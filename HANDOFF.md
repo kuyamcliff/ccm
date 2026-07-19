@@ -1,49 +1,59 @@
-# Cam Chop Meat website: owner's guide
+# Cam Chop Meat website: owner's guide (v2)
 
-This is a plain website. Three pages, no monthly software costs, no accounts that can
-expire. Anyone who can edit a text file can maintain it.
+The site is now a real web application in two parts:
 
-## What was built
-- index.html: the home page. Big headline, the four things you sell, your story, directions teaser.
-- menu.html: the menu with prices and "Order this" buttons that open WhatsApp with the order already typed.
-- contact.html: address, hours, phone, WhatsApp, TikTok and a map.
-- css/style.css: all the colors and layout. The colors live at the top of the file.
-- js/main.js: small touches (mobile menu button, sections fading in as you scroll).
+- **frontend/**: what visitors see. React + TypeScript. Pages: home, menu, book a
+  table, reviews, sign in, create account, my tables.
+- **backend/**: the engine. Node.js + Express + TypeScript. It stores accounts,
+  reservations and reviews in a single SQLite database file (backend/data/camchop.db).
+  That file IS your data; back it up and never commit it to git.
 
-## Before you launch: replace the placeholders
-Open each file in Notepad and use "Find" to locate these:
+## Running it on a computer
+1. Install Node.js LTS from nodejs.org (already installed on this machine).
+2. In one terminal: `cd backend`, `npm install`, `npm run dev` (starts on port 4000).
+3. In another: `cd frontend`, `npm install`, `npm run dev` (starts on port 5173).
+4. Open http://localhost:5173.
 
-1. **WhatsApp number.** Search for `237000000000` and replace every one with the real
-   number in international format without the plus sign. Example: if the number is
-   +237 6 70 12 34 56, write `237670123456`. It appears in all three HTML files.
-2. **Phone number.** In contact.html, search for `+237 000 000 000` and replace it.
-3. **Opening hours.** Search for `midday till late` in all three files and write the
-   real hours.
-4. **Photos.** The dish cards on the home page currently show drawn art. To use real
-   photos, take them in similar light (evening, near the fire, phone camera is fine),
-   then replace each `<div class="dish-art">...</div>` block with
-   `<img src="images/your-photo.jpg" alt="describe the dish">` and put the photos in
-   a new `images` folder. Keep photos under about 300 KB each so the page stays fast
-   on mobile data (tinypng.com shrinks them for free).
-5. **Menu prices.** Edit the text inside `<span class="price">` in menu.html any time
-   prices change. It is plain text.
+## What users can do
+- Create an account (name, email, password). Passwords are stored hashed, never plain.
+- Book a table: date, half-hour slots from 12:00 to 21:30, 1 to 20 people, phone,
+  optional note. They get a "table ticket" with a number.
+- See and cancel their bookings under "My tables". Cancelling keeps a record
+  (status becomes cancelled) so you can still see no-show history.
+- Leave one review each (1 to 5 stars plus text), edit it, or delete it.
 
-## How to put it online, free
-1. Make a free account at netlify.com (or use GitHub Pages if you have GitHub).
-2. On Netlify: "Add new site", then "Deploy manually", then drag the whole
-   "Camchop Meat" folder onto the page. The site is live in about a minute at a free
-   netlify.app address.
-3. When ready, buy a domain (about 10,000 to 15,000 FCFA per year, e.g. camchopmeat.com
-   from Namecheap or Hostinger) and connect it in Netlify's "Domain settings". Netlify
-   gives you the padlock (SSL) automatically.
+## Where the owner looks things up
+There is no admin dashboard yet (good first upgrade). Until then, reservations can be
+read straight from the database with any SQLite viewer (for example "DB Browser for
+SQLite", free) opened on backend/data/camchop.db, table "reservations".
 
-## What is real vs what needs confirming
-Already sourced and correct: the location (opposite the Survey School, Clerks
-Quarters), the TikTok account (@cam.chop.meat), and the price anchors (food from
-2,500 FCFA, drinks from 1,000 FCFA). Confirm with the kitchen: exact prices, hours,
-the sides list, and whether fish or soya should be added to the menu.
+## Before real customers use it
+1. Replace the placeholder phone number: search the frontend folder for
+   `+237 000 000 000` (Footer.tsx and Reserve.tsx).
+2. Confirm hours: search for `midday till late` (Footer.tsx and App.tsx ticker).
+3. Set a real secret for sessions: on the production server, set the environment
+   variable JWT_SECRET to a long random string. The dev fallback in
+   backend/src/auth.ts must not be used in production.
+4. Menu prices: edit frontend/src/data/menu.ts. Plain text, hard to get wrong.
+
+## Putting it on the internet
+The frontend builds to static files (`cd frontend && npm run build`, output in
+frontend/dist). The backend needs a small always-on Node server. The simplest path:
+- Render.com or Railway.app free/cheap tier: deploy backend as a Node service
+  (build: `npm install && npm run build`, start: `npm start`), set JWT_SECRET there.
+- Deploy frontend/dist to Netlify, and set a redirect so /api/* forwards to the
+  backend URL.
+A domain (camchopmeat.com, roughly 10,000 to 15,000 FCFA per year) plugs into
+Netlify. Ask a developer for an hour of help the first time; after that, deploys are
+one command.
+
+## What is tested
+backend/scripts/smoke.ts exercises every endpoint (register, login, duplicate email,
+bad dates, double booking, cancel, reviews). Run it with the backend up:
+`cd backend && npm run smoke`. The booking, review and account flows were also
+clicked through in a real browser before handoff.
 
 ## If something breaks
-The whole site is in a git history. Every working version is saved. Ask anyone with
-basic git knowledge to run `git log` in the folder and restore any earlier version
-with one command. Nothing here can "crash": there is no server code, no database.
+Every working version is a git commit. `git log` shows the history; any earlier
+version can be restored. The database file is separate from the code, so rolling back
+code never deletes reservations.

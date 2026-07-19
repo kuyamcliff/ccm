@@ -1,29 +1,33 @@
-# Cam Chop Meat website plan
+# Cam Chop Meat website plan (v2, full-stack)
 
 ## The business (researched 2026-07-19)
 Cam Chop Meat is a grilled meat restaurant in Buea, Cameroon, opposite the Survey School
 in Clerks Quarters. Known for grilled chicken, pork and goat over charcoal, plus matango
-(palm wine) and drinks. Food from about 2,500 FCFA, drinks from about 1,000 FCFA.
-Customer word of mouth runs through TikTok (@cam.chop.meat) and local recommendation
-lists. No official website exists.
+(palm wine). Food from about 2,500 FCFA, drinks from about 1,000 FCFA. Word of mouth
+runs through TikTok (@cam.chop.meat). Google Maps has a pin for "Cam chop meat".
 
-## Agreed scope (user answers, 2026-07-19)
-- Full static site: home, menu with prices, location and contact.
-- Ordering happens through WhatsApp links with prefilled messages.
-- Design: smoky grill-house. Charcoal blacks, ember orange, flame red.
-- Contact number, hours and photos are PLACEHOLDERS the owner swaps in later.
+## Agreed scope (user, 2026-07-19)
+v1 was a static HTML site; user rejected it and the design. v2 requirements:
+- Two folders: frontend/ and backend/.
+- Stack: TypeScript, Node.js, React. No plain HTML site.
+- Users can create accounts and sign in.
+- Users can book tables online (reservations), view and cancel them.
+- Users can leave reviews (one per user, editable, deletable).
+- Completely new design, nothing that reads as default AI output.
 
 ## Stack
-Plain HTML, CSS and a little JavaScript. No build step, no backend, no framework.
-Reason: a three page restaurant site does not need one. Anything that can serve
-static files (Netlify, GitHub Pages, any shared host) can host this for free.
-
-## Pages
-1. index.html: hero, what we grill, about, location teaser.
-2. menu.html: full menu grouped by grill / sides / drinks, order buttons.
-3. contact.html: address, directions, hours, WhatsApp, TikTok, map embed.
+- backend/: Node.js + Express 5 + TypeScript. SQLite through the node:sqlite module
+  built into Node 24 (no native compilation). Passwords hashed with bcryptjs. Sessions
+  are JWTs in an httpOnly cookie. Port 4000. All endpoints under /api.
+- frontend/: Vite + React 19 + TypeScript + react-router. Dev server on 5173 proxies
+  /api to the backend, so no CORS and cookies stay same-origin.
 
 ## Design direction (one sentence)
-Butcher-shop signage meets night grill: heavy slab headlines, charcoal surfaces,
-ember gradients, and a grill-grate motif, lit like the fire is just off screen.
-Fonts: Alfa Slab One (display) + Karla (body), via Google Fonts.
+Butcher-paper editorial: warm cream paper with grain, heavy Fraunces serif headlines,
+Space Mono receipt details, stamp-red accents, dashed ticket cards, hard offset
+shadows; reservations are literal "table tickets".
+
+## API surface
+- POST /api/auth/register, /login, /logout; GET /api/auth/me
+- GET/POST /api/reservations; DELETE /api/reservations/:id (cancel, own only)
+- GET /api/reviews (public); POST /api/reviews (upsert own); DELETE /api/reviews/mine
