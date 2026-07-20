@@ -3,15 +3,17 @@
   "configurations": [
     {
       "name": "camchop-backend",
-      "runtimeExecutable": "C:\\Program Files\\nodejs\\npm.cmd",
-      "runtimeArgs": ["run", "dev", "--prefix", "backend"],
-      "port": 4000
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["backend/node_modules/tsx/dist/cli.mjs", "watch", "backend/src/server.ts"],
+      "port": 4000,
+      "autoPort": false
     },
     {
       "name": "camchop-frontend",
-      "runtimeExecutable": "C:\\Program Files\\nodejs\\npm.cmd",
-      "runtimeArgs": ["run", "dev", "--prefix", "frontend"],
-      "port": 5173
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["frontend/node_modules/vite/bin/vite.js", "frontend"],
+      "port": 5173,
+      "autoPort": false
     }
   ]
 }
