@@ -1,0 +1,118 @@
+/**
+ * Environment configuration, validated once at boot.
+ *
+ * Anything missing that would silently weaken security in production stops the
+ * process here rather than failing quietly at request time.
+ */
+
+export const IS_PROD = process.env.NODE_ENV === "production";
+
+const problems: string[] = [];
+
+function required(name: string, devFallback: string): string {
+  const value = process.env[name];
+  if (value && value.trim()) return value.trim();
+  if (IS_PROD) {
+    problems.push(`${name} is not set.`);
+    return "";
+  }
+  return devFallback;
+}
+
+function optional(name: string, fallback = ""): string {
+  return (process.env[name] ?? fallback).trim();
+}
+
+export const JWT_SECRET = required("JWT_SECRET", "dev-only-secret-change-in-production");
+
+/**
+ * Signs the QR code on booking receipts. Kept separate from JWT_SECRET so that
+ * rotating session keys does not invalidate every receipt already printed, and
+ * so a leak of one does not compromise the other.
+ */
+export const QR_SIGNING_SECRET = required("QR_SIGNING_SECRET", "dev-only-qr-secret-change-in-production");
+
+/** Origins allowed to make state-changing requests. Same-origin in production. */
+export const FRONTEND_URL = optional("FRONTEND_URL", "http://localhost:5173").replace(/\/+$/, "");
+
+export const ALLOWED_ORIGINS = new Set(
+  [FRONTEND_URL, ...optional("EXTRA_ORIGINS").split(",")]
+    .map((o) => o.trim().replace(/\/+$/, ""))
+    .filter(Boolean)
+);
+
+/* ── MTN MoMo Collections ──────────────────────────────────────────────────
+   Credentials come from the MoMo developer portal. The subscription key is on
+   your profile page; the API user and API key are provisioned against it. */
+
+export const MOMO_SUBSCRIPTION_KEY = optional("MOMO_SUBSCRIPTION_KEY");
+export const MOMO_API_USER = optional("MOMO_API_USER");
+export const MOMO_API_KEY = optional("MOMO_API_KEY");
+
+/** `sandbox` while testing; the live value MTN issues you when you go live. */
+export const MOMO_TARGET_ENVIRONMENT = optional("MOMO_TARGET_ENVIRONMENT", "sandbox");
+
+export const MOMO_BASE_URL = optional(
+  "MOMO_BASE_URL",
+  "https://sandbox.momodeveloper.mtn.com"
+).replace(/\/+$/, "");
+
+/** Sandbox only settles in EUR; live Cameroon accounts collect in XAF. */
+export const MOMO_CURRENCY = optional(
+  "MOMO_CURRENCY",
+  MOMO_TARGET_ENVIRONMENT === "sandbox" ? "EUR" : "XAF"
+);
+
+export const PORT = Number(process.env.PORT ?? 4000);
+
+/* ── Outgoing email (Resend) ───────────────────────────────────────────────
+   Self-service "forgot password" needs somewhere to send the link. Until a
+   Resend API key is supplied the feature stays switched off and the
+   admin-issued reset flow covers recovery, so nothing breaks by leaving these
+   unset. */
+export const RESEND_API_KEY = optional("RESEND_API_KEY");
+
+/** Must be an address on a domain verified in the Resend dashboard. */
+export const EMAIL_FROM = optional("EMAIL_FROM", "Cam Chop Meat <onboarding@resend.dev>");
+
+/** Where Resend should send replies, when it differs from the from address. */
+export const EMAIL_REPLY_TO = optional("EMAIL_REPLY_TO");
+
+/** True only when the key needed to actually send is present. */
+export const EMAIL_ENABLED = RESEND_API_KEY.startsWith("re_");
+
+/** Public base URL the API is reachable at — used to build absolute image URLs. */
+export const PUBLIC_API_URL = optional("PUBLIC_API_URL", "").replace(/\/+$/, "");
+
+if (IS_PROD) {
+  if (JWT_SECRET.length < 32) {
+    problems.push("JWT_SECRET must be at least 32 characters in production.");
+  }
+  if (QR_SIGNING_SECRET.length < 32) {
+    problems.push("QR_SIGNING_SECRET must be at least 32 characters in production.");
+  }
+  if (QR_SIGNING_SECRET === JWT_SECRET) {
+    problems.push("QR_SIGNING_SECRET must be different from JWT_SECRET.");
+  }
+  if (!MOMO_SUBSCRIPTION_KEY || !MOMO_API_USER || !MOMO_API_KEY) {
+    problems.push(
+      "MOMO_SUBSCRIPTION_KEY, MOMO_API_USER and MOMO_API_KEY must all be set — payments cannot run without them."
+    );
+  }
+  if (MOMO_TARGET_ENVIRONMENT === "sandbox") {
+    problems.push("MOMO_TARGET_ENVIRONMENT is still 'sandbox' — real payments would not be collected.");
+  }
+  if (!FRONTEND_URL.startsWith("https://")) {
+    problems.push("FRONTEND_URL must be an https:// origin in production.");
+  }
+}
+
+if (problems.length > 0) {
+  console.error("Refusing to start. Fix the configuration:");
+  for (const p of problems) console.error(`  - ${p}`);
+  process.exit(1);
+}
+
+if (!IS_PROD) {
+  console.warn("[config] Running in development mode with fallback secrets. Do not deploy like this.");
+}

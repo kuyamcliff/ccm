@@ -1,23 +1,87 @@
 import { Router } from "express";
 import { db } from "../db.js";
 import { requireAuth } from "../auth.js";
+import { MediaError, storeOrValidateUrl } from "../lib/media.js";
+import { rateLimit } from "../middleware/security.js";
 
 export const reviewsRouter = Router();
 
-reviewsRouter.get("/", (_req, res) => {
-  const rows = db
-    .prepare(
-      `SELECT r.id, r.rating, r.text, r.created_at, r.updated_at, r.user_id, u.name AS author
-       FROM reviews r JOIN users u ON u.id = r.user_id
-       ORDER BY r.updated_at DESC LIMIT 100`
-    )
-    .all();
-  res.json({ reviews: rows });
+const writeLimit = rateLimit("review-write", {
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: "You are posting very quickly. Wait a few minutes.",
+  key: (req) => String(req.user?.id ?? "anon"),
 });
 
-reviewsRouter.post("/", requireAuth, (req, res) => {
+type DbReview = {
+  id: number; rating: number; text: string;
+  created_at: string; updated_at: string;
+  user_id: number; author: string;
+  media_urls: string; likes: number; dislikes: number;
+  admin_reply: string | null; admin_reply_at: string | null;
+  verified_count: number;
+};
+
+type DbReply = {
+  id: number; review_id: number; user_id: number;
+  text: string; created_at: string; author: string;
+};
+
+reviewsRouter.get("/", (req, res) => {
+  const rows = db.prepare(`
+    SELECT r.id, r.rating, r.text, r.created_at, r.updated_at, r.user_id, r.media_urls,
+           r.admin_reply, r.admin_reply_at,
+           u.name AS author,
+           (SELECT COUNT(*) FROM review_votes v WHERE v.review_id = r.id AND v.vote = 'like') AS likes,
+           (SELECT COUNT(*) FROM review_votes v WHERE v.review_id = r.id AND v.vote = 'dislike') AS dislikes,
+           (SELECT COUNT(*) FROM reservations res WHERE res.user_id = r.user_id AND res.status = 'completed') AS verified_count
+    FROM reviews r JOIN users u ON u.id = r.user_id
+    ORDER BY r.updated_at DESC LIMIT 100
+  `).all() as DbReview[];
+
+  const myVotes = new Map<number, string>();
+  if (req.user?.id) {
+    const votes = db.prepare(
+      "SELECT review_id, vote FROM review_votes WHERE user_id = ?"
+    ).all(req.user.id) as { review_id: number; vote: string }[];
+    for (const v of votes) myVotes.set(v.review_id, v.vote);
+  }
+
+  // Scoped to the reviews actually being returned, rather than every reply ever
+  // written, which grew without limit as the site aged.
+  const ids = rows.map((r) => r.id);
+  const allReplies = ids.length
+    ? (db
+        .prepare(
+          `SELECT rr.id, rr.review_id, rr.user_id, rr.text, rr.created_at, u.name AS author
+           FROM review_replies rr JOIN users u ON u.id = rr.user_id
+           WHERE rr.review_id IN (${ids.map(() => "?").join(",")})
+           ORDER BY rr.created_at ASC`
+        )
+        .all(...ids) as DbReply[])
+    : [];
+
+  const repliesByReview = new Map<number, DbReply[]>();
+  for (const rp of allReplies) {
+    if (!repliesByReview.has(rp.review_id)) repliesByReview.set(rp.review_id, []);
+    repliesByReview.get(rp.review_id)!.push(rp);
+  }
+
+  const reviews = rows.map((r) => ({
+    ...r,
+    media_urls: safeJsonArray(r.media_urls),
+    user_vote: myVotes.get(r.id) ?? null,
+    replies: repliesByReview.get(r.id) ?? [],
+    is_verified_diner: r.verified_count > 0,
+  }));
+
+  res.json({ reviews });
+});
+
+reviewsRouter.post("/", requireAuth, writeLimit, (req, res) => {
   const rating = Number(req.body?.rating);
   const text = String(req.body?.text ?? "").trim();
+  const rawMedia: unknown = req.body?.media_urls;
 
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
     res.status(400).json({ error: "Rating must be 1 to 5." });
@@ -28,18 +92,34 @@ reviewsRouter.post("/", requireAuth, (req, res) => {
     return;
   }
 
-  db.prepare(
-    `INSERT INTO reviews (user_id, rating, text) VALUES (?, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET rating = excluded.rating, text = excluded.text, updated_at = datetime('now')`
-  ).run(req.user!.id, rating, text);
+  // Each attachment is decoded, type-checked and written to disk here. Storing
+  // the raw string would let a `javascript:` URL reach an <img> on the page.
+  const media_urls: string[] = [];
+  if (Array.isArray(rawMedia)) {
+    for (const raw of rawMedia.slice(0, 5)) {
+      try {
+        media_urls.push(storeOrValidateUrl(raw, { allowVideo: true }));
+      } catch (err) {
+        res.status(400).json({ error: err instanceof MediaError ? err.message : "Invalid attachment." });
+        return;
+      }
+    }
+  }
 
-  const row = db
-    .prepare(
-      `SELECT r.id, r.rating, r.text, r.created_at, r.updated_at, r.user_id, u.name AS author
-       FROM reviews r JOIN users u ON u.id = r.user_id WHERE r.user_id = ?`
-    )
-    .get(req.user!.id);
-  res.status(201).json({ review: row });
+  db.prepare(
+    `INSERT INTO reviews (user_id, rating, text, media_urls) VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       rating = excluded.rating, text = excluded.text,
+       media_urls = excluded.media_urls, updated_at = datetime('now')`
+  ).run(req.user!.id, rating, text, JSON.stringify(media_urls));
+
+  const row = db.prepare(
+    `SELECT r.id, r.rating, r.text, r.created_at, r.updated_at, r.user_id, r.media_urls, u.name AS author
+     FROM reviews r JOIN users u ON u.id = r.user_id WHERE r.user_id = ?`
+  ).get(req.user!.id) as (DbReview & { media_urls: string }) | undefined;
+
+  if (!row) { res.status(500).json({ error: "Could not retrieve review." }); return; }
+  res.status(201).json({ review: { ...row, media_urls: safeJsonArray(row.media_urls) } });
 });
 
 reviewsRouter.delete("/mine", requireAuth, (req, res) => {
@@ -50,3 +130,79 @@ reviewsRouter.delete("/mine", requireAuth, (req, res) => {
   }
   res.json({ ok: true });
 });
+
+reviewsRouter.post("/:id/vote", requireAuth, (req, res) => {
+  const reviewId = Number(req.params.id);
+  if (!Number.isInteger(reviewId)) { res.status(400).json({ error: "Bad review id." }); return; }
+  const vote = String(req.body?.vote ?? "");
+  if (!["like", "dislike"].includes(vote)) {
+    res.status(400).json({ error: "Vote must be 'like' or 'dislike'." });
+    return;
+  }
+  const exists = db.prepare("SELECT id FROM reviews WHERE id = ?").get(reviewId);
+  if (!exists) { res.status(404).json({ error: "Review not found." }); return; }
+
+  db.prepare(
+    `INSERT INTO review_votes (review_id, user_id, vote) VALUES (?, ?, ?)
+     ON CONFLICT(review_id, user_id) DO UPDATE SET vote = excluded.vote`
+  ).run(reviewId, req.user!.id, vote);
+
+  res.json({ ok: true, ...voteCounts(reviewId), user_vote: vote });
+});
+
+reviewsRouter.delete("/:id/vote", requireAuth, (req, res) => {
+  const reviewId = Number(req.params.id);
+  if (!Number.isInteger(reviewId)) { res.status(400).json({ error: "Bad review id." }); return; }
+  db.prepare("DELETE FROM review_votes WHERE review_id = ? AND user_id = ?").run(reviewId, req.user!.id);
+  res.json({ ok: true, ...voteCounts(reviewId), user_vote: null });
+});
+
+reviewsRouter.post("/:id/replies", requireAuth, writeLimit, (req, res) => {
+  const reviewId = Number(req.params.id);
+  if (!Number.isInteger(reviewId)) { res.status(400).json({ error: "Bad review id." }); return; }
+  const text = String(req.body?.text ?? "").trim();
+  if (text.length < 1 || text.length > 500) {
+    res.status(400).json({ error: "Reply must be 1–500 characters." });
+    return;
+  }
+  const exists = db.prepare("SELECT id FROM reviews WHERE id = ?").get(reviewId);
+  if (!exists) { res.status(404).json({ error: "Review not found." }); return; }
+
+  const info = db.prepare(
+    "INSERT INTO review_replies (review_id, user_id, text) VALUES (?, ?, ?)"
+  ).run(reviewId, req.user!.id, text);
+
+  const reply = db.prepare(
+    `SELECT rr.id, rr.review_id, rr.user_id, rr.text, rr.created_at, u.name AS author
+     FROM review_replies rr JOIN users u ON u.id = rr.user_id WHERE rr.id = ?`
+  ).get(Number(info.lastInsertRowid));
+
+  res.status(201).json({ reply });
+});
+
+reviewsRouter.delete("/replies/:replyId", requireAuth, (req, res) => {
+  const replyId = Number(req.params.replyId);
+  if (!Number.isInteger(replyId)) { res.status(400).json({ error: "Bad reply id." }); return; }
+  const reply = db.prepare("SELECT id, user_id FROM review_replies WHERE id = ?").get(replyId) as { id: number; user_id: number } | undefined;
+  if (!reply) { res.status(404).json({ error: "Reply not found." }); return; }
+
+  const u = req.user!;
+  if (reply.user_id !== u.id && u.role !== "admin" && u.role !== "super_admin") {
+    res.status(403).json({ error: "You can only delete your own replies." });
+    return;
+  }
+  db.prepare("DELETE FROM review_replies WHERE id = ?").run(replyId);
+  res.json({ ok: true });
+});
+
+function voteCounts(reviewId: number) {
+  return db.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM review_votes WHERE review_id = ? AND vote = 'like') AS likes,
+      (SELECT COUNT(*) FROM review_votes WHERE review_id = ? AND vote = 'dislike') AS dislikes
+  `).get(reviewId, reviewId) as { likes: number; dislikes: number };
+}
+
+function safeJsonArray(raw: string | null | undefined): string[] {
+  try { const v = JSON.parse(raw ?? "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
+}

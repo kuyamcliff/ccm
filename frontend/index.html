@@ -3,21 +3,49 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b0906" />
     <title>Cam Chop Meat | Charcoal grill in Buea. Book a table.</title>
     <meta
       name="description"
       content="Cam Chop Meat grills chicken, pork and goat over charcoal in Clerks Quarters, Buea. Book a table online, read reviews, see the menu."
     />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🥩</text></svg>" />
+    <meta property="og:type" content="restaurant" />
+    <meta property="og:title" content="Cam Chop Meat | Charcoal grill in Buea" />
+    <meta property="og:description" content="Chicken, pork and goat over real charcoal. Opposite the Survey School, Clerks Quarters, Buea. Book a table online." />
+    <meta property="og:url" content="https://camchopmeat.com" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Cam Chop Meat | Charcoal grill in Buea" />
+    <meta name="twitter:description" content="Chicken, pork and goat over real charcoal. Opposite the Survey School, Clerks Quarters, Buea." />
+    <link rel="canonical" href="https://camchopmeat.com/" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!--
+      Fonts are preloaded rather than linked as a stylesheet, so the request
+      starts immediately but never blocks the first paint. main.tsx promotes it
+      to a real stylesheet once the page is interactive; the noscript copy
+      covers visitors without JavaScript. Doing the swap from the module script
+      instead of an inline onload keeps the strict script-src CSP intact.
+    -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
+      id="webfonts"
+      rel="preload"
+      as="style"
       href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..900&family=Archivo:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap"
-      rel="stylesheet"
     />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..900&family=Archivo:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap"
+      />
+    </noscript>
   </head>
   <body>
     <div id="root"></div>
+    <noscript><p style="font-family:sans-serif;padding:2rem;text-align:center;background:#0b0906;color:#f2e8d5">Cam Chop Meat needs JavaScript to run. Enable it in your browser settings and reload.</p></noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

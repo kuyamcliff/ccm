@@ -4,16 +4,16 @@
     {
       "name": "camchop-backend",
       "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["backend/node_modules/tsx/dist/cli.mjs", "watch", "backend/src/server.ts"],
+      "runtimeArgs": ["--env-file=backend/.env", "--use-system-ca", "backend/node_modules/tsx/dist/cli.mjs", "watch", "backend/src/server.ts"],
       "port": 4000,
-      "autoPort": false
+      "autoPort": true
     },
     {
       "name": "camchop-frontend",
       "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
       "runtimeArgs": ["frontend/node_modules/vite/bin/vite.js", "frontend"],
       "port": 5173,
-      "autoPort": false
+      "autoPort": true
     }
   ]
 }

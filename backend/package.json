@@ -7,20 +7,30 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "momo:provision": "tsx scripts/momo-provision.ts"
   },
   "dependencies": {
+    "@types/compression": "^1.8.1",
+    "@types/qrcode": "^1.5.6",
     "bcryptjs": "^3.0.2",
+    "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
     "express": "^5.1.0",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "pdfkit": "^0.19.1",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.8",
     "@types/express": "^5.0.1",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^24.0.0",
+    "@types/pdfkit": "^0.17.6",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0"
+  },
+  "allowScripts": {
+    "qrcode@1.5.4": true
   }
 }

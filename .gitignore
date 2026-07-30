@@ -1,4 +1,10 @@
 node_modules/
 dist/
 backend/data/
+
+# Every env file, however it is suffixed. A plain `.env` rule misses the
+# backups people leave behind (.env.bak, .env.local, .env.old), which is
+# exactly how live credentials end up in a public repository.
 .env
+.env.*
+!.env.example

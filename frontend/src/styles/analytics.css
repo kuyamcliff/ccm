@@ -1,0 +1,186 @@
+/* ============================================================
+   ADMIN ANALYTICS (.an-*)
+   ============================================================ */
+.an { display: grid; gap: 1.25rem; }
+
+/* Headline numbers. The revenue tile spans two columns so the figure the
+   owner actually asks about is the first thing the eye lands on. */
+.an-kpis {
+  display: grid;
+  gap: 1px;
+  background: var(--hairline);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 860px) {
+  .an-kpis { grid-template-columns: 1.4fr 1fr 1fr 1fr; }
+}
+
+.an-kpi {
+  background: var(--surface);
+  padding: 1.15rem 1.25rem;
+  display: grid;
+  gap: 0.35rem;
+  align-content: start;
+}
+.an-kpi-lead { background: linear-gradient(150deg, rgba(212,37,37,0.1), var(--surface) 65%); }
+.an-kpi-label {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+}
+.an-kpi-value {
+  font-size: clamp(1.35rem, 3vw, 1.9rem);
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.an-kpi-unit { font-size: 0.72rem; color: var(--text-faint); font-weight: 400; }
+.an-kpi-foot { font-size: 0.7rem; color: var(--text-faint); }
+
+.an-delta {
+  justify-self: start;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  padding: 0.2rem 0.45rem;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.05);
+  color: var(--text-faint);
+}
+.an-delta-up   { background: rgba(75,185,138,0.14); color: var(--green); }
+.an-delta-down { background: var(--amber-dim); color: var(--amber); }
+.an-delta-new  { background: rgba(216,165,28,0.14); color: var(--gold); }
+
+/* Panels */
+.an-panel {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.35rem 1.35rem;
+  min-width: 0;
+}
+.an-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.1rem;
+}
+.an-panel-title {
+  font-family: var(--serif);
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.an-panel-head .an-panel-title { margin: 0; }
+.an-panel > .an-panel-title { margin-bottom: 1.1rem; }
+.an-toggle { margin: 0; }
+.an-empty { color: var(--text-faint); font-size: 0.85rem; padding: 2rem 0; }
+
+.an-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 780px)  { .an-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1280px) { .an-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* Area chart */
+.an-chart svg {
+  display: block;
+  width: 100%;
+  height: clamp(140px, 22vw, 190px);
+  overflow: visible;
+}
+.an-chart-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.64rem;
+  color: var(--text-faint);
+}
+
+.an-inline-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 1.25rem;
+  margin-top: 1.35rem;
+  padding-top: 1.15rem;
+  border-top: 1px solid var(--hairline);
+}
+@media (min-width: 700px) { .an-inline-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.an-inline-stats > div { display: grid; gap: 0.15rem; }
+.an-inline-num { font-size: 1.1rem; font-weight: 700; color: var(--text); line-height: 1; }
+.an-inline-stats span:last-child { font-size: 0.7rem; color: var(--text-faint); line-height: 1.35; }
+
+/* Hour columns */
+.an-hours {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 150px;
+}
+.an-hour { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.4rem; height: 100%; min-width: 0; }
+.an-hour-track { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.an-hour-fill {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(180deg, var(--amber), rgba(212,37,37,0.35));
+  transition: height 400ms var(--ease-out);
+}
+.an-hour-label { font-size: 0.58rem; color: var(--text-faint); }
+
+/* Horizontal bars */
+.an-bars { list-style: none; display: grid; gap: 0.6rem; }
+.an-bars li { display: grid; grid-template-columns: 2.4rem minmax(0, 1fr) 1.75rem; align-items: center; gap: 0.65rem; }
+.an-bar-label { font-size: 0.76rem; color: var(--text-muted); }
+.an-bar-track { height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+.an-bar-fill { display: block; height: 100%; background: var(--amber); border-radius: 3px; transition: width 400ms var(--ease-out); }
+.an-bar-val { font-size: 0.74rem; color: var(--text-faint); text-align: right; }
+
+/* Most ordered */
+.an-top { list-style: none; display: grid; gap: 0.85rem; counter-reset: none; }
+.an-top li { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr) 2rem; align-items: center; gap: 0.7rem; }
+.an-top-rank { font-size: 0.66rem; color: var(--text-dim); }
+.an-top-body { display: grid; gap: 0.35rem; min-width: 0; }
+.an-top-name {
+  font-size: 0.84rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.an-top-track { height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; }
+.an-top-fill { display: block; height: 100%; background: var(--gold); border-radius: 2px; transition: width 400ms var(--ease-out); }
+.an-top-qty { font-size: 0.76rem; color: var(--text-muted); text-align: right; }
+
+/* Reviews */
+.an-reviews { display: grid; gap: 0.3rem; padding-top: 0.5rem; }
+.an-reviews-score {
+  font-size: 2.6rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.an-reviews-score span { font-family: var(--sans); font-size: 0.74rem; color: var(--text-faint); font-weight: 400; }
+.an-reviews-count { font-size: 0.78rem; color: var(--text-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .an-hour-fill, .an-bar-fill, .an-top-fill { transition: none; }
+}

@@ -1,4 +1,9 @@
 node_modules/
 dist/
 data/
+windows-ca.pem
+
+# See the root .gitignore: every env file, including backups.
 .env
+.env.*
+!.env.example
