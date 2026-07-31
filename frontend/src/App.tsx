@@ -1,6 +1,7 @@
 import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Header } from "./components/Header";
+import { useLanguage } from "./i18n/context";
 import { Footer } from "./components/Footer";
 import { SupportChat } from "./components/SupportChat";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -70,6 +71,7 @@ function RouteTransition({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const { t } = useLanguage();
   return (
     <>
       <RouteChrome />
@@ -113,9 +115,7 @@ export default function App() {
           element={
             <div className="page">
               <a className="skip-link" href="#main">Skip to content</a>
-              <p className="ticker" aria-hidden="true">
-                buea · clerks quarters · opposite supptic · charcoal grill · open daily 9am till late · dine in or collect
-              </p>
+              <p className="ticker" aria-hidden="true">{t("nav", "ticker")}</p>
               <Header />
               <main id="main" tabIndex={-1}>
                 <ErrorBoundary>

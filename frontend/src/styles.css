@@ -314,6 +314,32 @@ main:focus { outline: none; }
 }
 .nav-toggle:hover { border-color: var(--amber); }
 
+.header-actions { display: flex; align-items: center; gap: 0.6rem; }
+
+.lang-toggle {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.lang-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  padding: 0.5rem 0.7rem;
+  min-height: 44px;
+  min-width: 44px;
+  cursor: pointer;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+.lang-btn:hover { color: var(--text); }
+.lang-btn.active { color: var(--bg); background: var(--amber); }
+
 /* ============================================================
    BUTTONS
    ============================================================ */
