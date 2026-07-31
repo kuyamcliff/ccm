@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import type { AdminAnalytics as AnalyticsData } from "../../api";
+import { useLanguage } from "../../i18n/context";
 
 type Series = { day: string; revenue?: number; count?: number; payments?: number };
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAY_KEYS = ["daySun", "dayMon", "dayTue", "dayWed", "dayThu", "dayFri", "daySat"];
 
 /** Fills gaps so a quiet day draws as zero instead of collapsing the x axis. */
 function densify(rows: Series[], key: "revenue" | "count", days = 30) {
@@ -26,9 +27,10 @@ function pctChange(now: number, before: number): number | null {
 }
 
 function Delta({ value }: { value: number | null }) {
-  if (value === null) return <span className="an-delta an-delta-new">new</span>;
+  const { t } = useLanguage();
+  if (value === null) return <span className="an-delta an-delta-new">{t("adminAnalytics", "new")}</span>;
   const rounded = Math.round(value);
-  if (rounded === 0) return <span className="an-delta">level</span>;
+  if (rounded === 0) return <span className="an-delta">{t("adminAnalytics", "level")}</span>;
   const up = rounded > 0;
   return (
     <span className={`an-delta ${up ? "an-delta-up" : "an-delta-down"}`}>
@@ -45,6 +47,8 @@ function Delta({ value }: { value: number | null }) {
  * rather than needing a resize observer.
  */
 function AreaChart({ points, unit }: { points: { day: string; value: number }[]; unit: string }) {
+  const { t } = useLanguage();
+  const ta = (key: string) => t("adminAnalytics", key);
   const W = 600;
   const H = 160;
   const PAD = 6;
@@ -61,7 +65,7 @@ function AreaChart({ points, unit }: { points: { day: string; value: number }[];
   return (
     <div className="an-chart">
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"
-           aria-label={`Trend over the last ${points.length} days, peak ${peak.value.toLocaleString()} ${unit}`}>
+           aria-label={ta("trendAriaLabel").replace("{n}", String(points.length)).replace("{peak}", peak.value.toLocaleString()).replace("{unit}", unit)}>
         <defs>
           <linearGradient id="anFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--amber)" stopOpacity="0.32" />
@@ -81,7 +85,7 @@ function AreaChart({ points, unit }: { points: { day: string; value: number }[];
 
       <div className="an-chart-axis">
         <span>{points[0]?.day.slice(5)}</span>
-        <span>peak {peak.value.toLocaleString()} {unit}</span>
+        <span>{ta("peak")} {peak.value.toLocaleString()} {unit}</span>
         <span>{points[points.length - 1]?.day.slice(5)}</span>
       </div>
     </div>
@@ -89,6 +93,8 @@ function AreaChart({ points, unit }: { points: { day: string; value: number }[];
 }
 
 export default function AdminAnalytics() {
+  const { t } = useLanguage();
+  const ta = (key: string) => t("adminAnalytics", key);
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -112,7 +118,7 @@ export default function AdminAnalytics() {
     return <div className="admin-page"><div className="route-fallback"><span className="route-fallback-dot" aria-hidden="true" /></div></div>;
   }
   if (failed || !data) {
-    return <div className="admin-page"><p className="form-error">Could not load the analytics.</p></div>;
+    return <div className="admin-page"><p className="form-error">{ta("errLoad")}</p></div>;
   }
 
   const revenue30 = data.revenueByDay.reduce((s, d) => s + (d.revenue ?? 0), 0);
@@ -132,15 +138,15 @@ export default function AdminAnalytics() {
     <div className="admin-page an">
       <div className="admin-page-header">
         <div>
-          <h1 className="admin-page-title">Analytics</h1>
-          <p className="admin-page-sub">Last 30 days, against the 30 before it</p>
+          <h1 className="admin-page-title">{ta("title")}</h1>
+          <p className="admin-page-sub">{ta("subtitle")}</p>
         </div>
       </div>
 
       {/* Headline numbers */}
       <div className="an-kpis">
         <article className="an-kpi an-kpi-lead">
-          <p className="an-kpi-label">Revenue collected</p>
+          <p className="an-kpi-label">{ta("revenueCollected")}</p>
           <p className="an-kpi-value mono">
             {revenue30.toLocaleString()}<span className="an-kpi-unit">FCFA</span>
           </p>
@@ -148,21 +154,21 @@ export default function AdminAnalytics() {
         </article>
 
         <article className="an-kpi">
-          <p className="an-kpi-label">Bookings</p>
+          <p className="an-kpi-label">{ta("bookings")}</p>
           <p className="an-kpi-value mono">{bookings}</p>
           <Delta value={pctChange(bookings, data.previous.bookings)} />
         </article>
 
         <article className="an-kpi">
-          <p className="an-kpi-label">Covers seated</p>
+          <p className="an-kpi-label">{ta("coversSeated")}</p>
           <p className="an-kpi-value mono">{covers}</p>
           <Delta value={pctChange(covers, data.previous.covers)} />
         </article>
 
         <article className="an-kpi">
-          <p className="an-kpi-label">Average party</p>
+          <p className="an-kpi-label">{ta("averageParty")}</p>
           <p className="an-kpi-value mono">{avgParty}</p>
-          <span className="an-kpi-foot">guests per booking</span>
+          <span className="an-kpi-foot">{ta("guestsPerBooking")}</span>
         </article>
       </div>
 
@@ -170,33 +176,33 @@ export default function AdminAnalytics() {
       <section className="an-panel an-panel-wide">
         <header className="an-panel-head">
           <h2 className="an-panel-title">
-            {metric === "revenue" ? "Revenue by day" : "New customers by day"}
+            {metric === "revenue" ? ta("revenueByDay") : ta("newCustomersByDay")}
           </h2>
           <div className="filter-chips an-toggle">
             <button className={`filter-chip${metric === "revenue" ? " active" : ""}`} onClick={() => setMetric("revenue")}>
-              Revenue
+              {ta("revenue")}
             </button>
             <button className={`filter-chip${metric === "signups" ? " active" : ""}`} onClick={() => setMetric("signups")}>
-              Sign ups
+              {ta("signUps")}
             </button>
           </div>
         </header>
 
         {series.every((p) => p.value === 0) ? (
           <p className="an-empty">
-            Nothing recorded in this window yet. {metric === "revenue" ? "Takings" : "Sign ups"} will draw here.
+            {ta("nothingRecorded")} {metric === "revenue" ? ta("takings") : ta("signUps")} {ta("willDrawHere")}
           </p>
         ) : (
-          <AreaChart points={series} unit={metric === "revenue" ? "FCFA" : "people"} />
+          <AreaChart points={series} unit={metric === "revenue" ? ta("unit") : ta("unitPeople")} />
         )}
 
         <div className="an-inline-stats">
-          <div><span className="an-inline-num mono">{signups30}</span><span>new customers</span></div>
-          <div><span className="an-inline-num mono">{avgTicket.toLocaleString()}</span><span>avg deposit per booking</span></div>
-          <div><span className="an-inline-num mono">{cancelRate}%</span><span>cancelled</span></div>
+          <div><span className="an-inline-num mono">{signups30}</span><span>{ta("newCustomers")}</span></div>
+          <div><span className="an-inline-num mono">{avgTicket.toLocaleString()}</span><span>{ta("avgDeposit")}</span></div>
+          <div><span className="an-inline-num mono">{cancelRate}%</span><span>{ta("cancelled")}</span></div>
           <div>
             <span className="an-inline-num mono">{showRate === null ? "0" : showRate}%</span>
-            <span>checked in at the door</span>
+            <span>{ta("checkedInAtDoor")}</span>
           </div>
         </div>
       </section>
@@ -204,13 +210,13 @@ export default function AdminAnalytics() {
       <div className="an-grid">
         {/* Service times */}
         <section className="an-panel">
-          <h2 className="an-panel-title">Busiest times</h2>
+          <h2 className="an-panel-title">{ta("busiestTimes")}</h2>
           {data.peakHours.length === 0 ? (
-            <p className="an-empty">No bookings recorded yet.</p>
+            <p className="an-empty">{ta("noBookingsYet")}</p>
           ) : (
             <div className="an-hours">
               {data.peakHours.map((h) => (
-                <div key={h.hour} className="an-hour" title={`${h.hour}:00, ${h.count} bookings`}>
+                <div key={h.hour} className="an-hour" title={ta("bookingsHourLabel").replace("{hour}", String(h.hour)).replace("{count}", String(h.count))}>
                   <div className="an-hour-track">
                     <div className="an-hour-fill" style={{ height: `${(h.count / peakMax) * 100}%` }} />
                   </div>
@@ -223,14 +229,14 @@ export default function AdminAnalytics() {
 
         {/* Weekday pattern */}
         <section className="an-panel">
-          <h2 className="an-panel-title">Busiest days</h2>
+          <h2 className="an-panel-title">{ta("busiestDays")}</h2>
           {data.busiestDays.length === 0 ? (
-            <p className="an-empty">No bookings recorded yet.</p>
+            <p className="an-empty">{ta("noBookingsYet")}</p>
           ) : (
             <ul className="an-bars">
               {data.busiestDays.map((d) => (
                 <li key={d.weekday}>
-                  <span className="an-bar-label">{WEEKDAYS[d.weekday] ?? d.weekday}</span>
+                  <span className="an-bar-label">{ta(WEEKDAY_KEYS[d.weekday]) ?? d.weekday}</span>
                   <span className="an-bar-track">
                     <span className="an-bar-fill" style={{ width: `${(d.count / dayMax) * 100}%` }} />
                   </span>
@@ -243,9 +249,9 @@ export default function AdminAnalytics() {
 
         {/* Most ordered */}
         <section className="an-panel">
-          <h2 className="an-panel-title">Most ordered</h2>
+          <h2 className="an-panel-title">{ta("mostOrdered")}</h2>
           {data.topMenuItems.length === 0 ? (
-            <p className="an-empty">No takeaway orders in the last 90 days.</p>
+            <p className="an-empty">{ta("noTakeawayOrders")}</p>
           ) : (
             <ol className="an-top">
               {data.topMenuItems.map((item, i) => (
@@ -266,17 +272,17 @@ export default function AdminAnalytics() {
 
         {/* Reviews */}
         <section className="an-panel">
-          <h2 className="an-panel-title">What people say</h2>
+          <h2 className="an-panel-title">{ta("whatPeopleSay")}</h2>
           {data.reviewSummary.total === 0 ? (
-            <p className="an-empty">No reviews yet.</p>
+            <p className="an-empty">{ta("noReviewsYet")}</p>
           ) : (
             <div className="an-reviews">
               <p className="an-reviews-score mono">
                 {Number(data.reviewSummary.avg_rating ?? 0).toFixed(1)}
-                <span>out of 5</span>
+                <span>{ta("outOf5")}</span>
               </p>
               <p className="an-reviews-count">
-                from {data.reviewSummary.total} review{data.reviewSummary.total === 1 ? "" : "s"}
+                {ta(data.reviewSummary.total === 1 ? "fromReviewSingular" : "fromReviewPlural").replace("{n}", String(data.reviewSummary.total))}
               </p>
             </div>
           )}
