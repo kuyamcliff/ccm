@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import type { LegalPage } from "../../api";
+import { useLanguage } from "../../i18n/context";
 
 type Slug = "terms" | "privacy";
 
-const TABS: { slug: Slug; label: string }[] = [
-  { slug: "terms", label: "Terms of use" },
-  { slug: "privacy", label: "Privacy policy" },
-];
-
 export default function AdminLegal() {
+  const { t } = useLanguage();
+  const tl = (key: string) => t("adminLegal", key);
+  const TABS: { slug: Slug; label: string }[] = [
+    { slug: "terms", label: tl("termsTab") },
+    { slug: "privacy", label: tl("privacyTab") },
+  ];
   const [pages, setPages] = useState<Record<string, LegalPage>>({});
   const [slug, setSlug] = useState<Slug>("terms");
   const [title, setTitle] = useState("");
@@ -26,7 +28,7 @@ export default function AdminLegal() {
         for (const p of r.pages) map[p.slug] = p;
         setPages(map);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "Could not load the legal pages."))
+      .catch((e) => setError(e instanceof Error ? e.message : tl("errLoad")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -45,10 +47,10 @@ export default function AdminLegal() {
     try {
       const r = await api.admin.updateLegalPage(slug, { title, body });
       setPages((p) => ({ ...p, [slug]: r.page }));
-      setToast("Published. The public page is updated.");
+      setToast(tl("published"));
       setTimeout(() => setToast(""), 3000);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save.");
+      setError(e instanceof Error ? e.message : tl("errSave"));
     } finally {
       setSaving(false);
     }
@@ -65,36 +67,36 @@ export default function AdminLegal() {
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
-          <h1 className="admin-page-title">Legal pages</h1>
+          <h1 className="admin-page-title">{tl("title")}</h1>
           <p className="admin-page-sub">
-            Edit your terms and privacy policy. Changes go live as soon as you publish.
+            {tl("subtitle")}
           </p>
         </div>
         <a className="btn btn-sm btn-outline" href={`/${slug === "terms" ? "terms" : "privacy"}`} target="_blank" rel="noopener noreferrer">
-          View public page
+          {tl("viewPublicPage")}
         </a>
       </div>
 
       <div className="filter-chips" style={{ marginBottom: "1.5rem" }}>
-        {TABS.map((t) => (
+        {TABS.map((tab) => (
           <button
-            key={t.slug}
-            className={`filter-chip${slug === t.slug ? " active" : ""}`}
-            onClick={() => setSlug(t.slug)}
+            key={tab.slug}
+            className={`filter-chip${slug === tab.slug ? " active" : ""}`}
+            onClick={() => setSlug(tab.slug)}
           >
-            {t.label}
+            {tab.label}
           </button>
         ))}
       </div>
 
       {loading ? (
-        <p className="empty-admin">Loading…</p>
+        <p className="empty-admin">{tl("loading")}</p>
       ) : !current ? (
-        <p className="empty-admin">{error || "That page is missing from the database."}</p>
+        <p className="empty-admin">{error || tl("missing")}</p>
       ) : (
         <div className="legal-editor">
           <label className="legal-editor-field">
-            Page title
+            {tl("pageTitle")}
             <input
               type="text"
               value={title}
@@ -104,7 +106,7 @@ export default function AdminLegal() {
           </label>
 
           <label className="legal-editor-field">
-            Page text
+            {tl("pageText")}
             <textarea
               rows={22}
               value={body}
@@ -113,15 +115,15 @@ export default function AdminLegal() {
               spellCheck
             />
             <span className="settings-hint">
-              Start a line with <code>## </code> for a heading. Blank line between paragraphs.
+              {tl("headingHint")}
             </span>
           </label>
 
           <div className="legal-editor-meta">
-            <span className="mono">{body.length.toLocaleString()} / 40,000 characters</span>
+            <span className="mono">{tl("characters").replace("{n}", body.length.toLocaleString())}</span>
             {current.updated_at && (
               <span className="mono">
-                Last saved {new Date(current.updated_at.replace(" ", "T") + "Z").toLocaleString("en-GB")}
+                {tl("lastSaved").replace("{date}", new Date(current.updated_at.replace(" ", "T") + "Z").toLocaleString("en-GB"))}
               </span>
             )}
           </div>
@@ -131,11 +133,11 @@ export default function AdminLegal() {
 
           <div className="legal-editor-actions">
             <button className="btn btn-amber" onClick={save} disabled={saving || !dirty}>
-              {saving ? "Publishing…" : dirty ? "Publish changes" : "No changes"}
+              {saving ? tl("publishing") : dirty ? tl("publishChanges") : tl("noChanges")}
             </button>
             {dirty && (
               <button className="btn btn-outline" onClick={revert} disabled={saving}>
-                Discard changes
+                {tl("discardChanges")}
               </button>
             )}
           </div>
