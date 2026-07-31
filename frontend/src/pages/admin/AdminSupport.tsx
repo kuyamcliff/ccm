@@ -4,6 +4,7 @@ import type { AdminSupportRoster, AdminSupportThread, SupportMessage, SupportTra
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { useAuth } from "../../auth";
 import { openStream } from "../../lib/stream";
+import { useLanguage } from "../../i18n/context";
 
 const TYPING_IDLE_MS = 2200;
 const TYPING_PING_MS = 1800;
@@ -28,6 +29,8 @@ function formatTime(iso: string): string {
  * and which colleagues are at their desks all arrive as events.
  */
 export default function AdminSupport() {
+  const { t } = useLanguage();
+  const ts = (key: string) => t("adminSupport", key);
   const { user } = useAuth();
 
   const [threads, setThreads] = useState<AdminSupportThread[]>([]);
@@ -60,8 +63,10 @@ export default function AdminSupport() {
   const lastTypingPing = useRef(0);
   const typingStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tsRef = useRef(ts);
 
   activeIdRef.current = activeId;
+  tsRef.current = ts;
 
   const loadThreads = useCallback(async () => {
     try {
@@ -70,7 +75,7 @@ export default function AdminSupport() {
       setOnlineAdmins(r.online_admins);
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load conversations.");
+      setError(e instanceof Error ? e.message : ts("errLoadThreads"));
     } finally {
       setLoading(false);
     }
@@ -90,7 +95,7 @@ export default function AdminSupport() {
       setUserTyping(r.typing?.who === "user" ? r.typing.name : null);
       setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, unread_for_admin: 0 } : t)));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not open that conversation.");
+      setError(e instanceof Error ? e.message : ts("errOpenThread"));
     }
   }, []);
 
@@ -133,7 +138,7 @@ export default function AdminSupport() {
         if (event === "typing") {
           if (Number(payload.thread_id) !== activeIdRef.current) return;
           if (payload.stopped || payload.who !== "user") { setUserTyping(null); return; }
-          setUserTyping(String(payload.name || "Customer"));
+          setUserTyping(String(payload.name || tsRef.current("customerTyping")));
           if (typingClearTimer.current) clearTimeout(typingClearTimer.current);
           typingClearTimer.current = setTimeout(() => setUserTyping(null), 6000);
           return;
@@ -208,7 +213,7 @@ export default function AdminSupport() {
       await api.admin.replySupport(activeId, body);
       setReply("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Reply did not send.");
+      setError(err instanceof Error ? err.message : ts("errReplyFailed"));
     } finally {
       setSending(false);
     }
@@ -220,7 +225,7 @@ export default function AdminSupport() {
       setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
       setActive((prev) => (prev && prev.id === id ? { ...prev, status } : prev));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not change that conversation.");
+      setError(e instanceof Error ? e.message : ts("errChangeStatus"));
     }
   }
 
@@ -244,7 +249,7 @@ export default function AdminSupport() {
       setForwardOpen(false);
       void openThread(activeId);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not pass that on.");
+      setError(e instanceof Error ? e.message : ts("errForward"));
     } finally {
       setForwarding(false);
     }
@@ -255,14 +260,14 @@ export default function AdminSupport() {
   return (
     <div className="admin-page sup">
       <div className="admin-page-header">
-        <h1 className="admin-page-title">Support</h1>
+        <h1 className="admin-page-title">{ts("title")}</h1>
         <div className="sup-status">
           <span className={`sup-conn${connected ? " on" : ""}`}>
             <span className="sup-conn-dot" aria-hidden="true" />
-            {connected ? "Live" : "Reconnecting"}
+            {connected ? ts("live") : ts("reconnecting")}
           </span>
           <span className="sup-online mono">
-            {onlineAdmins.length} admin{onlineAdmins.length === 1 ? "" : "s"} online
+            {onlineAdmins.length} {onlineAdmins.length === 1 ? ts("adminSingularOnline") : ts("adminPluralOnline")}
           </span>
         </div>
       </div>
@@ -273,7 +278,7 @@ export default function AdminSupport() {
         {/* ── Queue ── */}
         <aside className="sup-list">
           <div className="sup-filters">
-            {([["", "All"], ["open", "Open"], ["closed", "Closed"]] as [string, string][]).map(([v, label]) => (
+            {([["", ts("all")], ["open", ts("open")], ["closed", ts("closed")]] as [string, string][]).map(([v, label]) => (
               <button
                 key={v}
                 type="button"
@@ -288,16 +293,16 @@ export default function AdminSupport() {
               className={`filter-chip${mineOnly ? " active" : ""}`}
               onClick={() => setMineOnly((v) => !v)}
             >
-              Mine
+              {ts("mine")}
             </button>
           </div>
 
           {unassigned > 0 && (
-            <p className="sup-waiting mono">{unassigned} waiting for an owner</p>
+            <p className="sup-waiting mono">{ts("waitingForOwner").replace("{n}", String(unassigned))}</p>
           )}
 
-          {loading && <p className="muted">Loading</p>}
-          {!loading && threads.length === 0 && <p className="empty-admin">No conversations.</p>}
+          {loading && <p className="muted">{ts("loading")}</p>}
+          {!loading && threads.length === 0 && <p className="empty-admin">{ts("noConversations")}</p>}
 
           <ul className="sup-threads">
             {threads.map((t) => (
@@ -311,7 +316,7 @@ export default function AdminSupport() {
                     <span className="sup-thread-name">
                       <span
                         className={`sup-dot${t.visitor_online ? " on" : ""}`}
-                        aria-label={t.visitor_online ? "Customer online" : "Customer offline"}
+                        aria-label={t.visitor_online ? ts("customerOnline") : ts("customerOffline")}
                       />
                       {t.user_name || t.display_name}
                     </span>
@@ -321,13 +326,13 @@ export default function AdminSupport() {
                   <span className="sup-thread-preview">{t.last_body || t.subject}</span>
 
                   <span className="sup-thread-tags">
-                    <span className={`sup-tag ${t.status}`}>{t.status}</span>
+                    <span className={`sup-tag ${t.status}`}>{t.status === "open" ? ts("open") : ts("closed")}</span>
                     {t.assigned_admin_name ? (
                       <span className={`sup-tag owner${t.assigned_admin_id === user?.id ? " me" : ""}`}>
-                        {t.assigned_admin_id === user?.id ? "You" : t.assigned_admin_name}
+                        {t.assigned_admin_id === user?.id ? ts("you") : t.assigned_admin_name}
                       </span>
                     ) : (
-                      <span className="sup-tag waiting">Unassigned</span>
+                      <span className="sup-tag waiting">{ts("unassigned")}</span>
                     )}
                     {t.unread_for_admin > 0 && <span className="sup-tag count">{t.unread_for_admin}</span>}
                   </span>
@@ -340,28 +345,28 @@ export default function AdminSupport() {
         {/* ── Transcript ── */}
         <section className="sup-pane">
           {activeId === null || !active ? (
-            <p className="sup-pick">Pick a conversation.</p>
+            <p className="sup-pick">{ts("pickConversation")}</p>
           ) : (
             <>
               <header className="sup-pane-head">
                 <div>
                   <h2 className="sup-pane-title">{active.user_name || active.display_name}</h2>
                   <p className="sup-pane-sub">
-                    {active.user_email || "Guest"}
+                    {active.user_email || ts("guest")}
                     <span className={`sup-dot${visitorOnline ? " on" : ""}`} aria-hidden="true" />
-                    {visitorOnline ? "online" : "offline"}
-                    {active.assigned_admin_name && ` · ${active.assigned_admin_name}`}
+                    {visitorOnline ? ts("online") : ts("offline")}
+                    {active.assigned_admin_name && `, ${active.assigned_admin_name}`}
                   </p>
                 </div>
                 <div className="sup-pane-actions">
-                  <button className="btn btn-sm btn-outline" onClick={openForward}>Forward</button>
+                  <button className="btn btn-sm btn-outline" onClick={openForward}>{ts("forward")}</button>
                   <button
                     className="btn btn-sm btn-ghost"
                     onClick={() => void setStatus(active.id, active.status === "open" ? "closed" : "open")}
                   >
-                    {active.status === "open" ? "Close" : "Reopen"}
+                    {active.status === "open" ? ts("close") : ts("reopen")}
                   </button>
-                  <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(active.id)}>Delete</button>
+                  <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(active.id)}>{ts("delete")}</button>
                 </div>
               </header>
 
@@ -369,7 +374,7 @@ export default function AdminSupport() {
                 <div className="sup-handovers">
                   {transfers.map((tr, i) => (
                     <p key={i} className="sup-handover">
-                      {tr.from_name ?? "Someone"} to {tr.to_name ?? "someone"}
+                      {tr.from_name ?? ts("someone")} {ts("transferTo")} {tr.to_name ?? ts("someone")}
                       {tr.note && <span className="sup-handover-note">{tr.note}</span>}
                     </p>
                   ))}
@@ -382,7 +387,7 @@ export default function AdminSupport() {
                     <p key={m.id} className="sup-system">{m.body}</p>
                   ) : (
                     <div key={m.id} className={`sup-msg${m.sender === "admin" ? " from-admin" : " from-user"}`}>
-                      <span className="sup-msg-who">{m.author_name || (m.sender === "admin" ? "Staff" : "Customer")}</span>
+                      <span className="sup-msg-who">{m.author_name || (m.sender === "admin" ? ts("staff") : ts("customer"))}</span>
                       <p className="sup-msg-body">{m.body}</p>
                       <span className="sup-msg-time mono">{formatTime(m.created_at)}</span>
                     </div>
@@ -392,7 +397,7 @@ export default function AdminSupport() {
                 {userTyping && (
                   <div className="sup-msg from-user sup-typing-msg">
                     <span className="sup-msg-who">{userTyping}</span>
-                    <span className="sc-typing" aria-label={`${userTyping} is typing`}>
+                    <span className="sc-typing" aria-label={`${userTyping} ${ts("isTyping")}`}>
                       <span /><span /><span />
                     </span>
                   </div>
@@ -404,14 +409,14 @@ export default function AdminSupport() {
                   rows={2}
                   value={reply}
                   maxLength={2000}
-                  placeholder="Type a reply"
+                  placeholder={ts("replyPlaceholder")}
                   onChange={(e) => { setReply(e.target.value); signalTyping(); }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(e); }
                   }}
                 />
                 <button className="btn btn-amber" disabled={sending || !reply.trim()}>
-                  {sending ? "Sending" : "Send"}
+                  {sending ? ts("sending") : ts("send")}
                 </button>
               </form>
             </>
@@ -423,9 +428,9 @@ export default function AdminSupport() {
       {forwardOpen && (
         <div className="modal-backdrop" onMouseDown={() => setForwardOpen(false)}>
           <div className="modal-box" role="dialog" aria-modal="true" aria-labelledby="fwd-title" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 className="modal-title" id="fwd-title">Forward this conversation</h2>
+            <h2 className="modal-title" id="fwd-title">{ts("forwardTitle")}</h2>
 
-            {roster.length === 0 && <p className="muted">No one else to forward to.</p>}
+            {roster.length === 0 && <p className="muted">{ts("noOneToForward")}</p>}
 
             <ul className="sup-roster">
               {roster.map((a) => (
@@ -438,28 +443,28 @@ export default function AdminSupport() {
                   >
                     <span className={`sup-dot${a.online ? " on" : ""}`} aria-hidden="true" />
                     <span className="sup-roster-name">{a.name}</span>
-                    <span className="sup-roster-role mono">{a.role === "super_admin" ? "Super admin" : "Admin"}</span>
-                    <span className="sup-roster-state mono">{a.online ? "online" : "offline"}</span>
+                    <span className="sup-roster-role mono">{a.role === "super_admin" ? ts("superAdmin") : ts("admin")}</span>
+                    <span className="sup-roster-state mono">{a.online ? ts("online") : ts("offline")}</span>
                   </button>
                 </li>
               ))}
             </ul>
 
             <label className="ofr-field">
-              Note <span className="optional">optional</span>
+              {ts("note")} <span className="optional">{ts("optional")}</span>
               <textarea
                 rows={2}
                 value={forwardNote}
                 maxLength={300}
-                placeholder="What they need to know"
+                placeholder={ts("notePlaceholder")}
                 onChange={(e) => setForwardNote(e.target.value)}
               />
             </label>
 
             <div className="modal-actions">
-              <button className="btn btn-outline" onClick={() => setForwardOpen(false)}>Cancel</button>
+              <button className="btn btn-outline" onClick={() => setForwardOpen(false)}>{ts("cancel")}</button>
               <button className="btn btn-amber" disabled={forwardTo === null || forwarding} onClick={doForward}>
-                {forwarding ? "Sending" : "Forward"}
+                {forwarding ? ts("sending") : ts("forward")}
               </button>
             </div>
           </div>
@@ -468,9 +473,9 @@ export default function AdminSupport() {
 
       <ConfirmModal
         open={deleteTarget !== null}
-        title="Delete this conversation?"
-        body="The whole transcript goes with it. This cannot be undone."
-        confirmLabel="Delete"
+        title={ts("deleteTitle")}
+        body={ts("deleteBody")}
+        confirmLabel={ts("delete")}
         confirmClass="btn-danger"
         onConfirm={() => {
           const id = deleteTarget;
@@ -481,7 +486,7 @@ export default function AdminSupport() {
               setThreads((prev) => prev.filter((t) => t.id !== id));
               if (id === activeId) { setActiveId(null); setActive(null); setMessages([]); }
             })
-            .catch((e) => setError(e instanceof Error ? e.message : "Could not delete that."));
+            .catch((e) => setError(e instanceof Error ? e.message : ts("errDelete")));
         }}
         onCancel={() => setDeleteTarget(null)}
       />
