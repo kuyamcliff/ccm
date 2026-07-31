@@ -6,6 +6,7 @@ import { PhoneInput, toInternational } from "../components/PhoneInput";
 import { useAuth } from "../auth";
 import { MomoPaymentModal } from "../components/MomoPaymentModal";
 import { IconBag, IconCheck, IconMinus, IconPlus } from "../components/Icons";
+import { useT } from "../i18n/context";
 
 type CartLine = { item: MenuItem; qty: number };
 
@@ -33,6 +34,7 @@ interface PlacedOrder {
  * the counter.
  */
 export function MenuPage() {
+  const t = useT("menu");
   const { user } = useAuth();
 
   const [menu, setMenu] = useState<MenuItem[]>([]);
@@ -123,13 +125,13 @@ export function MenuPage() {
 
   function add(item: MenuItem) {
     setQty(item, 1);
-    flash(`${item.name} don enter your bag`);
+    flash(t("enteredBag").replace("{name}", item.name));
   }
 
   /** The add / quantity control. Shared by the feature cards and the dense rows
       so the two section styles cannot drift apart. */
   function itemAction(item: MenuItem) {
-    if (item.price_fcfa === null) return <span className="mnu-item-ask">Ask for counter</span>;
+    if (item.price_fcfa === null) return <span className="mnu-item-ask">{t("askCounter")}</span>;
     const line = cart.get(item.id);
     if (line) {
       return (
@@ -147,7 +149,7 @@ export function MenuPage() {
     return (
       <button type="button" className="mnu-add" onClick={() => add(item)}>
         <IconPlus size={15} />
-        <span>Add</span>
+        <span>{t("add")}</span>
       </button>
     );
   }
@@ -165,7 +167,7 @@ export function MenuPage() {
       const r = await api.validatePromo(form.promo_code.trim(), subtotal);
       setPromoInfo({ discount_fcfa: r.discount_fcfa, description: r.description });
     } catch (err) {
-      setPromoMsg(err instanceof Error ? err.message : "That code no work.");
+      setPromoMsg(err instanceof Error ? err.message : t("errPromo"));
     }
   }
 
@@ -177,7 +179,7 @@ export function MenuPage() {
       const r = await api.validateGiftCard(form.gift_card_code.trim());
       setGiftInfo({ remaining_value_fcfa: r.remaining_value_fcfa });
     } catch (err) {
-      setGiftMsg(err instanceof Error ? err.message : "We no fit find that gift card.");
+      setGiftMsg(err instanceof Error ? err.message : t("errGift"));
     }
   }
 
@@ -207,7 +209,7 @@ export function MenuPage() {
       }
       window.scrollTo({ top: 0, behavior: "instant" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "We no fit place that order. Try am again.");
+      setError(err instanceof Error ? err.message : t("errPlaceOrder"));
     } finally {
       setSubmitting(false);
     }
@@ -229,7 +231,7 @@ export function MenuPage() {
       // Revoked on the next tick so the download has already started.
       setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch {
-      setError("We no fit download the receipt. Sign in and check your account.");
+      setError(t("errReceipt"));
     }
   }
 
@@ -245,7 +247,7 @@ export function MenuPage() {
         windowSeconds: pay.expires_in_seconds,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "We no fit start the payment.");
+      setError(err instanceof Error ? err.message : t("errPay"));
     }
   }
 
@@ -265,29 +267,28 @@ export function MenuPage() {
     return (
       <div className="mnu">
         <div className="mnu-inner mnu-done">
-          <p className="mnu-step mono">Step 2 of 2</p>
-          <h1 className="mnu-done-title">Pay for your order</h1>
+          <p className="mnu-step mono">{t("step2of2")}</p>
+          <h1 className="mnu-done-title">{t("payTitle")}</h1>
           <p className="mnu-done-sub">
-            We start cooking once the payment lands. Nothing leaves your account until you
-            approve am with your PIN.
+            {t("payLede")}
           </p>
 
           <div className="mnu-ticket">
-            <p className="mnu-ticket-label">Order number</p>
+            <p className="mnu-ticket-label">{t("orderNumber")}</p>
             <p className="mnu-ticket-no mono">{order.order_no}</p>
 
             <dl className="mnu-ticket-rows">
-              <div><dt>Collect at</dt><dd className="mono">{form.pickup_time}</dd></div>
-              <div><dt>Name</dt><dd>{form.name}</dd></div>
-              <div><dt>Subtotal</dt><dd className="mono">{order.subtotal.toLocaleString()} FCFA</dd></div>
+              <div><dt>{t("collectAt")}</dt><dd className="mono">{form.pickup_time}</dd></div>
+              <div><dt>{t("name")}</dt><dd>{form.name}</dd></div>
+              <div><dt>{t("subtotal")}</dt><dd className="mono">{order.subtotal.toLocaleString()} FCFA</dd></div>
               {order.discount_fcfa > 0 && (
                 <div className="is-saving">
-                  <dt>Discount</dt>
+                  <dt>{t("discount")}</dt>
                   <dd className="mono">-{order.discount_fcfa.toLocaleString()} FCFA</dd>
                 </div>
               )}
               <div className="is-total">
-                <dt>To pay</dt>
+                <dt>{t("toPay")}</dt>
                 <dd className="mono">{order.total_fcfa.toLocaleString()} FCFA</dd>
               </div>
             </dl>
@@ -297,17 +298,17 @@ export function MenuPage() {
 
           <div className="mnu-pay-block">
             <PhoneInput
-              label="MTN number for Mobile Money"
+              label={t("momoLabel")}
               value={payPhone}
               onChange={setPayPhone}
             />
             <button className="btn btn-amber" onClick={startPayment} disabled={payPhone.length !== 9}>
-              Pay {order.total_fcfa.toLocaleString()} FCFA
+              {t("payButton").replace("{amount}", order.total_fcfa.toLocaleString())}
             </button>
           </div>
 
           <button className="btn btn-ghost mnu-abandon" onClick={startOver}>
-            Cancel this order
+            {t("cancelOrder")}
           </button>
         </div>
 
@@ -332,27 +333,27 @@ export function MenuPage() {
             <IconCheck size={30} />
           </span>
 
-          <h1 className="mnu-done-title">Payment don enter.</h1>
+          <h1 className="mnu-done-title">{t("doneTitle")}</h1>
           <p className="mnu-done-sub">
-            Show this code at the counter when you reach. We go scan am.
+            {t("doneLede")}
           </p>
 
           <div className="mnu-ticket">
-            <p className="mnu-ticket-label">Collection code</p>
+            <p className="mnu-ticket-label">{t("collectionCode")}</p>
             <p className="mnu-ticket-no mono">{order.order_no}</p>
 
             <dl className="mnu-ticket-rows">
-              <div><dt>Collect at</dt><dd className="mono">{form.pickup_time}</dd></div>
-              <div><dt>Name</dt><dd>{form.name}</dd></div>
-              <div><dt>Subtotal</dt><dd className="mono">{order.subtotal.toLocaleString()} FCFA</dd></div>
+              <div><dt>{t("collectAt")}</dt><dd className="mono">{form.pickup_time}</dd></div>
+              <div><dt>{t("name")}</dt><dd>{form.name}</dd></div>
+              <div><dt>{t("subtotal")}</dt><dd className="mono">{order.subtotal.toLocaleString()} FCFA</dd></div>
               {order.discount_fcfa > 0 && (
                 <div className="is-saving">
-                  <dt>Discount</dt>
+                  <dt>{t("discount")}</dt>
                   <dd className="mono">-{order.discount_fcfa.toLocaleString()} FCFA</dd>
                 </div>
               )}
               <div className="is-total">
-                <dt>Paid</dt>
+                <dt>{t("paid")}</dt>
                 <dd className="mono">{order.total_fcfa.toLocaleString()} FCFA</dd>
               </div>
             </dl>
@@ -361,9 +362,9 @@ export function MenuPage() {
           {error && <p className="form-error" role="alert">{error}</p>}
 
           <div className="mnu-done-actions">
-            <button className="btn btn-amber" onClick={downloadReceipt}>Download receipt</button>
-            <button className="btn btn-outline" onClick={startOver}>Order again</button>
-            <Link to="/" className="btn btn-ghost">Back to home</Link>
+            <button className="btn btn-amber" onClick={downloadReceipt}>{t("downloadReceipt")}</button>
+            <button className="btn btn-outline" onClick={startOver}>{t("orderAgain")}</button>
+            <Link to="/" className="btn btn-ghost">{t("backToHome")}</Link>
           </div>
         </div>
       </div>
@@ -375,58 +376,58 @@ export function MenuPage() {
     return (
       <div className="mnu">
         <div className="mnu-inner">
-          <button className="mnu-back" onClick={() => setStep("menu")}>Back to the food</button>
-          <h1 className="mnu-title">Checkout</h1>
+          <button className="mnu-back" onClick={() => setStep("menu")}>{t("backToFood")}</button>
+          <h1 className="mnu-title">{t("checkoutTitle")}</h1>
 
           <div className="mnu-checkout">
             <form className="mnu-form" onSubmit={placeOrder}>
               <section className="mnu-card">
-                <h2 className="mnu-card-title">Who dey collect</h2>
+                <h2 className="mnu-card-title">{t("whoCollect")}</h2>
                 <div className="mnu-grid-2">
                   <label className="mnu-field">
-                    Name
-                    <input value={form.name} onChange={setField("name")} required minLength={2} maxLength={60} placeholder="Your name" />
+                    {t("name")}
+                    <input value={form.name} onChange={setField("name")} required minLength={2} maxLength={60} placeholder={t("name")} />
                   </label>
                   <PhoneInput
-                    label="Phone"
+                    label={t("phone")}
                     value={form.phone}
                     onChange={(digits) => setForm((f) => ({ ...f, phone: digits }))}
                     required
                   />
                 </div>
                 <label className="mnu-field">
-                  Pickup time
+                  {t("pickupTime")}
                   <select value={form.pickup_time} onChange={setField("pickup_time")} required>
-                    <option value="">Choose a time</option>
-                    {PICKUP_SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
+                    <option value="">{t("chooseTime")}</option>
+                    {PICKUP_SLOTS.map((slot) => <option key={slot} value={slot}>{slot}</option>)}
                   </select>
                 </label>
                 <label className="mnu-field">
-                  Notes <span className="optional">(optional)</span>
-                  <textarea value={form.note} onChange={setField("note")} rows={3} maxLength={300} placeholder="Extra pepper, no onions" />
+                  {t("notes")} <span className="optional">{t("optional")}</span>
+                  <textarea value={form.note} onChange={setField("note")} rows={3} maxLength={300} placeholder={t("notePlaceholder")} />
                 </label>
               </section>
 
               <section className="mnu-card">
-                <h2 className="mnu-card-title">Discounts</h2>
-                {!user && <p className="hint"><Link to="/login">Sign in</Link> to use a promo code or gift card.</p>}
+                <h2 className="mnu-card-title">{t("discounts")}</h2>
+                {!user && <p className="hint"><Link to="/login">{t("signInPrompt")}</Link> {t("signInSuffix")}</p>}
                 <label className="mnu-field">
-                  Promo code
+                  {t("promoCode")}
                   <div className="input-with-btn">
                     <input value={form.promo_code} onChange={setField("promo_code")} placeholder="WEEKEND10" disabled={!user} style={{ textTransform: "uppercase" }} />
-                    <button type="button" className="btn btn-outline btn-sm" onClick={applyPromo} disabled={!user || !form.promo_code.trim()}>Apply</button>
+                    <button type="button" className="btn btn-outline btn-sm" onClick={applyPromo} disabled={!user || !form.promo_code.trim()}>{t("applyPromo")}</button>
                   </div>
                   {promoMsg && <span className="form-error">{promoMsg}</span>}
-                  {promoInfo && <span className="mnu-ok">{promoInfo.description} saves you {promoInfo.discount_fcfa.toLocaleString()} FCFA</span>}
+                  {promoInfo && <span className="mnu-ok">{promoInfo.description} {t("promoSaved").replace("{amount}", promoInfo.discount_fcfa.toLocaleString())}</span>}
                 </label>
                 <label className="mnu-field">
-                  Gift card
+                  {t("giftCard")}
                   <div className="input-with-btn">
                     <input value={form.gift_card_code} onChange={setField("gift_card_code")} placeholder="GIFT-XXXX-XXXX" disabled={!user} style={{ textTransform: "uppercase" }} />
-                    <button type="button" className="btn btn-outline btn-sm" onClick={applyGift} disabled={!user || !form.gift_card_code.trim()}>Check</button>
+                    <button type="button" className="btn btn-outline btn-sm" onClick={applyGift} disabled={!user || !form.gift_card_code.trim()}>{t("checkGift")}</button>
                   </div>
                   {giftMsg && <span className="form-error">{giftMsg}</span>}
-                  {giftInfo && <span className="mnu-ok">{giftInfo.remaining_value_fcfa.toLocaleString()} FCFA left on this card</span>}
+                  {giftInfo && <span className="mnu-ok">{t("giftLeft").replace("{amount}", giftInfo.remaining_value_fcfa.toLocaleString())}</span>}
                 </label>
               </section>
 
@@ -434,7 +435,7 @@ export function MenuPage() {
             </form>
 
             <aside className="mnu-summary">
-              <h2 className="mnu-card-title">Your order</h2>
+              <h2 className="mnu-card-title">{t("yourOrder")}</h2>
               <ul className="mnu-summary-lines">
                 {lines.map(({ item, qty }) => (
                   <li key={item.id}>
@@ -444,16 +445,16 @@ export function MenuPage() {
                 ))}
               </ul>
               <dl className="mnu-totals">
-                <div><dt>Subtotal</dt><dd className="mono">{subtotal.toLocaleString()} FCFA</dd></div>
+                <div><dt>{t("subtotal")}</dt><dd className="mono">{subtotal.toLocaleString()} FCFA</dd></div>
                 {discount > 0 && (
-                  <div className="is-saving"><dt>Discount</dt><dd className="mono">-{discount.toLocaleString()} FCFA</dd></div>
+                  <div className="is-saving"><dt>{t("discount")}</dt><dd className="mono">-{discount.toLocaleString()} FCFA</dd></div>
                 )}
-                <div className="is-total"><dt>Total</dt><dd className="mono">{total.toLocaleString()} FCFA</dd></div>
+                <div className="is-total"><dt>{t("total")}</dt><dd className="mono">{total.toLocaleString()} FCFA</dd></div>
               </dl>
               <button className="btn btn-amber mnu-place" onClick={placeOrder} disabled={submitting || lines.length === 0}>
-                {submitting ? "Sending" : "Continue to payment"}
+                {submitting ? t("sending") : t("continueToPayment")}
               </button>
-              <p className="hint">Pay with Mobile Money on the next screen.</p>
+              <p className="hint">{t("payNextScreen")}</p>
             </aside>
           </div>
         </div>
@@ -470,17 +471,17 @@ export function MenuPage() {
       <div className="mnu-bar">
         <div className="mnu-inner mnu-bar-inner">
           <div className="mnu-bar-top">
-            <h1 className="mnu-title-sm">Our Menu</h1>
+            <h1 className="mnu-title-sm">{t("ourMenu")}</h1>
             <input
               className="mnu-search"
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search the board"
-              aria-label="Search the menu"
+              placeholder={t("searchPlaceholder")}
+              aria-label={t("searchLabel")}
             />
           </div>
-          <nav className="mnu-cats" aria-label="Menu categories">
+          <nav className="mnu-cats" aria-label={t("categoriesLabel")}>
             {categories.map((c) => (
               <button
                 key={c}
@@ -498,7 +499,7 @@ export function MenuPage() {
       <div className="mnu-inner mnu-layout">
         <div className="mnu-board">
           {loading && <div className="route-fallback"><span className="route-fallback-dot" aria-hidden="true" /></div>}
-          {!loading && filtered.length === 0 && <p className="mnu-empty">Nothing match that one.</p>}
+          {!loading && filtered.length === 0 && <p className="mnu-empty">{t("noMatch")}</p>}
 
           {grouped.map(([cat, items]) => (
             <section key={cat} className="mnu-section">
@@ -542,9 +543,9 @@ export function MenuPage() {
 
         {/* Desktop cart rail. The docked bar below replaces it on narrow screens. */}
         <aside className="mnu-cart">
-          <h2 className="mnu-card-title">Your bag</h2>
+          <h2 className="mnu-card-title">{t("yourBag")}</h2>
           {lines.length === 0 ? (
-            <p className="mnu-cart-empty">Nothing inside yet. Add something from the board.</p>
+            <p className="mnu-cart-empty">{t("bagEmpty")}</p>
           ) : (
             <>
               <ul className="mnu-summary-lines">
@@ -556,15 +557,15 @@ export function MenuPage() {
                 ))}
               </ul>
               <dl className="mnu-totals">
-                <div className="is-total"><dt>Subtotal</dt><dd className="mono">{subtotal.toLocaleString()} FCFA</dd></div>
+                <div className="is-total"><dt>{t("subtotal")}</dt><dd className="mono">{subtotal.toLocaleString()} FCFA</dd></div>
               </dl>
               <button className="btn btn-amber mnu-place" onClick={() => setStep("checkout")}>
-                Checkout
+                {t("checkout")}
               </button>
             </>
           )}
           <p className="hint mnu-cart-note">
-            Prefer to sit down? <Link to="/reserve">Book a table</Link>.
+            {t("preferSitDown")} <Link to="/reserve">{t("bookTable")}</Link>.
           </p>
         </aside>
       </div>
@@ -574,11 +575,11 @@ export function MenuPage() {
         <div className="mnu-dock">
           <button type="button" className="mnu-dock-info" onClick={() => setCartOpen((v) => !v)} aria-expanded={cartOpen}>
             <span className="mnu-dock-count">{itemCount}</span>
-            <span><IconBag size={16} /> View bag</span>
+            <span><IconBag size={16} /> {t("viewBag")}</span>
           </button>
           <span className="mnu-dock-total mono">{subtotal.toLocaleString()} FCFA</span>
           <button type="button" className="btn btn-amber btn-sm" onClick={() => { setCartOpen(false); setStep("checkout"); }}>
-            Checkout
+            {t("checkout")}
           </button>
         </div>
       )}
@@ -586,8 +587,8 @@ export function MenuPage() {
       {cartOpen && itemCount > 0 && (
         <div className="mnu-dock-sheet">
           <div className="mnu-dock-sheet-head">
-            <h2 className="mnu-card-title">Your bag</h2>
-            <button type="button" className="btn-ghost" onClick={() => setCartOpen(false)}>Close</button>
+            <h2 className="mnu-card-title">{t("yourBag")}</h2>
+            <button type="button" className="btn-ghost" onClick={() => setCartOpen(false)}>{t("close")}</button>
           </div>
           <ul className="mnu-summary-lines">
             {lines.map(({ item, qty }) => (
