@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, Offer } from "../../api";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { OfferIcon, OFFER_ICON_KEYS } from "../../components/Icons";
+import { useLanguage } from "../../i18n/context";
 
 type ModalState = { title: string; body?: string; label?: string; danger?: boolean; onConfirm: () => void };
 
@@ -25,6 +26,8 @@ const EMPTY: Draft = { title: "", description: "", badge: "", icon: "flame", val
  * of opening a second, differently-shaped dialog.
  */
 export default function AdminOffers() {
+  const { t } = useLanguage();
+  const to = (key: string) => t("adminOffers", key);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -84,15 +87,15 @@ export default function AdminOffers() {
       };
       if (editingId === null) {
         await api.admin.createOffer(payload);
-        showToast("Offer created.");
+        showToast(to("created"));
       } else {
         await api.admin.updateOffer(editingId, payload);
-        showToast("Offer updated.");
+        showToast(to("updated"));
       }
       cancelEdit();
       load();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Could not save that offer.");
+      setError(err instanceof Error ? err.message : to("errSave"));
     } finally {
       setSaving(false);
     }
@@ -101,28 +104,28 @@ export default function AdminOffers() {
   function toggle(o: Offer) {
     const enabling = !o.is_active;
     setModal({
-      title: `${enabling ? "Show" : "Hide"} "${o.title}"?`,
-      body: enabling ? "Customers will see this offer straight away." : "Customers will stop seeing this offer.",
-      label: enabling ? "Show" : "Hide",
+      title: (enabling ? to("showTitle") : to("hideTitle")).replace("{title}", o.title),
+      body: enabling ? to("showBody") : to("hideBody"),
+      label: enabling ? to("show") : to("hide"),
       danger: !enabling,
       onConfirm: () => {
         api.admin.updateOffer(o.id, { is_active: enabling ? 1 : 0 })
-          .then(() => { load(); showToast(enabling ? "Offer is live." : "Offer hidden."); })
-          .catch(() => showToast("Could not change that offer."));
+          .then(() => { load(); showToast(enabling ? to("isLive") : to("isHidden")); })
+          .catch(() => showToast(to("errToggle")));
       },
     });
   }
 
   function del(o: Offer) {
     setModal({
-      title: `Delete "${o.title}"?`,
-      body: "This cannot be undone.",
-      label: "Delete",
+      title: to("deleteTitle").replace("{title}", o.title),
+      body: to("cannotBeUndone"),
+      label: to("delete"),
       danger: true,
       onConfirm: () => {
         api.admin.deleteOffer(o.id)
-          .then(() => { if (editingId === o.id) cancelEdit(); load(); showToast("Offer deleted."); })
-          .catch(() => showToast("Could not delete that offer."));
+          .then(() => { if (editingId === o.id) cancelEdit(); load(); showToast(to("deleted")); })
+          .catch(() => showToast(to("errDelete")));
       },
     });
   }
@@ -130,34 +133,34 @@ export default function AdminOffers() {
   return (
     <div className="admin-page ofr">
       <div className="admin-page-header">
-        <h1 className="admin-page-title">Offers</h1>
-        <span className="ofr-tally mono">{liveCount} live · {offers.length} total</span>
+        <h1 className="admin-page-title">{to("title")}</h1>
+        <span className="ofr-tally mono">{to("tally").replace("{live}", String(liveCount)).replace("{total}", String(offers.length))}</span>
       </div>
 
       <div className="ofr-layout">
         {/* ── Editor ── */}
         <form className="ofr-editor" onSubmit={save}>
           <div className="ofr-editor-head">
-            <h2 className="ofr-editor-title">{editingId === null ? "New offer" : "Editing offer"}</h2>
+            <h2 className="ofr-editor-title">{editingId === null ? to("newOffer") : to("editingOffer")}</h2>
             {editingId !== null && (
-              <button type="button" className="link-btn" onClick={cancelEdit}>Cancel</button>
+              <button type="button" className="link-btn" onClick={cancelEdit}>{to("cancel")}</button>
             )}
           </div>
 
           {error && <p className="form-error" role="alert">{error}</p>}
 
           <label className="ofr-field">
-            Title
-            <input value={form.title} onChange={set("title")} required maxLength={120} placeholder="Happy hour, 20 percent off" />
+            {to("fieldTitle")}
+            <input value={form.title} onChange={set("title")} required maxLength={120} placeholder={to("titlePlaceholder")} />
           </label>
 
           <label className="ofr-field">
-            Description
-            <textarea value={form.description} onChange={set("description")} rows={3} maxLength={400} placeholder="Every day from 6 to 8 pm." />
+            {to("fieldDescription")}
+            <textarea value={form.description} onChange={set("description")} rows={3} maxLength={400} placeholder={to("descPlaceholder")} />
           </label>
 
           <fieldset className="ofr-icons">
-            <legend>Icon</legend>
+            <legend>{to("icon")}</legend>
             <div className="ofr-icon-row">
               {OFFER_ICON_KEYS.map((key) => (
                 <button
@@ -177,40 +180,40 @@ export default function AdminOffers() {
 
           <div className="ofr-field-row">
             <label className="ofr-field">
-              Badge <span className="optional">optional</span>
-              <input value={form.badge} onChange={set("badge")} maxLength={40} placeholder="Limited time" />
+              {to("badge")} <span className="optional">{to("optional")}</span>
+              <input value={form.badge} onChange={set("badge")} maxLength={40} placeholder={to("badgePlaceholder")} />
             </label>
             <label className="ofr-field">
-              Valid until <span className="optional">optional</span>
+              {to("validUntil")} <span className="optional">{to("optional")}</span>
               <input type="date" value={form.valid_until} onChange={set("valid_until")} />
             </label>
           </div>
 
           <label className="ofr-field ofr-field-narrow">
-            Sort order
+            {to("sortOrder")}
             <input type="number" value={form.sort_order} onChange={set("sort_order")} min={0} max={999} />
           </label>
 
           <div className="ofr-preview">
-            <p className="ofr-preview-label mono">Preview</p>
+            <p className="ofr-preview-label mono">{to("preview")}</p>
             <article className="offer-card">
               <span className="offer-icon"><OfferIcon name={form.icon} size={22} /></span>
               {form.badge && <span className="offer-badge">{form.badge}</span>}
-              <h3 className="offer-title">{form.title || "Offer title"}</h3>
+              <h3 className="offer-title">{form.title || to("offerTitlePlaceholder")}</h3>
               {form.description && <p className="offer-desc">{form.description}</p>}
-              {form.valid_until && <p className="offer-expires">Valid until {form.valid_until}</p>}
+              {form.valid_until && <p className="offer-expires">{to("validUntilPreview")} {form.valid_until}</p>}
             </article>
           </div>
 
           <button className="btn btn-amber ofr-save" type="submit" disabled={saving || !form.title.trim()}>
-            {saving ? "Saving" : editingId === null ? "Create offer" : "Save changes"}
+            {saving ? to("saving") : editingId === null ? to("createOffer") : to("saveChanges")}
           </button>
         </form>
 
         {/* ── List ── */}
         <div className="ofr-list">
-          {loading && <p className="muted">Loading</p>}
-          {!loading && offers.length === 0 && <p className="empty-admin">No offers yet.</p>}
+          {loading && <p className="muted">{to("loading")}</p>}
+          {!loading && offers.length === 0 && <p className="empty-admin">{to("noOffers")}</p>}
 
           {offers.map((o) => (
             <article key={o.id} className={`ofr-row${o.is_active ? "" : " is-hidden"}${editingId === o.id ? " is-editing" : ""}`}>
@@ -219,17 +222,17 @@ export default function AdminOffers() {
               <div className="ofr-row-body">
                 <div className="ofr-row-head">
                   <h3 className="ofr-row-title">{o.title}</h3>
-                  <span className={`ofr-state ${o.is_active ? "live" : "off"}`}>{o.is_active ? "Live" : "Hidden"}</span>
+                  <span className={`ofr-state ${o.is_active ? "live" : "off"}`}>{o.is_active ? to("live") : to("hidden")}</span>
                 </div>
                 {o.badge && <span className="ofr-row-badge">{o.badge}</span>}
                 {o.description && <p className="ofr-row-desc">{o.description}</p>}
-                {o.valid_until && <p className="ofr-row-meta mono">Until {o.valid_until}</p>}
+                {o.valid_until && <p className="ofr-row-meta mono">{to("until")} {o.valid_until}</p>}
               </div>
 
               <div className="ofr-row-actions">
-                <button className="btn btn-sm btn-outline" onClick={() => startEdit(o)}>Edit</button>
-                <button className="btn btn-sm btn-ghost" onClick={() => toggle(o)}>{o.is_active ? "Hide" : "Show"}</button>
-                <button className="btn btn-sm btn-danger" onClick={() => del(o)}>Delete</button>
+                <button className="btn btn-sm btn-outline" onClick={() => startEdit(o)}>{to("edit")}</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => toggle(o)}>{o.is_active ? to("hide") : to("show")}</button>
+                <button className="btn btn-sm btn-danger" onClick={() => del(o)}>{to("delete")}</button>
               </div>
             </article>
           ))}
@@ -242,7 +245,7 @@ export default function AdminOffers() {
         open={modal !== null}
         title={modal?.title ?? ""}
         body={modal?.body}
-        confirmLabel={modal?.label ?? "Confirm"}
+        confirmLabel={modal?.label ?? to("confirm")}
         confirmClass={modal?.danger !== false ? "btn-danger" : "btn-primary"}
         onConfirm={() => { modal?.onConfirm(); setModal(null); }}
         onCancel={() => setModal(null)}
