@@ -6,6 +6,7 @@ import { api } from "../api";
 import type { Review, ReviewReply } from "../api";
 import { useAuth } from "../auth";
 import { Stars } from "../components/Stars";
+import { useT } from "../i18n/context";
 
 const MAX_IMAGES = 4;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -16,6 +17,7 @@ function formatDate(iso: string): string {
 }
 
 function MediaGrid({ urls, onRemove }: { urls: string[]; onRemove?: (i: number) => void }) {
+  const t = useT("reviews");
   if (urls.length === 0) return null;
   return (
     <div className="rv-media-grid">
@@ -27,7 +29,7 @@ function MediaGrid({ urls, onRemove }: { urls: string[]; onRemove?: (i: number) 
             <img src={url} alt="" className="rv-media-el" loading="lazy" />
           )}
           {onRemove && (
-            <button className="rv-media-remove" type="button" onClick={() => onRemove(i)} aria-label="Remove media">✕</button>
+            <button className="rv-media-remove" type="button" onClick={() => onRemove(i)} aria-label={t("removeMedia")}>✕</button>
           )}
         </div>
       ))}
@@ -40,6 +42,7 @@ function VoteBar({ review, userId, onChange }: {
   userId?: number;
   onChange: (id: number, likes: number, dislikes: number, vote: "like" | "dislike" | null) => void;
 }) {
+  const t = useT("reviews");
   const [busy, setBusy] = useState(false);
 
   async function cast(v: "like" | "dislike") {
@@ -57,7 +60,7 @@ function VoteBar({ review, userId, onChange }: {
     finally { setBusy(false); }
   }
 
-  const tip = userId ? undefined : "Sign in to vote";
+  const tip = userId ? undefined : t("signInToVote");
 
   return (
     <div className="rv-vote-bar">
@@ -65,7 +68,7 @@ function VoteBar({ review, userId, onChange }: {
         className={`rv-vote-btn${review.user_vote === "like" ? " rv-vote-active-like" : ""}`}
         onClick={() => cast("like")}
         disabled={busy || !userId}
-        title={tip ?? (review.user_vote === "like" ? "Remove like" : "Like")}
+        title={tip ?? (review.user_vote === "like" ? t("removeLike") : t("like"))}
       >
         <span className="rv-vote-icon"><IconThumbUp size={15} /></span>
         <span className="rv-vote-count">{review.likes}</span>
@@ -74,12 +77,12 @@ function VoteBar({ review, userId, onChange }: {
         className={`rv-vote-btn${review.user_vote === "dislike" ? " rv-vote-active-dislike" : ""}`}
         onClick={() => cast("dislike")}
         disabled={busy || !userId}
-        title={tip ?? (review.user_vote === "dislike" ? "Remove dislike" : "Dislike")}
+        title={tip ?? (review.user_vote === "dislike" ? t("removeDislike") : t("dislike"))}
       >
         <span className="rv-vote-icon"><IconThumbDown size={15} /></span>
         <span className="rv-vote-count">{review.dislikes}</span>
       </button>
-      {!userId && <span className="rv-vote-hint"><Link to="/login">Sign in</Link> to vote</span>}
+      {!userId && <span className="rv-vote-hint"><Link to="/login">{t("signInToReply")}</Link> {t("toVote")}</span>}
     </div>
   );
 }
@@ -90,6 +93,7 @@ function RepliesSection({ review, userId, onAdded, onDeleted }: {
   onAdded: (reviewId: number, reply: ReviewReply) => void;
   onDeleted: (reviewId: number, replyId: number) => void;
 }) {
+  const t = useT("reviews");
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -106,7 +110,7 @@ function RepliesSection({ review, userId, onAdded, onDeleted }: {
       onAdded(review.id, r.reply);
       setText("");
     } catch (ex) {
-      setErr(ex instanceof Error ? ex.message : "Could not post reply.");
+      setErr(ex instanceof Error ? ex.message : t("errPostReply"));
     } finally { setBusy(false); }
   }
 
@@ -121,8 +125,8 @@ function RepliesSection({ review, userId, onAdded, onDeleted }: {
     <div className="rv-replies">
       <button className="rv-replies-toggle" onClick={() => setOpen((v) => !v)}>
         {count === 0
-          ? (open ? "Close" : "Reply")
-          : `${open ? "Hide" : "Show"} ${count} repl${count === 1 ? "y" : "ies"}`}
+          ? (open ? t("close") : t("reply"))
+          : `${open ? t("hide") : t("show")} ${count} ${count === 1 ? t("replySingular") : t("replyPlural")}`}
         <span className="rv-replies-caret">{open ? "▴" : "▾"}</span>
       </button>
 
@@ -135,7 +139,7 @@ function RepliesSection({ review, userId, onAdded, onDeleted }: {
                 <span className="rv-reply-author">{rp.author}</span>
                 <span className="rv-reply-date">{formatDate(rp.created_at)}</span>
                 {userId === rp.user_id && (
-                  <button className="rv-reply-del" onClick={() => del(rp.id)}>Delete</button>
+                  <button className="rv-reply-del" onClick={() => del(rp.id)}>{t("delete")}</button>
                 )}
               </div>
               <p className="rv-reply-text">{rp.text}</p>
@@ -150,17 +154,17 @@ function RepliesSection({ review, userId, onAdded, onDeleted }: {
                   className="rv-reply-input"
                   rows={2}
                   maxLength={500}
-                  placeholder="Write a reply…"
+                  placeholder={t("replyPlaceholder")}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                 />
                 <button className="btn btn-amber btn-sm" disabled={busy || !text.trim()}>
-                  {busy ? "…" : "Post"}
+                  {busy ? t("posting") : t("post")}
                 </button>
               </div>
             </form>
           ) : (
-            <p className="rv-reply-signin"><Link to="/login">Sign in</Link> to reply.</p>
+            <p className="rv-reply-signin"><Link to="/login">{t("signInToReply")}</Link> {t("toReply")}</p>
           )}
         </div>
       )}
@@ -169,6 +173,7 @@ function RepliesSection({ review, userId, onAdded, onDeleted }: {
 }
 
 export function Reviews() {
+  const t = useT("reviews");
   const { user } = useAuth();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -229,15 +234,15 @@ export function Reviews() {
     const queue: File[] = [];
     for (const f of files) {
       if (f.type.startsWith("image/")) {
-        if (imgSlots <= 0) { setMediaErr(`Max ${MAX_IMAGES} images per review.`); break; }
-        if (f.size > MAX_IMAGE_BYTES) { setMediaErr(`"${f.name}" is over 5 MB.`); break; }
+        if (imgSlots <= 0) { setMediaErr(t("errMaxImages").replace("{max}", String(MAX_IMAGES))); break; }
+        if (f.size > MAX_IMAGE_BYTES) { setMediaErr(t("errImageSize").replace("{name}", f.name)); break; }
         queue.push(f); imgSlots--;
       } else if (f.type.startsWith("video/")) {
-        if (vidSlots <= 0) { setMediaErr("Only 1 video per review."); break; }
-        if (f.size > MAX_VIDEO_BYTES) { setMediaErr("Video must be under 20 MB."); break; }
+        if (vidSlots <= 0) { setMediaErr(t("errOneVideo")); break; }
+        if (f.size > MAX_VIDEO_BYTES) { setMediaErr(t("errVideoSize")); break; }
         queue.push(f); vidSlots--;
       } else {
-        setMediaErr("Only images (JPEG, PNG, WebP) and videos (MP4, WebM) are supported.");
+        setMediaErr(t("errUnsupported"));
         break;
       }
     }
@@ -266,7 +271,7 @@ export function Reviews() {
       await refresh();
       setFormOpen(false);
     } catch (ex) {
-      setError(ex instanceof Error ? ex.message : "Could not save your review.");
+      setError(ex instanceof Error ? ex.message : t("errSave"));
     } finally { setBusy(false); }
   }
 
@@ -278,7 +283,7 @@ export function Reviews() {
       await refresh();
       setFormOpen(false);
     } catch (ex) {
-      setError(ex instanceof Error ? ex.message : "Could not delete your review.");
+      setError(ex instanceof Error ? ex.message : t("errDelete"));
     } finally { setBusy(false); }
   }
 
@@ -304,17 +309,17 @@ export function Reviews() {
       <div className="rv-wrap">
         <header className="rv2-head">
           <div>
-            <p className="eyebrow animate-up">Word on the street</p>
-            <h1 className="page-title animate-up delay-1" style={{ marginBottom: 0 }}>Reviews</h1>
+            <p className="eyebrow animate-up">{t("eyebrow")}</p>
+            <h1 className="page-title animate-up delay-1" style={{ marginBottom: 0 }}>{t("title")}</h1>
           </div>
           <div className="rv2-head-cta animate-up delay-1">
             {user ? (
               <button className="btn btn-amber" onClick={openForm}>
-                {mine ? "Edit your review" : "Write a review"}
+                {mine ? t("editReview") : t("writeReview")}
               </button>
             ) : (
               <p className="rv2-signin-hint">
-                <Link to="/login">Sign in</Link> or <Link to="/register">create an account</Link> to leave a review.
+                <Link to="/login">{t("signInPrefix")}</Link> {t("signInOr")} <Link to="/register">{t("createAccount")}</Link> {t("signInSuffix")}
               </p>
             )}
           </div>
@@ -326,7 +331,7 @@ export function Reviews() {
               <span className="review-summary-avg">{avgRating.toFixed(1)}</span>
               <div>
                 <Stars value={Math.round(avgRating)} />
-                <span className="review-summary-count">{reviews.length} review{reviews.length !== 1 ? "s" : ""}</span>
+                <span className="review-summary-count">{reviews.length} {reviews.length !== 1 ? t("reviewPlural") : t("reviewSingular")}</span>
               </div>
             </div>
             {reviews.length >= 3 && (
@@ -351,7 +356,7 @@ export function Reviews() {
         {loaded && reviews.length === 0 && (
           <div className="empty-state">
             <p className="empty-mark" aria-hidden="true">✶</p>
-            <p>No reviews yet. The grill is ready, be the first to write one.</p>
+            <p>{t("emptyTitle")}</p>
           </div>
         )}
 
@@ -373,7 +378,7 @@ export function Reviews() {
               {(r.media_urls?.length ?? 0) > 0 && <MediaGrid urls={r.media_urls} />}
               {r.admin_reply && (
                 <div className="admin-reply-block">
-                  <p className="admin-reply-label">Cam Chop Meat replied</p>
+                  <p className="admin-reply-label">{t("adminReplied")}</p>
                   <p className="admin-reply-text">{r.admin_reply}</p>
                   {r.admin_reply_at && <span className="admin-reply-date">{formatDate(r.admin_reply_at)}</span>}
                 </div>
@@ -395,23 +400,23 @@ export function Reviews() {
             aria-labelledby="rv2-form-title"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <h2 id="rv2-form-title" className="modal-title">{mine ? "Edit your review" : "Leave a review"}</h2>
+            <h2 id="rv2-form-title" className="modal-title">{mine ? t("editReview") : t("leaveReview")}</h2>
             <form className="form" onSubmit={submit}>
               <label>
-                Your rating
-                <div className="rating-picker" role="radiogroup" aria-label="Rating">
+                {t("yourRating")}
+                <div className="rating-picker" role="radiogroup" aria-label={t("rating")}>
                   {[1, 2, 3, 4, 5].map((n) => (
                     <button key={n} type="button" role="radio" aria-checked={rating === n}
-                      aria-label={`${n} star${n > 1 ? "s" : ""}`}
+                      aria-label={`${n} ${n > 1 ? t("stars") : t("star")}`}
                       className={n <= rating ? "star-btn on" : "star-btn"}
                       onClick={() => setRating(n)}>★</button>
                   ))}
                 </div>
               </label>
               <label>
-                How was it?
+                {t("howWasIt")}
                 <textarea rows={4} required minLength={3} maxLength={600}
-                  placeholder="Tell people about the pork..."
+                  placeholder={t("reviewPlaceholder")}
                   value={text} onChange={(e) => setText(e.target.value)} />
                 {text.length > 0 && (
                   <span style={{ fontSize: "0.75rem", color: "var(--text-dim)", marginTop: "-0.25rem" }}>
@@ -422,13 +427,13 @@ export function Reviews() {
 
               <div className="rv-upload-section">
                 <p className="rv-upload-label">
-                  Photos &amp; video
-                  <span className="rv-upload-hint">, up to {MAX_IMAGES} photos or 1 video · 5 MB / 20 MB</span>
+                  {t("photosVideo")}
+                  <span className="rv-upload-hint">, {t("photosVideoHint").replace("{max}", String(MAX_IMAGES))}</span>
                 </p>
                 <MediaGrid urls={mediaUrls} onRemove={(i) => setMediaUrls((p) => p.filter((_, idx) => idx !== i))} />
                 {mediaErr && <p className="form-error" style={{ fontSize: "0.8rem", margin: "0.35rem 0" }}>{mediaErr}</p>}
                 <button type="button" className="rv-upload-btn" onClick={() => fileRef.current?.click()}>
-                  + Add photos or video
+                  {t("addPhotos")}
                 </button>
                 <input ref={fileRef} type="file" accept="image/*,video/*" multiple
                   style={{ display: "none" }} onChange={handleFiles} />
@@ -439,14 +444,14 @@ export function Reviews() {
                 <div>
                   {mine && (
                     <button type="button" className="btn btn-danger btn-sm" disabled={busy} onClick={removeMine}>
-                      Delete mine
+                      {t("deleteMine")}
                     </button>
                   )}
                 </div>
                 <div style={{ display: "flex", gap: "0.75rem" }}>
-                  <button type="button" className="btn btn-outline" onClick={() => setFormOpen(false)}>Cancel</button>
+                  <button type="button" className="btn btn-outline" onClick={() => setFormOpen(false)}>{t("cancel")}</button>
                   <button className="btn btn-amber" disabled={busy}>
-                    {busy ? "Saving…" : mine ? "Update review" : "Post review"}
+                    {busy ? t("saving") : mine ? t("updateReview") : t("postReview")}
                   </button>
                 </div>
               </div>

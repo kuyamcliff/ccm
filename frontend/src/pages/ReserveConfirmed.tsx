@@ -4,13 +4,15 @@ import { ApiError, api } from "../api";
 import type { ReceiptData } from "../api";
 import { Receipt } from "../components/Receipt";
 import { useAuth } from "../auth";
+import { useT } from "../i18n/context";
 
 /**
  * Landing page for a completed booking. The payment itself is confirmed inside
- * the payment modal, so by the time anyone gets here the charge has settled —
+ * the payment modal, so by the time anyone gets here the charge has settled,
  * this just fetches and shows the receipt.
  */
 export function ReserveConfirmed() {
+  const t = useT("confirmed");
   const [searchParams] = useSearchParams();
   const { loading: authLoading } = useAuth();
 
@@ -24,7 +26,7 @@ export function ReserveConfirmed() {
     if (authLoading) return;
 
     if (!reference) {
-      setError("No booking reference in the link. Your bookings are listed under My Tables.");
+      setError(t("errNoRef"));
       setLoading(false);
       return;
     }
@@ -37,8 +39,8 @@ export function ReserveConfirmed() {
         if (cancelled) return;
         setError(
           err instanceof ApiError && err.status === 404
-            ? "We could not find that booking. Check My Tables."
-            : err instanceof Error ? err.message : "Could not load your receipt."
+            ? t("errNotFound")
+            : err instanceof Error ? err.message : t("errLoad")
         );
       })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -50,10 +52,10 @@ export function ReserveConfirmed() {
     <section className="section">
       <div className="section-inner narrow">
         <p className="eyebrow animate-up">
-          {receipt?.status === "paid" ? "Confirmed" : "Your booking"}
+          {receipt?.status === "paid" ? t("confirmed") : t("yourBooking")}
         </p>
         <h1 className="page-title animate-up delay-1">
-          {loading ? "One moment…" : receipt?.status === "paid" ? "Table booked." : "Booking details"}
+          {loading ? t("oneMoment") : receipt?.status === "paid" ? t("tableBooked") : t("bookingDetails")}
         </h1>
 
         {loading && (
@@ -65,7 +67,7 @@ export function ReserveConfirmed() {
         {error && (
           <div className="animate-up delay-2">
             <p className="form-error" role="alert" style={{ marginBottom: "1.5rem" }}>{error}</p>
-            <Link to="/my-tables" className="btn btn-amber">Go to My Tables</Link>
+            <Link to="/my-tables" className="btn btn-amber">{t("goToMyTables")}</Link>
           </div>
         )}
 
@@ -74,8 +76,8 @@ export function ReserveConfirmed() {
             <Receipt data={receipt} />
 
             <div className="rcpt-actions">
-              <Link to="/my-tables" className="btn btn-amber">My Tables</Link>
-              <Link to="/menu" className="btn btn-outline">See the menu</Link>
+              <Link to="/my-tables" className="btn btn-amber">{t("myTables")}</Link>
+              <Link to="/menu" className="btn btn-outline">{t("seeMenu")}</Link>
             </div>
           </div>
         )}
