@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api";
 import type { Reservation } from "../../api";
+import { useLanguage } from "../../i18n/context";
 
 type Stats = {
   totalReservations: number;
@@ -34,7 +35,15 @@ function MenuIcon() { return <svg width="13" height="13" viewBox="0 0 24 24" fil
 function StarIcon() { return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>; }
 function PayIcon()  { return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>; }
 
+const PAY_STATUS_KEYS: Record<string, string> = {
+  unpaid: "payUnpaid",
+  paid: "payPaid",
+  refunded: "payRefunded",
+};
+
 export function AdminDashboard() {
+  const { t } = useLanguage();
+  const td = (key: string) => t("adminDashboard", key);
   const today    = todayLocal();
   const tomorrow = tomorrowLocal();
 
@@ -73,8 +82,8 @@ export function AdminDashboard() {
       {/* Header */}
       <div className="adash-head">
         <div>
-          <p className="adash-eyebrow">Overview</p>
-          <h1 className="adash-title">Dashboard</h1>
+          <p className="adash-eyebrow">{td("overview")}</p>
+          <h1 className="adash-title">{td("dashboard")}</h1>
         </div>
         <p className="adash-date">{dateStr}</p>
       </div>
@@ -83,88 +92,88 @@ export function AdminDashboard() {
       <div className="adash-stats">
         <div className="adash-stat adash-stat-red">
           <p className="adash-stat-val">{loading ? "" : stats?.todayReservations ?? 0}</p>
-          <p className="adash-stat-lbl">Today</p>
+          <p className="adash-stat-lbl">{td("statToday")}</p>
         </div>
         <div className="adash-stat">
           <p className="adash-stat-val">{loading ? "" : stats?.totalReservations ?? 0}</p>
-          <p className="adash-stat-lbl">All-time confirmed</p>
+          <p className="adash-stat-lbl">{td("statAllTimeConfirmed")}</p>
         </div>
         <div className="adash-stat">
           <p className="adash-stat-val">{loading ? "" : stats?.totalUsers ?? 0}</p>
-          <p className="adash-stat-lbl">Accounts</p>
+          <p className="adash-stat-lbl">{td("statAccounts")}</p>
         </div>
         <div className="adash-stat" style={{ color: stats?.pendingPayments ? "var(--amber)" : "inherit" }}>
           <p className="adash-stat-val" style={{ color: stats?.pendingPayments ? "var(--amber)" : "inherit" }}>
             {loading ? "" : stats?.pendingPayments ?? 0}
           </p>
-          <p className="adash-stat-lbl">Pending payment</p>
+          <p className="adash-stat-lbl">{td("statPendingPayment")}</p>
         </div>
         <div className="adash-stat adash-stat-green">
           <p className="adash-stat-val" style={{ fontSize: "1.5rem" }}>
             {loading ? "" : (stats?.totalRevenue ?? 0).toLocaleString()}
             <span className="adash-stat-unit">FCFA</span>
           </p>
-          <p className="adash-stat-lbl">Revenue collected</p>
+          <p className="adash-stat-lbl">{td("statRevenueCollected")}</p>
         </div>
       </div>
 
       {/* Quick links */}
       <div className="adash-links">
         <Link to="/admin/reservations" className="adash-link">
-          <CalIcon /> Reservations
+          <CalIcon /> {td("linkReservations")}
         </Link>
         <Link to="/admin/floor" className="adash-link">
-          <MapIcon /> Floor plan
+          <MapIcon /> {td("linkFloorPlan")}
         </Link>
         <Link to="/admin/users" className="adash-link">
-          <UsersIcon /> Users
+          <UsersIcon /> {td("linkUsers")}
         </Link>
         <Link to="/admin/menu" className="adash-link">
-          <MenuIcon /> Menu
+          <MenuIcon /> {td("linkMenu")}
         </Link>
         <Link to="/admin/reviews" className="adash-link">
-          <StarIcon /> Reviews
+          <StarIcon /> {td("linkReviews")}
         </Link>
         <Link to="/admin/payments" className="adash-link">
-          <PayIcon /> Payments
+          <PayIcon /> {td("linkPayments")}
         </Link>
       </div>
 
       {/* Today's schedule */}
       <div className="adash-section-head">
         <h2 className="adash-section-title">
-          Today
+          {td("today")}
           <span className="adash-section-sub">
             {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
           </span>
         </h2>
         {todayRes.length > 0 && (
-          <span className="adash-count-badge">{todayRes.length} reservation{todayRes.length !== 1 ? "s" : ""}</span>
+          <span className="adash-count-badge">{todayRes.length} {todayRes.length !== 1 ? td("reservationPlural") : td("reservationSingular")}</span>
         )}
       </div>
 
       {loading ? (
-        <p className="empty-admin">Loading schedule...</p>
+        <p className="empty-admin">{td("loadingSchedule")}</p>
       ) : todayRes.length === 0 ? (
         <div className="adash-empty">
-          <p>No confirmed reservations today.</p>
-          <Link to="/admin/reservations">View all reservations →</Link>
+          <p>{td("noConfirmedToday")}</p>
+          <Link to="/admin/reservations">{td("viewAllReservations")} →</Link>
         </div>
       ) : (
         <>
           {upcomingToday.length > 0 && (
             <div className="adash-time-group">
-              <p className="adash-time-label">Upcoming</p>
+              <p className="adash-time-label">{td("upcoming")}</p>
               <div className="adash-res-list">
-                {upcomingToday.map((r) => <DashResRow key={r.id} r={r} upcoming />)}
+                {upcomingToday.map((r) => <DashResRow key={r.id} r={r} upcoming td={td} />)}
               </div>
             </div>
           )}
           {pastToday.length > 0 && (
             <div className="adash-time-group" style={{ marginTop: "1.5rem" }}>
-              <p className="adash-time-label">Already seated</p>
+              <p className="adash-time-label">{td("alreadySeated")}</p>
               <div className="adash-res-list">
-                {pastToday.map((r) => <DashResRow key={r.id} r={r} upcoming={false} />)}
+                {pastToday.map((r) => <DashResRow key={r.id} r={r} upcoming={false} td={td} />)}
               </div>
             </div>
           )}
@@ -176,34 +185,34 @@ export function AdminDashboard() {
         <>
           <div className="adash-section-head" style={{ marginTop: "2.5rem" }}>
             <h2 className="adash-section-title">
-              Tomorrow
+              {td("tomorrow")}
               <span className="adash-section-sub">
                 {new Date(tomorrow + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
               </span>
             </h2>
-            <span className="adash-count-badge">{tomorrowRes.length} reservation{tomorrowRes.length !== 1 ? "s" : ""}</span>
+            <span className="adash-count-badge">{tomorrowRes.length} {tomorrowRes.length !== 1 ? td("reservationPlural") : td("reservationSingular")}</span>
           </div>
           <div className="table-scroll">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Name</th>
-                  <th>Table</th>
-                  <th>Party</th>
-                  <th>Payment</th>
+                  <th>{td("colTime")}</th>
+                  <th>{td("colName")}</th>
+                  <th>{td("colTable")}</th>
+                  <th>{td("colParty")}</th>
+                  <th>{td("colPayment")}</th>
                 </tr>
               </thead>
               <tbody>
                 {tomorrowRes.sort((a, b) => a.time.localeCompare(b.time)).map((r) => (
                   <tr key={r.id}>
-                    <td data-label="Time" className="mono">{r.time}</td>
-                    <td data-label="Name">{r.user_name}</td>
-                    <td data-label="Table">{r.table_label ?? ""}</td>
-                    <td data-label="Party">{r.party_size}</td>
-                    <td data-label="Payment">
+                    <td data-label={td("colTime")} className="mono">{r.time}</td>
+                    <td data-label={td("colName")}>{r.user_name}</td>
+                    <td data-label={td("colTable")}>{r.table_label ?? ""}</td>
+                    <td data-label={td("colParty")}>{r.party_size}</td>
+                    <td data-label={td("colPayment")}>
                       <span className={`badge badge-${r.payment_status === "paid" ? "green" : "amber"}`}>
-                        {r.payment_status}
+                        {td(PAY_STATUS_KEYS[r.payment_status] ?? "payUnpaid")}
                       </span>
                     </td>
                   </tr>
@@ -217,20 +226,20 @@ export function AdminDashboard() {
   );
 }
 
-function DashResRow({ r, upcoming }: { r: AdminReservation; upcoming: boolean }) {
+function DashResRow({ r, upcoming, td }: { r: AdminReservation; upcoming: boolean; td: (key: string) => string }) {
   return (
     <div className={`adash-res-row${upcoming ? " upcoming" : " past"}`}>
       <span className="adash-res-time">{r.time}</span>
       <div className="adash-res-info">
         <span className="adash-res-name">{r.user_name}</span>
         <span className="adash-res-meta">
-          {r.party_size} {r.party_size === 1 ? "person" : "people"}
-          {r.table_label ? ` · Table ${r.table_label}` : ""}
-          {r.phone ? ` · ${r.phone}` : ""}
+          {r.party_size} {r.party_size === 1 ? td("person") : td("people")}
+          {r.table_label ? `, ${td("table")} ${r.table_label}` : ""}
+          {r.phone ? `, ${r.phone}` : ""}
         </span>
       </div>
       <span className={`badge badge-${r.payment_status === "paid" ? "green" : "amber"}`}>
-        {r.payment_status}
+        {td(PAY_STATUS_KEYS[r.payment_status] ?? "payUnpaid")}
       </span>
     </div>
   );
