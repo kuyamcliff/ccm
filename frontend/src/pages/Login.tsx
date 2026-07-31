@@ -4,8 +4,10 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { api, needsTwoFactor } from "../api";
 import { useSettings } from "../settings";
+import { useT } from "../i18n/context";
 
 export function Login() {
+  const t = useT("auth");
   const { login, completeTwoFactor } = useAuth();
   const { city, address } = useSettings();
   const navigate = useNavigate();
@@ -51,7 +53,7 @@ export function Login() {
         navigate(from, { replace: true });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign in failed. Try again.");
+      setError(err instanceof Error ? err.message : t("errSignIn"));
     } finally {
       setBusy(false);
     }
@@ -66,7 +68,7 @@ export function Login() {
       await completeTwoFactor(challenge, code);
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "That code did not work.");
+      setError(err instanceof Error ? err.message : t("errCode"));
       setCode("");
       codeRef.current?.focus();
     } finally {
@@ -85,14 +87,16 @@ export function Login() {
       <div className="auth-brand-panel" aria-hidden="true">
         <div className="auth-brand-top">
           <p className="auth-brand-logo">Cam Chop <em>Meat</em></p>
-          <p className="auth-brand-tagline">Charcoal grill · {city}</p>
+          <p className="auth-brand-tagline">{t("tagline").replace("{city}", city)}</p>
         </div>
         <div className="auth-brand-center">
-          <p className="auth-brand-big">Real<br />fire.</p>
+          <p className="auth-brand-big">{t("loginBrandBig").split("\n").map((line, i, arr) => (
+            <span key={i}>{line}{i < arr.length - 1 && <br />}</span>
+          ))}</p>
         </div>
         <div className="auth-brand-bottom">
           <blockquote className="auth-brand-quote">
-            Walk-ins welcome. Reservations guarantee your seat.
+            {t("loginQuote")}
           </blockquote>
           <p className="auth-brand-meta">{address}</p>
         </div>
@@ -102,15 +106,15 @@ export function Login() {
         <div className="auth-form-inner">
           {challenge ? (
             <>
-              <p className="eyebrow animate-up">Two-factor authentication</p>
-              <h1 className="page-title animate-up delay-1">Enter your code</h1>
+              <p className="eyebrow animate-up">{t("twoFactorEyebrow")}</p>
+              <h1 className="page-title animate-up delay-1">{t("enterCode")}</h1>
               <p className="form-fine animate-up delay-1" style={{ marginBottom: "1.5rem" }}>
-                Open your authenticator app and type the six-digit code for Cam Chop Meat.
+                {t("twoFactorBody")}
               </p>
 
               <form className="form animate-up delay-2" onSubmit={submitCode}>
                 <label>
-                  Authentication code
+                  {t("authCode")}
                   <input
                     ref={codeRef}
                     type="text"
@@ -129,22 +133,22 @@ export function Login() {
                 {error && <p className="form-error" id="auth-error" role="alert">{error}</p>}
 
                 <button className="btn btn-amber btn-big" disabled={busy || code.length !== 6}>
-                  {busy ? "Checking…" : "Verify and sign in"}
+                  {busy ? t("checking") : t("verifyAndSignIn")}
                 </button>
 
                 <button type="button" className="btn-ghost" onClick={startOver}>
-                  Use a different account
+                  {t("useDifferentAccount")}
                 </button>
               </form>
             </>
           ) : (
             <>
-              <p className="eyebrow animate-up">Welcome back</p>
-              <h1 className="page-title animate-up delay-1">Sign in</h1>
+              <p className="eyebrow animate-up">{t("welcomeBack")}</p>
+              <h1 className="page-title animate-up delay-1">{t("signIn")}</h1>
 
               <form className="form animate-up delay-2" onSubmit={submitPassword}>
                 <label>
-                  Email
+                  {t("email")}
                   <input
                     type="email"
                     required
@@ -155,7 +159,7 @@ export function Login() {
                 </label>
 
                 <label>
-                  Password
+                  {t("password")}
                   <div className="pw-wrap">
                     <input
                       type={showPw ? "text" : "password"}
@@ -169,9 +173,9 @@ export function Login() {
                       type="button"
                       className="pw-toggle"
                       onClick={() => setShowPw((v) => !v)}
-                      aria-label={showPw ? "Hide password" : "Show password"}
+                      aria-label={showPw ? t("hidePassword") : t("showPassword")}
                     >
-                      {showPw ? "hide" : "show"}
+                      {showPw ? t("hide") : t("show")}
                     </button>
                   </div>
                 </label>
@@ -179,25 +183,25 @@ export function Login() {
                 {error && <p className="form-error" id="auth-error" role="alert">{error}</p>}
 
                 <button className="btn btn-amber btn-big" style={{ marginTop: "0.25rem" }} disabled={busy}>
-                  {busy ? "Signing in…" : "Sign in"}
+                  {busy ? t("signingIn") : t("signIn")}
                 </button>
 
                 <p className="form-fine">
-                  First time here? <Link to="/register">Create an account</Link>. Takes a minute.
+                  {t("firstTime")} <Link to="/register">{t("createAccountLink")}</Link>. {t("takesAMinute")}
                 </p>
 
                 {/* Only offered when the server can actually send mail. Showing a
                     link that silently does nothing is worse than not showing one. */}
                 {selfServiceReset ? (
                   <p className="form-fine">
-                    Forgotten your password?{" "}
+                    {t("forgotPassword")}{" "}
                     <Link to={`/reset-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`}>
-                      Reset it by email
+                      {t("resetByEmail")}
                     </Link>
                   </p>
                 ) : (
                   <p className="form-fine">
-                    Forgotten your password? Message us on the chat button and we will reset it for you.
+                    {t("forgotNoReset")}
                   </p>
                 )}
               </form>
