@@ -1225,6 +1225,38 @@ export const translations: Translations = {
       remove: "Retirer",
     },
   },
+  legal: {
+    en: {
+      eyebrow: "Legal",
+      loading: "Loading...",
+      errLoad: "We could not load this page just now. Please refresh, or reach us at {address}.",
+      lastUpdated: "Last updated:",
+      termsTitle: "Terms of use",
+      privacyTitle: "Privacy policy",
+    },
+    fr: {
+      eyebrow: "Mentions legales",
+      loading: "Chargement...",
+      errLoad: "Nous n'avons pas pu charger cette page. Veuillez actualiser, ou nous contacter a {address}.",
+      lastUpdated: "Derniere mise a jour :",
+      termsTitle: "Conditions d'utilisation",
+      privacyTitle: "Politique de confidentialite",
+    },
+  },
+  notFound: {
+    en: {
+      title: "Nothing on this plate.",
+      body: "The page you asked for doesn't exist. The charcoal, however, is very much lit.",
+      backToFire: "Back to the fire",
+      seeMenu: "See the menu",
+    },
+    fr: {
+      title: "Rien dans cette assiette.",
+      body: "La page que vous cherchez n'existe pas. Le charbon, lui, est bien allume.",
+      backToFire: "Retour au feu",
+      seeMenu: "Voir le menu",
+    },
+  },
 };
 
 /** Reads one string, falling back to English, then the key itself. */
