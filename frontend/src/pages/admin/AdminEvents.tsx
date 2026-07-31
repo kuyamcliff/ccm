@@ -2,16 +2,17 @@ import { useEffect, useState } from "react";
 import { api, EventBooking } from "../../api";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { PhoneInput, isCompletePhone, toInternational } from "../../components/PhoneInput";
+import { useLanguage } from "../../i18n/context";
 
 type ModalState = { title: string; body?: string; label?: string; danger?: boolean; onConfirm: () => void };
 
-const EVENT_TYPES = [
-  { value: "birthday", label: "Birthday" },
-  { value: "corporate", label: "Corporate" },
-  { value: "private_dining", label: "Private Dining" },
-  { value: "wedding", label: "Wedding" },
-  { value: "other", label: "Other" },
-];
+const EVENT_TYPE_KEYS: Record<string, string> = {
+  birthday: "typeBirthday",
+  corporate: "typeCorporate",
+  private_dining: "typePrivate",
+  wedding: "typeWedding",
+  other: "typeOther",
+};
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "#f59e0b",
@@ -19,9 +20,18 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "#6b7280",
 };
 
+const STATUS_KEYS: Record<string, string> = {
+  pending: "pendingStatus",
+  confirmed: "confirmed",
+  cancelled: "cancelled",
+};
+
 const EMPTY_FORM = { name: "", email: "", phone: "", event_type: "birthday", date: "", time: "18:00", guest_count: "10", note: "", status: "confirmed" };
 
 export default function AdminEvents() {
+  const { t } = useLanguage();
+  const te = (key: string) => t("adminEvents", key);
+  const EVENT_TYPES = Object.entries(EVENT_TYPE_KEYS).map(([value, key]) => ({ value, label: te(key) }));
   const [bookings, setBookings] = useState<EventBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "pending" | "confirmed" | "cancelled">("all");
@@ -42,9 +52,9 @@ export default function AdminEvents() {
 
   function del(id: number, name: string) {
     setModal({
-      title: `Delete ${name}'s event booking?`,
-      body: "This permanently removes the event record.",
-      label: "Delete",
+      title: te("deleteTitle").replace("{name}", name),
+      body: te("deleteBody"),
+      label: te("delete"),
       danger: true,
       onConfirm: () => { api.admin.deleteEvent(id).then(load); },
     });
@@ -57,12 +67,12 @@ export default function AdminEvents() {
   async function submitCreate() {
     setFormErr("");
     const guestCount = Number(form.guest_count);
-    if (!form.name.trim() || form.name.trim().length < 2) { setFormErr("Name required."); return; }
-    if (!form.email.includes("@")) { setFormErr("Valid email required."); return; }
-    if (!isCompletePhone(form.phone)) { setFormErr("Enter 9 digits starting with 6."); return; }
-    if (!form.date) { setFormErr("Date required."); return; }
-    if (!form.time) { setFormErr("Time required."); return; }
-    if (!Number.isInteger(guestCount) || guestCount < 5) { setFormErr("Minimum 5 guests."); return; }
+    if (!form.name.trim() || form.name.trim().length < 2) { setFormErr(te("errName")); return; }
+    if (!form.email.includes("@")) { setFormErr(te("errEmail")); return; }
+    if (!isCompletePhone(form.phone)) { setFormErr(te("errPhone")); return; }
+    if (!form.date) { setFormErr(te("errDate")); return; }
+    if (!form.time) { setFormErr(te("errTime")); return; }
+    if (!Number.isInteger(guestCount) || guestCount < 5) { setFormErr(te("errGuests")); return; }
 
     setCreating(true);
     try {
@@ -81,7 +91,7 @@ export default function AdminEvents() {
       setForm(EMPTY_FORM);
       load();
     } catch (err: unknown) {
-      setFormErr(err instanceof Error ? err.message : "Could not create event.");
+      setFormErr(err instanceof Error ? err.message : te("errCreate"));
     } finally {
       setCreating(false);
     }
@@ -93,22 +103,22 @@ export default function AdminEvents() {
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
-          <h1 className="admin-page-title">Private Events</h1>
-          <p className="admin-page-sub">{bookings.filter((b) => b.status === "pending").length} pending</p>
+          <h1 className="admin-page-title">{te("title")}</h1>
+          <p className="admin-page-sub">{te("pending").replace("{n}", String(bookings.filter((b) => b.status === "pending").length))}</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => { setCreateOpen(true); setFormErr(""); }}>+ New event</button>
+        <button className="btn btn-primary btn-sm" onClick={() => { setCreateOpen(true); setFormErr(""); }}>{te("newEvent")}</button>
       </div>
 
       <div className="filter-chips" style={{ marginBottom: "1.5rem" }}>
         {(["all", "pending", "confirmed", "cancelled"] as const).map((s) => (
           <button key={s} className={`filter-chip${filter === s ? " active" : ""}`} onClick={() => setFilter(s)}>
-            {s.charAt(0).toUpperCase() + s.slice(1)}
+            {s === "all" ? te("all") : te(STATUS_KEYS[s])}
           </button>
         ))}
       </div>
 
-      {loading && <p className="muted">Loading…</p>}
-      {!loading && filtered.length === 0 && <p className="muted">No event bookings found.</p>}
+      {loading && <p className="muted">{te("loading")}</p>}
+      {!loading && filtered.length === 0 && <p className="muted">{te("noBookings")}</p>}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         {filtered.map((b) => (
@@ -116,14 +126,14 @@ export default function AdminEvents() {
             <div className="admin-event-header">
               <div>
                 <strong>{b.name}</strong>
-                <span className="admin-event-type">{EVENT_TYPES.find((t) => t.value === b.event_type)?.label ?? b.event_type}</span>
+                <span className="admin-event-type">{EVENT_TYPES.find((et) => et.value === b.event_type)?.label ?? b.event_type}</span>
                 <span className="status-pill" style={{ background: STATUS_COLORS[b.status] + "22", color: STATUS_COLORS[b.status] }}>
-                  {b.status}
+                  {te(STATUS_KEYS[b.status] ?? "pendingStatus")}
                 </span>
               </div>
               <div className="admin-event-meta">
                 <span>{b.date} at {b.time}</span>
-                <span>{b.guest_count} guests</span>
+                <span>{b.guest_count} {te("guests")}</span>
               </div>
             </div>
             <div className="admin-event-contact">
@@ -134,14 +144,14 @@ export default function AdminEvents() {
             <div className="admin-event-actions">
               {b.status === "pending" && (
                 <>
-                  <button className="btn btn-sm btn-primary" onClick={() => update(b.id, "confirmed")}>Confirm</button>
-                  <button className="btn btn-sm btn-outline" onClick={() => update(b.id, "cancelled")}>Cancel</button>
+                  <button className="btn btn-sm btn-primary" onClick={() => update(b.id, "confirmed")}>{te("confirm")}</button>
+                  <button className="btn btn-sm btn-outline" onClick={() => update(b.id, "cancelled")}>{te("cancel")}</button>
                 </>
               )}
               {b.status === "confirmed" && (
-                <button className="btn btn-sm btn-outline" onClick={() => update(b.id, "cancelled")}>Cancel</button>
+                <button className="btn btn-sm btn-outline" onClick={() => update(b.id, "cancelled")}>{te("cancel")}</button>
               )}
-              <button className="btn btn-sm btn-danger" onClick={() => del(b.id, b.name)}>Delete</button>
+              <button className="btn btn-sm btn-danger" onClick={() => del(b.id, b.name)}>{te("delete")}</button>
             </div>
           </div>
         ))}
@@ -151,7 +161,7 @@ export default function AdminEvents() {
         open={modal !== null}
         title={modal?.title ?? ""}
         body={modal?.body}
-        confirmLabel={modal?.label ?? "Confirm"}
+        confirmLabel={modal?.label ?? te("confirm")}
         confirmClass={modal?.danger !== false ? "btn-danger" : "btn-primary"}
         onConfirm={() => { modal?.onConfirm(); setModal(null); }}
         onCancel={() => setModal(null)}
@@ -168,31 +178,31 @@ export default function AdminEvents() {
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
-              <h3 style={{ margin: 0, fontSize: "1rem" }}>Create event booking</h3>
+              <h3 style={{ margin: 0, fontSize: "1rem" }}>{te("createBooking")}</h3>
               <button onClick={() => setCreateOpen(false)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1rem" }}>✕</button>
             </div>
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Contact name</label>
-                <input className="form-input" value={form.name} onChange={(e) => setField("name", e.target.value)} placeholder="Full name" />
+                <label className="form-label">{te("contactName")}</label>
+                <input className="form-input" value={form.name} onChange={(e) => setField("name", e.target.value)} placeholder={te("fullNamePlaceholder")} />
               </div>
               <div className="form-group">
-                <label className="form-label">Event type</label>
+                <label className="form-label">{te("eventType")}</label>
                 <select className="form-input" value={form.event_type} onChange={(e) => setField("event_type", e.target.value)}>
-                  {EVENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  {EVENT_TYPES.map((et) => <option key={et.value} value={et.value}>{et.label}</option>)}
                 </select>
               </div>
             </div>
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Email</label>
+                <label className="form-label">{te("email")}</label>
                 <input className="form-input" type="email" value={form.email} onChange={(e) => setField("email", e.target.value)} placeholder="email@example.com" />
               </div>
               <div className="form-group">
                 <PhoneInput
-                  label="Phone"
+                  label={te("phone")}
                   value={form.phone}
                   onChange={(digits) => setField("phone", digits)}
                 />
@@ -201,39 +211,39 @@ export default function AdminEvents() {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Date</label>
+                <label className="form-label">{te("date")}</label>
                 <input className="form-input" type="date" value={form.date} onChange={(e) => setField("date", e.target.value)} />
               </div>
               <div className="form-group">
-                <label className="form-label">Time</label>
+                <label className="form-label">{te("time")}</label>
                 <input className="form-input" type="time" value={form.time} onChange={(e) => setField("time", e.target.value)} />
               </div>
             </div>
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Guest count</label>
-                <input className="form-input" type="number" min={5} value={form.guest_count} onChange={(e) => setField("guest_count", e.target.value)} placeholder="Min. 5" />
+                <label className="form-label">{te("guestCount")}</label>
+                <input className="form-input" type="number" min={5} value={form.guest_count} onChange={(e) => setField("guest_count", e.target.value)} placeholder={te("minGuests")} />
               </div>
               <div className="form-group">
-                <label className="form-label">Status</label>
+                <label className="form-label">{te("status")}</label>
                 <select className="form-input" value={form.status} onChange={(e) => setField("status", e.target.value)}>
-                  <option value="confirmed">Confirmed</option>
-                  <option value="pending">Pending</option>
-                  <option value="cancelled">Cancelled</option>
+                  <option value="confirmed">{te("confirmed")}</option>
+                  <option value="pending">{te("pendingStatus")}</option>
+                  <option value="cancelled">{te("cancelled")}</option>
                 </select>
               </div>
             </div>
 
             <div className="form-group">
-              <label className="form-label">Notes</label>
-              <textarea className="form-input" rows={2} maxLength={600} value={form.note} onChange={(e) => setField("note", e.target.value)} placeholder="Any special requests or details…" />
+              <label className="form-label">{te("notes")}</label>
+              <textarea className="form-input" rows={2} maxLength={600} value={form.note} onChange={(e) => setField("note", e.target.value)} placeholder={te("notesPlaceholder")} />
             </div>
 
             {formErr && <p className="form-error" style={{ marginBottom: "0.75rem" }}>{formErr}</p>}
 
             <button className="btn btn-primary" style={{ width: "100%" }} onClick={submitCreate} disabled={creating}>
-              {creating ? "Creating…" : "Create event"}
+              {creating ? te("creating") : te("createEvent")}
             </button>
           </div>
         </div>
