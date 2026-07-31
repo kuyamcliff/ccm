@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, TakeawayOrder } from "../../api";
+import { useLanguage } from "../../i18n/context";
 
 /**
  * The collection board.
@@ -12,12 +13,12 @@ import { api, TakeawayOrder } from "../../api";
  * secondary.
  */
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: "New",
-  confirmed: "Cooking",
-  ready: "Ready",
-  picked_up: "Collected",
-  cancelled: "Cancelled",
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  pending: "statusNew",
+  confirmed: "statusCooking",
+  ready: "statusReady",
+  picked_up: "statusCollected",
+  cancelled: "statusCancelled",
 };
 
 /** Lanes, in the order the work moves. */
@@ -31,10 +32,10 @@ const NEXT_STATUS: Record<string, string | null> = {
   cancelled: null,
 };
 
-const NEXT_LABEL: Record<string, string> = {
-  pending: "Start cooking",
-  confirmed: "Mark ready",
-  ready: "Mark collected",
+const NEXT_LABEL_KEYS: Record<string, string> = {
+  pending: "nextStartCooking",
+  confirmed: "nextMarkReady",
+  ready: "nextMarkCollected",
 };
 
 type Order = TakeawayOrder & {
@@ -66,6 +67,8 @@ function parseItems(json: string): { name: string; qty: number; price: number }[
 }
 
 export default function AdminTakeaway() {
+  const { t, lang } = useLanguage();
+  const tk = (key: string) => t("adminTakeaway", key);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -91,7 +94,7 @@ export default function AdminTakeaway() {
       await api.admin.updateTakeawayStatus(id, status);
       setOrders((os) => os.map((o) => (o.id === id ? { ...o, status: status as Order["status"] } : o)));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not update that order.");
+      setError(e instanceof Error ? e.message : tk("errUpdate"));
     } finally {
       setBusy(null);
     }
@@ -112,12 +115,12 @@ export default function AdminTakeaway() {
     () =>
       LANES.map((lane) => ({
         key: lane,
-        label: STATUS_LABELS[lane],
+        label: tk(STATUS_LABEL_KEYS[lane]),
         orders: matching
           .filter((o) => o.status === lane)
           .sort((a, b) => a.pickup_time.localeCompare(b.pickup_time)),
       })),
-    [matching]
+    [matching, lang]
   );
 
   const done = useMemo(
@@ -146,7 +149,7 @@ export default function AdminTakeaway() {
 
         <p className="tka-customer">{order.name}</p>
         <p className="tka-meta mono">
-          Collect {order.pickup_time} · {order.phone}
+          {tk("collectAt").replace("{time}", order.pickup_time).replace("{phone}", order.phone)}
         </p>
 
         <ul className="tka-items">
@@ -162,7 +165,7 @@ export default function AdminTakeaway() {
 
         <footer className="tka-card-foot">
           <span className="tka-total mono">{(order.total_fcfa ?? 0).toLocaleString()} FCFA</span>
-          <span className="tka-paid">Paid</span>
+          <span className="tka-paid">{tk("paid")}</span>
         </footer>
 
         <div className="tka-actions">
@@ -172,7 +175,7 @@ export default function AdminTakeaway() {
               disabled={busy === order.id}
               onClick={() => void setStatus(order.id, next)}
             >
-              {busy === order.id ? "Saving" : NEXT_LABEL[order.status]}
+              {busy === order.id ? tk("saving") : tk(NEXT_LABEL_KEYS[order.status])}
             </button>
           )}
           <button
@@ -180,7 +183,7 @@ export default function AdminTakeaway() {
             disabled={busy === order.id}
             onClick={() => void setStatus(order.id, "cancelled")}
           >
-            Cancel
+            {tk("cancel")}
           </button>
         </div>
       </article>
@@ -191,9 +194,11 @@ export default function AdminTakeaway() {
     <div className="admin-page tka">
       <div className="admin-page-header">
         <div>
-          <h1 className="admin-page-title">Collection orders</h1>
+          <h1 className="admin-page-title">{tk("title")}</h1>
           <p className="admin-page-sub mono">
-            {lanes.reduce((n, l) => n + l.orders.length, 0)} in the kitchen · {takings.toLocaleString()} FCFA taken
+            {tk("subtitle")
+              .replace("{n}", String(lanes.reduce((n, l) => n + l.orders.length, 0)))
+              .replace("{total}", takings.toLocaleString())}
           </p>
         </div>
         <input
@@ -201,13 +206,13 @@ export default function AdminTakeaway() {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Code, name or phone"
-          aria-label="Search orders"
+          placeholder={tk("searchPlaceholder")}
+          aria-label={tk("searchLabel")}
         />
       </div>
 
       {error && <p className="form-error" role="alert">{error}</p>}
-      {loading && <p className="empty-admin">Loading</p>}
+      {loading && <p className="empty-admin">{tk("loading")}</p>}
 
       {!loading && (
         <div className="tka-lanes">
@@ -218,7 +223,7 @@ export default function AdminTakeaway() {
                 <span className="tka-lane-count mono">{lane.orders.length}</span>
               </h2>
               <div className="tka-lane-body">
-                {lane.orders.length === 0 && <p className="tka-lane-empty">Nothing here.</p>}
+                {lane.orders.length === 0 && <p className="tka-lane-empty">{tk("nothingHere")}</p>}
                 {lane.orders.map(card)}
               </div>
             </section>
@@ -229,7 +234,7 @@ export default function AdminTakeaway() {
       {done.length > 0 && (
         <section className="tka-done">
           <button type="button" className="tka-done-toggle" onClick={() => setShowDone((v) => !v)} aria-expanded={showDone}>
-            {showDone ? "Hide" : "Show"} finished orders ({done.length})
+            {(showDone ? tk("hideFinished") : tk("showFinished")).replace("{n}", String(done.length))}
           </button>
 
           {showDone && (
@@ -237,23 +242,23 @@ export default function AdminTakeaway() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Code</th>
-                    <th>Customer</th>
-                    <th>Collect</th>
-                    <th>Total</th>
-                    <th>Status</th>
-                    <th>Placed</th>
+                    <th>{tk("colCode")}</th>
+                    <th>{tk("colCustomer")}</th>
+                    <th>{tk("colCollect")}</th>
+                    <th>{tk("colTotal")}</th>
+                    <th>{tk("colStatus")}</th>
+                    <th>{tk("colPlaced")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {done.map((o) => (
                     <tr key={o.id}>
-                      <td className="mono">{o.order_no}</td>
-                      <td>{o.name}</td>
-                      <td className="mono">{o.pickup_time}</td>
-                      <td className="mono">{(o.total_fcfa ?? 0).toLocaleString()}</td>
-                      <td>{STATUS_LABELS[o.status] ?? o.status}</td>
-                      <td className="mono">{formatTime(o.created_at)}</td>
+                      <td className="mono" data-label={tk("colCode")}>{o.order_no}</td>
+                      <td data-label={tk("colCustomer")}>{o.name}</td>
+                      <td className="mono" data-label={tk("colCollect")}>{o.pickup_time}</td>
+                      <td className="mono" data-label={tk("colTotal")}>{(o.total_fcfa ?? 0).toLocaleString()}</td>
+                      <td data-label={tk("colStatus")}>{tk(STATUS_LABEL_KEYS[o.status] ?? "statusNew")}</td>
+                      <td className="mono" data-label={tk("colPlaced")}>{formatTime(o.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>
