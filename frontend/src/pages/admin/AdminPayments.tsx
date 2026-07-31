@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import { api } from "../../api";
 import type { Payment } from "../../api";
 import { ConfirmModal } from "../../components/ConfirmModal";
+import { useLanguage } from "../../i18n/context";
 
 type AdminPayment = Payment & { res_date: string; res_time: string; user_name: string };
 
 export function AdminPayments() {
+  const { t } = useLanguage();
+  const tp = (key: string) => t("adminPayments", key);
   const [payments, setPayments] = useState<AdminPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -17,7 +20,7 @@ export function AdminPayments() {
     api.admin
       .payments()
       .then((r) => setPayments(r.payments))
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load payments."))
+      .catch((e) => setError(e instanceof Error ? e.message : tp("errLoad")))
       .finally(() => setLoading(false));
   }
 
@@ -32,7 +35,7 @@ export function AdminPayments() {
       await api.admin.updatePayment(id, "failed");
       setPayments((ps) => ps.map((p) => p.id === id ? { ...p, status: "failed" } : p));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Action failed.");
+      setError(e instanceof Error ? e.message : tp("errAction"));
     } finally {
       setBusy(null);
     }
@@ -53,20 +56,21 @@ export function AdminPayments() {
       pending: "badge-amber",
       failed: "badge-red",
     };
-    return <span className={`badge ${map[status] ?? "badge-muted"}`}>{status}</span>;
+    const labelKey: Record<string, string> = { completed: "completed", pending: "pending", failed: "failed" };
+    return <span className={`badge ${map[status] ?? "badge-muted"}`}>{tp(labelKey[status] ?? "pending")}</span>;
   }
 
   function methodLabel(method?: string) {
     if (!method) return "";
-    if (method === "orange_money") return "Orange Money";
-    if (method === "mtn_momo") return "MTN MoMo";
-    if (method === "free") return "Free (promo/gift)";
+    if (method === "orange_money") return tp("orangeMoney");
+    if (method === "mtn_momo") return tp("mtnMomo");
+    if (method === "free") return tp("free");
     return method;
   }
 
   return (
     <div>
-      <h1 className="admin-page-title">Payments</h1>
+      <h1 className="admin-page-title">{tp("title")}</h1>
 
       <div className="stat-grid" style={{ marginBottom: "2rem" }}>
         <div className="stat-card">
@@ -74,30 +78,30 @@ export function AdminPayments() {
             {totalCollected.toLocaleString()}
             <span style={{ fontSize: "0.9rem", marginLeft: "0.25rem" }}>FCFA</span>
           </p>
-          <p className="stat-label">Total collected</p>
+          <p className="stat-label">{tp("totalCollected")}</p>
         </div>
         <div className="stat-card">
           <p className="stat-value">{payments.filter((p) => p.status === "completed").length}</p>
-          <p className="stat-label">Completed</p>
+          <p className="stat-label">{tp("completed")}</p>
         </div>
         <div className="stat-card">
           <p className="stat-value" style={{ color: "var(--amber-light)" }}>{pending}</p>
-          <p className="stat-label">Pending</p>
+          <p className="stat-label">{tp("pending")}</p>
         </div>
         <div className="stat-card">
           <p className="stat-value" style={{ color: "var(--red)" }}>{failed}</p>
-          <p className="stat-label">Failed</p>
+          <p className="stat-label">{tp("failed")}</p>
         </div>
       </div>
 
       <div className="admin-filters" style={{ marginBottom: "1.25rem" }}>
         <label>
-          Status
+          {tp("status")}
           <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-            <option value="">All</option>
-            <option value="completed">Completed</option>
-            <option value="pending">Pending</option>
-            <option value="failed">Failed</option>
+            <option value="">{tp("all")}</option>
+            <option value="completed">{tp("completed")}</option>
+            <option value="pending">{tp("pending")}</option>
+            <option value="failed">{tp("failed")}</option>
           </select>
         </label>
       </div>
@@ -105,38 +109,38 @@ export function AdminPayments() {
       {error && <p className="form-error" role="alert" style={{ marginBottom: "1rem" }}>{error}</p>}
 
       {loading ? (
-        <p className="empty-admin">Loading...</p>
+        <p className="empty-admin">{tp("loading")}</p>
       ) : filtered.length === 0 ? (
-        <p className="empty-admin">No payments for this filter.</p>
+        <p className="empty-admin">{tp("noPayments")}</p>
       ) : (
         <div className="table-scroll">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Reference</th>
-                <th>Customer</th>
-                <th>Reservation</th>
-                <th>Method</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th>Actions</th>
+                <th>{tp("colReference")}</th>
+                <th>{tp("colCustomer")}</th>
+                <th>{tp("colReservation")}</th>
+                <th>{tp("colMethod")}</th>
+                <th>{tp("colAmount")}</th>
+                <th>{tp("colStatus")}</th>
+                <th>{tp("colActions")}</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((p) => (
                 <tr key={p.id}>
-                  <td data-label="Reference" className="mono" style={{ fontSize: "0.76rem", color: "var(--text-muted)" }}>
+                  <td data-label={tp("colReference")} className="mono" style={{ fontSize: "0.76rem", color: "var(--text-muted)" }}>
                     {p.reference}
                   </td>
-                  <td data-label="Customer">{p.user_name}</td>
-                  <td data-label="Reservation" className="mono" style={{ fontSize: "0.8rem" }}>
+                  <td data-label={tp("colCustomer")}>{p.user_name}</td>
+                  <td data-label={tp("colReservation")} className="mono" style={{ fontSize: "0.8rem" }}>
                     {p.res_date} {p.res_time}
                   </td>
-                  <td data-label="Method" style={{ fontSize: "0.85rem" }}>{methodLabel(p.method)}</td>
-                  <td data-label="Amount" className="mono" style={{ fontWeight: 700, color: p.status === "completed" ? "var(--green)" : "var(--text)" }}>
+                  <td data-label={tp("colMethod")} style={{ fontSize: "0.85rem" }}>{methodLabel(p.method)}</td>
+                  <td data-label={tp("colAmount")} className="mono" style={{ fontWeight: 700, color: p.status === "completed" ? "var(--green)" : "var(--text)" }}>
                     {p.amount_fcfa?.toLocaleString() ?? ""} FCFA
                   </td>
-                  <td data-label="Status">{statusBadge(p.status)}</td>
+                  <td data-label={tp("colStatus")}>{statusBadge(p.status)}</td>
                   <td>
                     {p.status === "pending" && (
                       <button
@@ -144,7 +148,7 @@ export function AdminPayments() {
                         disabled={busy === p.id}
                         onClick={() => setCancelTarget(p.id)}
                       >
-                        Cancel
+                        {tp("cancel")}
                       </button>
                     )}
                   </td>
@@ -157,9 +161,9 @@ export function AdminPayments() {
 
       <ConfirmModal
         open={cancelTarget !== null}
-        title="Mark this payment as failed?"
-        body="This cancels the payment record. The customer will not be charged."
-        confirmLabel="Mark failed"
+        title={tp("markFailedTitle")}
+        body={tp("markFailedBody")}
+        confirmLabel={tp("markFailed")}
         confirmClass="btn-danger"
         onConfirm={doMarkFailed}
         onCancel={() => setCancelTarget(null)}
