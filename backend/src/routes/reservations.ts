@@ -18,8 +18,8 @@ function todayLocal(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-reservationsRouter.get("/", (req, res) => {
-  const rows = db
+reservationsRouter.get("/", async (req, res) => {
+  const rows = await db
     .prepare(
       `SELECT r.id, r.date, r.time, r.party_size, r.phone, r.note, r.status,
               r.payment_status, r.cancellation_fee_fcfa, r.ccm_code, r.created_at,
@@ -43,13 +43,13 @@ reservationsRouter.get("/", (req, res) => {
  * trail all still reference it. Only bookings that are over can be hidden, so
  * nobody can make a live table vanish and then fail to show up for it.
  */
-reservationsRouter.delete("/:id/hide", (req, res) => {
+reservationsRouter.delete("/:id/hide", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad reservation id." }); return; }
 
-  const row = db
+  const row = (await db
     .prepare("SELECT id, user_id, status FROM reservations WHERE id = ? AND hidden_at IS NULL")
-    .get(id) as { id: number; user_id: number; status: string } | undefined;
+    .get(id)) as { id: number; user_id: number; status: string } | undefined;
 
   if (!row || row.user_id !== req.user!.id) {
     res.status(404).json({ error: "Reservation not found." });
@@ -60,11 +60,11 @@ reservationsRouter.delete("/:id/hide", (req, res) => {
     return;
   }
 
-  db.prepare("UPDATE reservations SET hidden_at = datetime('now') WHERE id = ?").run(id);
+  await db.prepare("UPDATE reservations SET hidden_at = now_text() WHERE id = ?").run(id);
   res.json({ ok: true });
 });
 
-reservationsRouter.post("/", (req, res) => {
+reservationsRouter.post("/", async (req, res) => {
   const date = String(req.body?.date ?? "");
   const time = String(req.body?.time ?? "");
   const partySize = Number(req.body?.partySize);
@@ -94,17 +94,17 @@ reservationsRouter.post("/", (req, res) => {
   }
 
   if (tableId !== null) {
-    const table = db.prepare("SELECT id, capacity FROM restaurant_tables WHERE id = ? AND active = 1").get(tableId) as { id: number; capacity: number } | undefined;
+    const table = (await db.prepare("SELECT id, capacity FROM restaurant_tables WHERE id = ? AND active = 1").get(tableId)) as { id: number; capacity: number } | undefined;
     if (!table) {
       res.status(400).json({ error: "That table is not available." });
       return;
     }
-    const clash = db
+    const clash = await db
       .prepare(
         `SELECT id FROM reservations
          WHERE table_id = ? AND date = ? AND time = ? AND table_id IS NOT NULL
            AND (status = 'confirmed'
-             OR (status = 'pending_payment' AND created_at > datetime('now', '-30 minutes')))`
+             OR (status = 'pending_payment' AND created_at > now_text_offset(interval '-30 minutes')))`
       )
       .get(tableId, date, time);
     if (clash) {
@@ -113,12 +113,12 @@ reservationsRouter.post("/", (req, res) => {
     }
   }
 
-  const userClash = db
+  const userClash = await db
     .prepare(
       `SELECT id FROM reservations
        WHERE user_id = ? AND date = ? AND time = ?
          AND (status = 'confirmed'
-           OR (status = 'pending_payment' AND created_at > datetime('now', '-30 minutes')))`
+           OR (status = 'pending_payment' AND created_at > now_text_offset(interval '-30 minutes')))`
     )
     .get(req.user!.id, date, time);
   if (userClash) {
@@ -126,16 +126,16 @@ reservationsRouter.post("/", (req, res) => {
     return;
   }
 
-  const info = db
+  const info = await db
     .prepare(
       "INSERT INTO reservations (user_id, table_id, date, time, party_size, phone, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_payment')"
     )
     .run(req.user!.id, tableId, date, time, partySize, phone, note);
 
   const id = Number(info.lastInsertRowid);
-  db.prepare("UPDATE reservations SET ccm_code = ? WHERE id = ?").run(generateBookingCode(), id);
+  await db.prepare("UPDATE reservations SET ccm_code = ? WHERE id = ?").run(await generateBookingCode(), id);
 
-  const row = db
+  const row = await db
     .prepare(
       `SELECT r.id, r.date, r.time, r.party_size, r.phone, r.note, r.status,
               r.payment_status, r.cancellation_fee_fcfa, r.ccm_code, r.created_at,
@@ -148,16 +148,16 @@ reservationsRouter.post("/", (req, res) => {
   res.status(201).json({ reservation: row });
 });
 
-reservationsRouter.delete("/:id", (req, res) => {
+reservationsRouter.delete("/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: "Bad reservation id." });
     return;
   }
 
-  const reservation = db
+  const reservation = (await db
     .prepare("SELECT id, user_id, date, time, status, payment_status FROM reservations WHERE id = ?")
-    .get(id) as { id: number; user_id: number; date: string; time: string; status: string; payment_status: string } | undefined;
+    .get(id)) as { id: number; user_id: number; date: string; time: string; status: string; payment_status: string } | undefined;
 
   if (!reservation || reservation.user_id !== req.user!.id) {
     res.status(404).json({ error: "Reservation not found." });
@@ -180,6 +180,6 @@ reservationsRouter.delete("/:id", (req, res) => {
     return;
   }
 
-  db.prepare("UPDATE reservations SET status = 'cancelled', cancelled_at = datetime('now') WHERE id = ?").run(id);
+  await db.prepare("UPDATE reservations SET status = 'cancelled', cancelled_at = now_text() WHERE id = ?").run(id);
   res.json({ ok: true });
 });

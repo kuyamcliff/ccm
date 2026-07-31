@@ -50,14 +50,14 @@ function longDate(iso: string): string {
 receiptsRouter.get("/takeaway/:orderNo", requireAuth, async (req, res) => {
   const orderNo = String(req.params.orderNo ?? "");
 
-  const row = db
+  const row = (await db
     .prepare(
       `SELECT o.id, o.order_no, o.name, o.phone, o.items_json, o.total_fcfa, o.discount_fcfa,
               o.pickup_time, o.note, o.status, o.payment_status, o.paid_at, o.created_at,
               o.user_id, o.momo_phone, o.momo_transaction_id, o.collected_at
        FROM takeaway_orders o WHERE o.order_no = ?`
     )
-    .get(orderNo) as Record<string, unknown> | undefined;
+    .get(orderNo)) as Record<string, unknown> | undefined;
 
   if (!row) { res.status(404).json({ error: "Receipt not found." }); return; }
 
@@ -230,7 +230,7 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
     return;
   }
 
-  const row = db
+  const row = (await db
     .prepare(
       `SELECT r.id, r.date, r.time, r.party_size, r.phone, r.note, r.status, r.payment_status,
               r.ccm_code, r.created_at, r.user_id,
@@ -244,7 +244,7 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
        LEFT JOIN payments p ON p.reservation_id = r.id AND p.status = 'completed' AND p.type = 'reservation'
        WHERE r.id = ?`
     )
-    .get(resId) as Record<string, unknown> | undefined;
+    .get(resId)) as Record<string, unknown> | undefined;
 
   if (!row) { res.status(404).json({ error: "Receipt not found." }); return; }
 

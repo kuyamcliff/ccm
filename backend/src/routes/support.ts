@@ -82,30 +82,30 @@ function callerKey(userId: number | null, token: string | null): string | null {
 }
 
 /** Every thread belonging to the caller, newest activity first. */
-function listThreads(userId: number | null, token: string | null): ThreadRow[] {
+async function listThreads(userId: number | null, token: string | null): Promise<ThreadRow[]> {
   if (userId) {
-    return db
+    return (await db
       .prepare("SELECT * FROM support_threads WHERE user_id = ? ORDER BY last_message_at DESC LIMIT 50")
-      .all(userId) as unknown as ThreadRow[];
+      .all(userId)) as unknown as ThreadRow[];
   }
   if (token) {
-    return db
+    return (await db
       .prepare("SELECT * FROM support_threads WHERE guest_token = ? ORDER BY last_message_at DESC LIMIT 50")
-      .all(token) as unknown as ThreadRow[];
+      .all(token)) as unknown as ThreadRow[];
   }
   return [];
 }
 
 /** Loads a thread only if the caller owns it. */
-function ownedThread(id: number, userId: number | null, token: string | null): ThreadRow | undefined {
-  const row = db.prepare("SELECT * FROM support_threads WHERE id = ?").get(id) as ThreadRow | undefined;
+async function ownedThread(id: number, userId: number | null, token: string | null): Promise<ThreadRow | undefined> {
+  const row = (await db.prepare("SELECT * FROM support_threads WHERE id = ?").get(id)) as ThreadRow | undefined;
   if (!row) return undefined;
   if (userId && row.user_id === userId) return row;
   if (token && row.guest_token === token) return row;
   return undefined;
 }
 
-function messagesFor(threadId: number) {
+async function messagesFor(threadId: number) {
   return db
     .prepare(
       "SELECT id, thread_id, sender, author_name, body, kind, created_at FROM support_messages WHERE thread_id = ? ORDER BY id"
@@ -126,8 +126,8 @@ function publicThread(t: ThreadRow) {
 }
 
 /** Writes one of the desk's own lines into the transcript. */
-function systemLine(threadId: number, body: string) {
-  const info = db
+async function systemLine(threadId: number, body: string) {
+  const info = await db
     .prepare("INSERT INTO support_messages (thread_id, sender, author_name, body, kind) VALUES (?, 'system', '', ?, 'system')")
     .run(threadId, body);
   return db
@@ -146,21 +146,21 @@ function systemLine(threadId: number, body: string) {
  * Returns null when nobody is online. The thread stays unassigned and is
  * picked up by `drainUnassigned` the moment an admin connects.
  */
-function pickAdmin(): { id: number; name: string } | null {
+async function pickAdmin(): Promise<{ id: number; name: string } | null> {
   const online = onlineAdmins();
   if (online.length === 0) return null;
 
   const loads = new Map<number, number>();
   for (const admin of online) loads.set(admin.id, 0);
 
-  const rows = db
+  const rows = (await db
     .prepare(
       `SELECT assigned_admin_id AS id, COUNT(*) AS n
        FROM support_threads
        WHERE status = 'open' AND assigned_admin_id IS NOT NULL
        GROUP BY assigned_admin_id`
     )
-    .all() as { id: number; n: number }[];
+    .all()) as { id: number; n: number }[];
   for (const row of rows) if (loads.has(row.id)) loads.set(row.id, row.n);
 
   let best = online[0];
@@ -173,12 +173,12 @@ function pickAdmin(): { id: number; name: string } | null {
 }
 
 /** Assigns a thread and tells both sides. */
-function assign(threadId: number, admin: { id: number; name: string }): void {
-  db.prepare(
-    "UPDATE support_threads SET assigned_admin_id = ?, assigned_at = datetime('now') WHERE id = ?"
+async function assign(threadId: number, admin: { id: number; name: string }): Promise<void> {
+  await db.prepare(
+    "UPDATE support_threads SET assigned_admin_id = ?, assigned_at = now_text() WHERE id = ?"
   ).run(admin.id, threadId);
 
-  const line = systemLine(threadId, `${admin.name} joined the conversation.`);
+  const line = await systemLine(threadId, `${admin.name} joined the conversation.`);
   toEveryone(threadId, "message", line);
   toAdmins("thread_assigned", { thread_id: threadId, admin_id: admin.id, admin_name: admin.name });
 }
@@ -189,14 +189,14 @@ function assign(threadId: number, admin: { id: number; name: string }): void {
  * Called when an admin connects. Without this, a conversation started while
  * the desk was empty would sit unassigned until the customer wrote again.
  */
-export function drainUnassigned(): void {
-  const waiting = db
+export async function drainUnassigned(): Promise<void> {
+  const waiting = (await db
     .prepare("SELECT id FROM support_threads WHERE status = 'open' AND assigned_admin_id IS NULL ORDER BY last_message_at")
-    .all() as { id: number }[];
+    .all()) as { id: number }[];
   for (const row of waiting) {
-    const admin = pickAdmin();
+    const admin = await pickAdmin();
     if (!admin) return;
-    assign(row.id, admin);
+    await assign(row.id, admin);
   }
 }
 
@@ -218,7 +218,7 @@ function openStream(req: Request, res: Response): void {
 }
 
 /** The visitor's stream: their own threads only. */
-supportRouter.get("/stream", (req, res) => {
+supportRouter.get("/stream", async (req, res) => {
   const userId = req.user?.id ?? null;
   const token = guestToken(req);
   const key = callerKey(userId, token);
@@ -228,7 +228,7 @@ supportRouter.get("/stream", (req, res) => {
     return;
   }
 
-  const threads = listThreads(userId, token);
+  const threads = await listThreads(userId, token);
   openStream(req, res);
 
   const teardown = addClient(res, { kind: "visitor", threadKey: key }, threads.map((t) => t.id));
@@ -243,7 +243,7 @@ supportRouter.get("/stream", (req, res) => {
 });
 
 /** The admin's stream: every thread. */
-supportRouter.get("/admin/stream", requireAuth, requireAdmin, (req, res) => {
+supportRouter.get("/admin/stream", requireAuth, requireAdmin, async (req, res) => {
   const admin = { id: req.user!.id, name: req.user!.name };
   openStream(req, res);
 
@@ -251,7 +251,7 @@ supportRouter.get("/admin/stream", requireAuth, requireAdmin, (req, res) => {
 
   res.write(`event: ready\ndata: ${JSON.stringify(presenceSnapshot())}\n\n`);
   broadcastPresence();
-  drainUnassigned();
+  await drainUnassigned();
 
   req.on("close", teardown);
 });
@@ -259,12 +259,12 @@ supportRouter.get("/admin/stream", requireAuth, requireAdmin, (req, res) => {
 /* ── Visitor side ────────────────────────────────────────────────────────── */
 
 /** The caller's conversations. Creates nothing. */
-supportRouter.get("/threads/mine", (req, res) => {
+supportRouter.get("/threads/mine", async (req, res) => {
   const userId = req.user?.id ?? null;
   let token = guestToken(req);
   if (!userId && !token) token = randomBytes(16).toString("hex");
 
-  const threads = listThreads(userId, token);
+  const threads = await listThreads(userId, token);
   res.json({
     threads: threads.map(publicThread),
     guest_token: userId ? null : token,
@@ -273,22 +273,22 @@ supportRouter.get("/threads/mine", (req, res) => {
 });
 
 /** One conversation's transcript. Opening it clears the caller's badge. */
-supportRouter.get("/threads/mine/:id", (req, res) => {
+supportRouter.get("/threads/mine/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad conversation id." }); return; }
 
   const userId = req.user?.id ?? null;
   const token = guestToken(req);
-  const thread = ownedThread(id, userId, token);
+  const thread = await ownedThread(id, userId, token);
   if (!thread) { res.status(404).json({ error: "No such conversation." }); return; }
 
   if (thread.unread_for_user > 0) {
-    db.prepare("UPDATE support_threads SET unread_for_user = 0 WHERE id = ?").run(id);
+    await db.prepare("UPDATE support_threads SET unread_for_user = 0 WHERE id = ?").run(id);
   }
 
   res.json({
     thread: publicThread({ ...thread, unread_for_user: 0 }),
-    messages: messagesFor(id),
+    messages: await messagesFor(id),
     typing: typingIn(id),
     staffed: onlineAdmins().length > 0,
   });
@@ -300,7 +300,7 @@ supportRouter.get("/threads/mine/:id", (req, res) => {
  * Omitting `thread_id` starts a new conversation, which is what "start a new
  * chat" does. Passing one continues that conversation.
  */
-supportRouter.post("/messages", startLimit, sendLimit, (req, res) => {
+supportRouter.post("/messages", startLimit, sendLimit, async (req, res) => {
   const body = String(req.body?.body ?? "").trim();
   if (body.length < 1) { res.status(400).json({ error: "Type a message first." }); return; }
   if (body.length > MAX_BODY) {
@@ -316,54 +316,54 @@ supportRouter.post("/messages", startLimit, sendLimit, (req, res) => {
   let created = false;
 
   if (requestedId !== null && Number.isInteger(requestedId)) {
-    thread = ownedThread(requestedId, userId, token);
+    thread = await ownedThread(requestedId, userId, token);
     if (!thread) { res.status(404).json({ error: "No such conversation." }); return; }
   } else {
     if (!userId && !token) token = randomBytes(16).toString("hex");
 
-    const open = listThreads(userId, token).filter((t) => t.status === "open").length;
+    const open = (await listThreads(userId, token)).filter((t) => t.status === "open").length;
     if (open >= MAX_OPEN_THREADS) {
       res.status(429).json({ error: "You already have several conversations open. Continue one of those." });
       return;
     }
 
     const name = req.user?.name ?? String(req.body?.name ?? "").trim().slice(0, 60);
-    const info = db
+    const info = await db
       .prepare(
         `INSERT INTO support_threads (user_id, guest_token, display_name, subject, unread_for_admin)
          VALUES (?, ?, ?, ?, 0)`
       )
       .run(userId, userId ? null : token, name || "Guest", body.slice(0, 80));
-    thread = db
+    thread = (await db
       .prepare("SELECT * FROM support_threads WHERE id = ?")
-      .get(Number(info.lastInsertRowid)) as unknown as ThreadRow;
+      .get(Number(info.lastInsertRowid))) as unknown as ThreadRow;
     created = true;
 
     const key = callerKey(userId, token);
     if (key) watchThread(key, thread.id);
   }
 
-  const count = (db
+  const count = ((await db
     .prepare("SELECT COUNT(*) AS c FROM support_messages WHERE thread_id = ?")
-    .get(thread.id) as { c: number }).c;
+    .get(thread.id)) as { c: number }).c;
   if (count >= MAX_MESSAGES_PER_THREAD) {
     res.status(429).json({ error: "This conversation is very long. Start a new one." });
     return;
   }
 
-  const info = db
+  const info = await db
     .prepare("INSERT INTO support_messages (thread_id, sender, author_name, body) VALUES (?, 'user', ?, ?)")
     .run(thread.id, req.user?.name ?? thread.display_name, body);
 
-  db.prepare(
+  await db.prepare(
     `UPDATE support_threads
-     SET last_message_at = datetime('now'),
+     SET last_message_at = now_text(),
          unread_for_admin = unread_for_admin + 1,
          status = CASE WHEN status = 'closed' THEN 'open' ELSE status END
      WHERE id = ?`
   ).run(thread.id);
 
-  const message = db
+  const message = await db
     .prepare("SELECT id, thread_id, sender, author_name, body, kind, created_at FROM support_messages WHERE id = ?")
     .get(Number(info.lastInsertRowid));
 
@@ -373,28 +373,28 @@ supportRouter.post("/messages", startLimit, sendLimit, (req, res) => {
 
   // A brand new conversation goes straight to whoever is at the desk.
   if (created) {
-    const admin = pickAdmin();
-    if (admin) assign(thread.id, admin);
+    const admin = await pickAdmin();
+    if (admin) await assign(thread.id, admin);
   }
 
-  const fresh = db.prepare("SELECT * FROM support_threads WHERE id = ?").get(thread.id) as unknown as ThreadRow;
+  const fresh = (await db.prepare("SELECT * FROM support_threads WHERE id = ?").get(thread.id)) as unknown as ThreadRow;
 
   res.status(201).json({
     ok: true,
     thread: publicThread(fresh),
     message,
-    messages: messagesFor(thread.id),
+    messages: await messagesFor(thread.id),
     guest_token: userId ? null : (thread.guest_token ?? token),
     staffed: onlineAdmins().length > 0,
   });
 });
 
 /** Keystroke signal. Deliberately does no database work. */
-supportRouter.post("/threads/:id/typing", typingLimit, (req, res) => {
+supportRouter.post("/threads/:id/typing", typingLimit, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad conversation id." }); return; }
 
-  const thread = ownedThread(id, req.user?.id ?? null, guestToken(req));
+  const thread = await ownedThread(id, req.user?.id ?? null, guestToken(req));
   if (!thread) { res.status(404).json({ error: "No such conversation." }); return; }
 
   if (req.body?.stopped) clearTyping(id, "user");
@@ -405,11 +405,11 @@ supportRouter.post("/threads/:id/typing", typingLimit, (req, res) => {
 
 /* ── Admin side ──────────────────────────────────────────────────────────── */
 
-supportRouter.get("/threads", requireAuth, requireAdmin, (req, res) => {
+supportRouter.get("/threads", requireAuth, requireAdmin, async (req, res) => {
   const status = String(req.query.status ?? "");
   const mine = req.query.mine === "1";
 
-  const rows = db
+  const rows = (await db
     .prepare(
       `SELECT t.id, t.display_name, t.subject, t.status, t.last_message_at, t.unread_for_admin,
               t.created_at, t.assigned_admin_id,
@@ -425,7 +425,7 @@ supportRouter.get("/threads", requireAuth, requireAdmin, (req, res) => {
        ORDER BY t.unread_for_admin > 0 DESC, t.last_message_at DESC
        LIMIT 200`
     )
-    .all(status, status, mine ? 1 : 0, req.user!.id) as Record<string, unknown>[];
+    .all(status, status, mine ? 1 : 0, req.user!.id)) as Record<string, unknown>[];
 
   res.json({
     threads: rows.map((r) => ({
@@ -436,11 +436,11 @@ supportRouter.get("/threads", requireAuth, requireAdmin, (req, res) => {
   });
 });
 
-supportRouter.get("/threads/:id", requireAuth, requireAdmin, (req, res) => {
+supportRouter.get("/threads/:id", requireAuth, requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad conversation id." }); return; }
 
-  const thread = db
+  const thread = await db
     .prepare(
       `SELECT t.*, u.email AS user_email, a.name AS assigned_admin_name
        FROM support_threads t
@@ -451,7 +451,7 @@ supportRouter.get("/threads/:id", requireAuth, requireAdmin, (req, res) => {
     .get(id);
   if (!thread) { res.status(404).json({ error: "No such conversation." }); return; }
 
-  const transfers = db
+  const transfers = await db
     .prepare(
       `SELECT tr.created_at, tr.note, f.name AS from_name, x.name AS to_name
        FROM support_transfers tr
@@ -461,11 +461,11 @@ supportRouter.get("/threads/:id", requireAuth, requireAdmin, (req, res) => {
     )
     .all(id);
 
-  db.prepare("UPDATE support_threads SET unread_for_admin = 0 WHERE id = ?").run(id);
+  await db.prepare("UPDATE support_threads SET unread_for_admin = 0 WHERE id = ?").run(id);
 
   res.json({
     thread,
-    messages: messagesFor(id),
+    messages: await messagesFor(id),
     transfers,
     typing: typingIn(id),
     visitor_online: isThreadWatched(id),
@@ -473,7 +473,7 @@ supportRouter.get("/threads/:id", requireAuth, requireAdmin, (req, res) => {
   });
 });
 
-supportRouter.post("/threads/:id/reply", requireAuth, requireAdmin, sendLimit, (req, res) => {
+supportRouter.post("/threads/:id/reply", requireAuth, requireAdmin, sendLimit, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad conversation id." }); return; }
 
@@ -484,27 +484,27 @@ supportRouter.post("/threads/:id/reply", requireAuth, requireAdmin, sendLimit, (
     return;
   }
 
-  const thread = db.prepare("SELECT * FROM support_threads WHERE id = ?").get(id) as ThreadRow | undefined;
+  const thread = (await db.prepare("SELECT * FROM support_threads WHERE id = ?").get(id)) as ThreadRow | undefined;
   if (!thread) { res.status(404).json({ error: "No such conversation." }); return; }
 
-  const info = db
+  const info = await db
     .prepare("INSERT INTO support_messages (thread_id, sender, author_name, body) VALUES (?, 'admin', ?, ?)")
     .run(id, req.user!.name, body);
 
   // Replying to an unclaimed thread claims it: the person answering is the
   // person who owns it, whatever the router decided earlier.
   const claim = thread.assigned_admin_id === null;
-  db.prepare(
+  await db.prepare(
     `UPDATE support_threads
-     SET last_message_at = datetime('now'),
+     SET last_message_at = now_text(),
          unread_for_user = unread_for_user + 1,
          unread_for_admin = 0,
          assigned_admin_id = COALESCE(assigned_admin_id, ?),
-         assigned_at = COALESCE(assigned_at, datetime('now'))
+         assigned_at = COALESCE(assigned_at, now_text())
      WHERE id = ?`
   ).run(req.user!.id, id);
 
-  const message = db
+  const message = await db
     .prepare("SELECT id, thread_id, sender, author_name, body, kind, created_at FROM support_messages WHERE id = ?")
     .get(Number(info.lastInsertRowid));
 
@@ -514,7 +514,7 @@ supportRouter.post("/threads/:id/reply", requireAuth, requireAdmin, sendLimit, (
     toAdmins("thread_assigned", { thread_id: id, admin_id: req.user!.id, admin_name: req.user!.name });
   }
 
-  res.status(201).json({ ok: true, message, messages: messagesFor(id) });
+  res.status(201).json({ ok: true, message, messages: await messagesFor(id) });
 });
 
 supportRouter.post("/threads/:id/typing", requireAuth, requireAdmin, typingLimit, (req, res) => {
@@ -528,14 +528,14 @@ supportRouter.post("/threads/:id/typing", requireAuth, requireAdmin, typingLimit
 });
 
 /** Who a thread can be handed to. */
-supportRouter.get("/admins", requireAuth, requireAdmin, (req, res) => {
-  const rows = db
+supportRouter.get("/admins", requireAuth, requireAdmin, async (req, res) => {
+  const rows = (await db
     .prepare(
       `SELECT id, name, email, role FROM users
        WHERE role IN ('admin', 'super_admin') AND id != ?
        ORDER BY role = 'super_admin' DESC, name`
     )
-    .all(req.user!.id) as { id: number; name: string; email: string; role: string }[];
+    .all(req.user!.id)) as { id: number; name: string; email: string; role: string }[];
 
   const online = new Set(onlineAdmins().map((a) => a.id));
   res.json({ admins: rows.map((a) => ({ ...a, online: online.has(a.id) })) });
@@ -549,34 +549,34 @@ supportRouter.get("/admins", requireAuth, requireAdmin, (req, res) => {
  * written into the transcript as a system line, visible to staff and to the
  * customer — a handover the customer cannot see reads as being ignored.
  */
-supportRouter.post("/threads/:id/forward", requireAuth, requireAdmin, (req, res) => {
+supportRouter.post("/threads/:id/forward", requireAuth, requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad conversation id." }); return; }
 
   const toId = Number(req.body?.to_admin_id);
   const note = String(req.body?.note ?? "").trim().slice(0, 300);
 
-  const thread = db.prepare("SELECT * FROM support_threads WHERE id = ?").get(id) as ThreadRow | undefined;
+  const thread = (await db.prepare("SELECT * FROM support_threads WHERE id = ?").get(id)) as ThreadRow | undefined;
   if (!thread) { res.status(404).json({ error: "No such conversation." }); return; }
 
-  const target = db
+  const target = (await db
     .prepare("SELECT id, name, role FROM users WHERE id = ? AND role IN ('admin', 'super_admin')")
-    .get(toId) as { id: number; name: string; role: string } | undefined;
+    .get(toId)) as { id: number; name: string; role: string } | undefined;
   if (!target) { res.status(400).json({ error: "That is not an admin." }); return; }
   if (target.id === thread.assigned_admin_id) {
     res.status(400).json({ error: "That conversation is already theirs." });
     return;
   }
 
-  db.prepare(
+  await db.prepare(
     "INSERT INTO support_transfers (thread_id, from_admin_id, to_admin_id, note) VALUES (?, ?, ?, ?)"
   ).run(id, req.user!.id, target.id, note);
 
-  db.prepare(
-    "UPDATE support_threads SET assigned_admin_id = ?, assigned_at = datetime('now'), unread_for_admin = unread_for_admin + 1 WHERE id = ?"
+  await db.prepare(
+    "UPDATE support_threads SET assigned_admin_id = ?, assigned_at = now_text(), unread_for_admin = unread_for_admin + 1 WHERE id = ?"
   ).run(target.id, id);
 
-  const line = systemLine(id, `${req.user!.name} passed this to ${target.name}.${note ? ` Note: ${note}` : ""}`);
+  const line = await systemLine(id, `${req.user!.name} passed this to ${target.name}.${note ? ` Note: ${note}` : ""}`);
   toEveryone(id, "message", line);
   toAdmins("thread_assigned", { thread_id: id, admin_id: target.id, admin_name: target.name });
 
@@ -584,7 +584,7 @@ supportRouter.post("/threads/:id/forward", requireAuth, requireAdmin, (req, res)
   res.json({ ok: true, assigned_admin_id: target.id, assigned_admin_name: target.name });
 });
 
-supportRouter.patch("/threads/:id", requireAuth, requireAdmin, (req, res) => {
+supportRouter.patch("/threads/:id", requireAuth, requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad conversation id." }); return; }
 
@@ -594,7 +594,7 @@ supportRouter.patch("/threads/:id", requireAuth, requireAdmin, (req, res) => {
     return;
   }
 
-  db.prepare("UPDATE support_threads SET status = ? WHERE id = ?").run(status, id);
+  await db.prepare("UPDATE support_threads SET status = ? WHERE id = ?").run(status, id);
   toThread(id, "thread_status", { thread_id: id, status });
   toAdmins("thread_touched", { thread_id: id });
 
@@ -602,10 +602,10 @@ supportRouter.patch("/threads/:id", requireAuth, requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-supportRouter.delete("/threads/:id", requireAuth, requireAdmin, (req, res) => {
+supportRouter.delete("/threads/:id", requireAuth, requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad conversation id." }); return; }
-  db.prepare("DELETE FROM support_threads WHERE id = ?").run(id);
+  await db.prepare("DELETE FROM support_threads WHERE id = ?").run(id);
   toAdmins("thread_deleted", { thread_id: id });
   audit(req, { action: "support.delete", targetType: "support_thread", targetId: id });
   res.json({ ok: true });

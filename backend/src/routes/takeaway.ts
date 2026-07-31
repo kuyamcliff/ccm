@@ -30,7 +30,7 @@ const orderLimit = rateLimit("takeaway-order", {
   message: "Too many orders from this device. Wait a few minutes and try again.",
 });
 
-takeawayRouter.post("/", orderLimit, (req, res) => {
+takeawayRouter.post("/", orderLimit, async (req, res) => {
   const name = String(req.body?.name ?? "").trim();
   const phone = String(req.body?.phone ?? "").trim();
   const pickup_time = String(req.body?.pickup_time ?? "").trim();
@@ -54,9 +54,9 @@ takeawayRouter.post("/", orderLimit, (req, res) => {
   }
 
   // Prices always come from the database, never from the request body.
-  const menuItems = db
+  const menuItems = (await db
     .prepare("SELECT id, name, price_fcfa FROM menu_items WHERE is_active = 1 AND price_fcfa IS NOT NULL")
-    .all() as MenuItem[];
+    .all()) as MenuItem[];
   const menuMap = new Map(menuItems.map((m) => [m.id, m]));
 
   let subtotal = 0;
@@ -74,8 +74,8 @@ takeawayRouter.post("/", orderLimit, (req, res) => {
   let appliedGift: string | null = null;
 
   if (promoCode) {
-    const verdict = evaluatePromo(promoCode, subtotal);
-    if (verdict.ok && usePromoCode(promoCode)) {
+    const verdict = await evaluatePromo(promoCode, subtotal);
+    if (verdict.ok && (await usePromoCode(promoCode))) {
       discount += verdict.discount;
       appliedPromo = promoCode;
     }
@@ -84,7 +84,7 @@ takeawayRouter.post("/", orderLimit, (req, res) => {
   if (giftCode) {
     const remaining = Math.max(0, subtotal - discount);
     if (remaining > 0) {
-      const taken = redeemGiftCard(giftCode, remaining, { type: "takeaway", id: "pending" });
+      const taken = await redeemGiftCard(giftCode, remaining, { type: "takeaway", id: "pending" });
       if (taken > 0) { discount += taken; appliedGift = giftCode; }
     }
   }
@@ -97,9 +97,9 @@ takeawayRouter.post("/", orderLimit, (req, res) => {
      the kitchen board shows. An order fully covered by a promo or gift card
      has nothing left to charge, so it is confirmed immediately. */
   const settled = total <= 0;
-  const orderNo = generateOrderCode();
+  const orderNo = await generateOrderCode();
 
-  const info = db
+  const info = await db
     .prepare(
       `INSERT INTO takeaway_orders (user_id, name, phone, items_json, total_fcfa, pickup_time, note,
                                     promo_code, gift_card_code, discount_fcfa, order_no, status, payment_status, paid_at)
@@ -156,11 +156,11 @@ function secondsRemaining(startedAt: string | null): number {
 takeawayRouter.post("/:orderNo/pay", payLimit, async (req, res) => {
   const orderNo = String(req.params.orderNo ?? "");
 
-  const order = db
+  const order = (await db
     .prepare(
       "SELECT id, order_no, total_fcfa, payment_status, status FROM takeaway_orders WHERE order_no = ?"
     )
-    .get(orderNo) as (OrderPayRow & { status: string }) | undefined;
+    .get(orderNo)) as (OrderPayRow & { status: string }) | undefined;
 
   if (!order) { res.status(404).json({ error: "Order not found." }); return; }
   if (order.payment_status === "paid") { res.status(400).json({ error: "That order is already paid." }); return; }
@@ -202,10 +202,10 @@ takeawayRouter.post("/:orderNo/pay", payLimit, async (req, res) => {
     return;
   }
 
-  db.prepare(
+  await db.prepare(
     `UPDATE takeaway_orders
      SET momo_reference = ?, momo_phone = ?, payment_status = 'pending',
-         pay_requested_at = datetime('now'), fail_reason = NULL
+         pay_requested_at = now_text(), fail_reason = NULL
      WHERE id = ?`
   ).run(reference, `+${msisdn}`, order.id);
 
@@ -222,13 +222,13 @@ takeawayRouter.post("/:orderNo/pay", payLimit, async (req, res) => {
 takeawayRouter.get("/pay/:reference/status", async (req, res) => {
   const reference = String(req.params.reference ?? "");
 
-  const order = db
+  const order = (await db
     .prepare(
       `SELECT id, order_no, total_fcfa, payment_status, momo_reference, pay_requested_at,
               fail_reason, momo_transaction_id
        FROM takeaway_orders WHERE momo_reference = ?`
     )
-    .get(reference) as OrderPayRow | undefined;
+    .get(reference)) as OrderPayRow | undefined;
 
   if (!order) { res.status(404).json({ error: "Payment not found." }); return; }
 
@@ -244,10 +244,10 @@ takeawayRouter.get("/pay/:reference/status", async (req, res) => {
         // Conditional so a second poll cannot re-stamp an already-paid order.
         // Payment is also what admits the order to the kitchen queue: until
         // now its status was `awaiting_payment` and no board showed it.
-        db.prepare(
+        await db.prepare(
           `UPDATE takeaway_orders
            SET payment_status = 'paid',
-               paid_at = datetime('now'),
+               paid_at = now_text(),
                momo_transaction_id = ?,
                status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END
            WHERE id = ? AND payment_status != 'paid'`
@@ -256,7 +256,7 @@ takeawayRouter.get("/pay/:reference/status", async (req, res) => {
         message = null;
       } else if (trx.status === "FAILED" || remaining === 0) {
         const reason = trx.status === "FAILED" ? trx.reason : "EXPIRED";
-        db.prepare(
+        await db.prepare(
           "UPDATE takeaway_orders SET payment_status = 'failed', fail_reason = ? WHERE id = ? AND payment_status = 'pending'"
         ).run(reason, order.id);
         status = "failed";
@@ -278,9 +278,9 @@ takeawayRouter.get("/pay/:reference/status", async (req, res) => {
   });
 });
 
-takeawayRouter.post("/pay/:reference/cancel", (req, res) => {
+takeawayRouter.post("/pay/:reference/cancel", async (req, res) => {
   const reference = String(req.params.reference ?? "");
-  const info = db
+  const info = await db
     .prepare(
       "UPDATE takeaway_orders SET payment_status = 'unpaid', fail_reason = 'ABANDONED' WHERE momo_reference = ? AND payment_status = 'pending'"
     )
@@ -288,10 +288,10 @@ takeawayRouter.post("/pay/:reference/cancel", (req, res) => {
   res.json({ ok: true, released: info.changes > 0 });
 });
 
-takeawayRouter.get("/my-orders", (req, res) => {
+takeawayRouter.get("/my-orders", async (req, res) => {
   const userId = req.user?.id;
   if (!userId) { res.json({ orders: [] }); return; }
-  const orders = db
+  const orders = await db
     .prepare(
       `SELECT id, order_no, name, items_json, total_fcfa, discount_fcfa, pickup_time, status,
               payment_status, paid_at, collected_at, created_at
@@ -305,11 +305,11 @@ takeawayRouter.get("/my-orders", (req, res) => {
 
 // ── Admin ────────────────────────────────────────────────
 
-takeawayRouter.get("/", requireAdmin, (_req, res) => {
+takeawayRouter.get("/", requireAdmin, async (_req, res) => {
   /* Orders abandoned at the payment step are excluded. They are not orders
      the kitchen can act on, and showing them would bury the real queue under
      everyone who changed their mind at the MoMo prompt. */
-  const orders = db
+  const orders = await db
     .prepare(
       `SELECT t.*, u.name AS user_name
        FROM takeaway_orders t
@@ -321,7 +321,7 @@ takeawayRouter.get("/", requireAdmin, (_req, res) => {
   res.json({ orders });
 });
 
-takeawayRouter.patch("/:id/status", requireAdmin, (req, res) => {
+takeawayRouter.patch("/:id/status", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   const status = String(req.body?.status ?? "");
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad order id." }); return; }
@@ -330,21 +330,21 @@ takeawayRouter.patch("/:id/status", requireAdmin, (req, res) => {
     return;
   }
 
-  const order = db
+  const order = (await db
     .prepare("SELECT id, order_no, status, promo_code, gift_card_code, discount_fcfa FROM takeaway_orders WHERE id = ?")
-    .get(id) as
+    .get(id)) as
     | { id: number; order_no: string; status: string; promo_code: string | null; gift_card_code: string | null; discount_fcfa: number }
     | undefined;
   if (!order) { res.status(404).json({ error: "Order not found." }); return; }
   if (order.status === status) { res.json({ ok: true }); return; }
 
-  db.prepare("UPDATE takeaway_orders SET status = ? WHERE id = ?").run(status, id);
+  await db.prepare("UPDATE takeaway_orders SET status = ? WHERE id = ?").run(status, id);
 
   // Cancelling gives the customer their promo use and gift card value back.
   if (status === "cancelled" && order.status !== "cancelled") {
-    if (order.promo_code) releasePromoCode(order.promo_code);
+    if (order.promo_code) await releasePromoCode(order.promo_code);
     if (order.gift_card_code && order.discount_fcfa > 0) {
-      refundGiftCard(order.gift_card_code, order.discount_fcfa, { type: "takeaway_cancelled", id: order.id });
+      await refundGiftCard(order.gift_card_code, order.discount_fcfa, { type: "takeaway_cancelled", id: order.id });
     }
   }
 

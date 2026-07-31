@@ -14,8 +14,8 @@ const uploadLimit = rateLimit("gallery-upload", {
   key: (req) => String(req.user?.id ?? "anon"),
 });
 
-galleryRouter.get("/", (_req, res) => {
-  const photos = db
+galleryRouter.get("/", async (_req, res) => {
+  const photos = await db
     .prepare(
       `SELECT g.id, g.submitter_name, g.caption, g.image_url, g.is_featured, g.created_at,
               u.name AS user_name
@@ -29,7 +29,7 @@ galleryRouter.get("/", (_req, res) => {
   res.json({ photos });
 });
 
-galleryRouter.post("/", requireAuth, uploadLimit, (req, res) => {
+galleryRouter.post("/", requireAuth, uploadLimit, async (req, res) => {
   const caption = String(req.body?.caption ?? "").trim().slice(0, 200);
 
   let image_url: string;
@@ -40,7 +40,7 @@ galleryRouter.post("/", requireAuth, uploadLimit, (req, res) => {
     return;
   }
 
-  db.prepare(
+  await db.prepare(
     "INSERT INTO gallery_photos (user_id, submitter_name, caption, image_url, is_approved) VALUES (?, ?, ?, ?, 0)"
   ).run(req.user!.id, req.user!.name, caption, image_url);
 
@@ -49,8 +49,8 @@ galleryRouter.post("/", requireAuth, uploadLimit, (req, res) => {
 
 // ── Admin ────────────────────────────────────────────────
 
-galleryRouter.get("/pending", requireAdmin, (_req, res) => {
-  const photos = db
+galleryRouter.get("/pending", requireAdmin, async (_req, res) => {
+  const photos = await db
     .prepare(
       `SELECT g.*, u.name AS user_name
        FROM gallery_photos g
@@ -63,8 +63,8 @@ galleryRouter.get("/pending", requireAdmin, (_req, res) => {
   res.json({ photos });
 });
 
-galleryRouter.get("/all", requireAdmin, (_req, res) => {
-  const photos = db
+galleryRouter.get("/all", requireAdmin, async (_req, res) => {
+  const photos = await db
     .prepare(
       `SELECT g.*, u.name AS user_name
        FROM gallery_photos g
@@ -76,7 +76,7 @@ galleryRouter.get("/all", requireAdmin, (_req, res) => {
 });
 
 /** Admin uploads skip the approval queue and publish immediately. */
-galleryRouter.post("/admin-upload", requireAdmin, (req, res) => {
+galleryRouter.post("/admin-upload", requireAdmin, async (req, res) => {
   const caption = String(req.body?.caption ?? "").trim().slice(0, 200);
 
   let image_url: string;
@@ -87,18 +87,18 @@ galleryRouter.post("/admin-upload", requireAdmin, (req, res) => {
     return;
   }
 
-  const info = db
+  const info = await db
     .prepare(
       "INSERT INTO gallery_photos (user_id, submitter_name, caption, image_url, is_approved) VALUES (?, ?, ?, ?, 1)"
     )
     .run(req.user!.id, req.user!.name, caption, image_url);
 
-  const photo = db.prepare("SELECT * FROM gallery_photos WHERE id = ?").get(Number(info.lastInsertRowid));
+  const photo = await db.prepare("SELECT * FROM gallery_photos WHERE id = ?").get(Number(info.lastInsertRowid));
   audit(req, { action: "gallery.upload", targetType: "gallery_photo", targetId: Number(info.lastInsertRowid) });
   res.status(201).json({ ok: true, photo });
 });
 
-galleryRouter.patch("/:id", requireAdmin, (req, res) => {
+galleryRouter.patch("/:id", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad photo id." }); return; }
 
@@ -110,7 +110,7 @@ galleryRouter.patch("/:id", requireAdmin, (req, res) => {
 
   // Column names come from this fixed set, never from the request body.
   const sets = Object.keys(fields).map((k) => `${k} = ?`).join(", ");
-  db.prepare(`UPDATE gallery_photos SET ${sets} WHERE id = ?`).run(...Object.values(fields), id);
+  await db.prepare(`UPDATE gallery_photos SET ${sets} WHERE id = ?`).run(...Object.values(fields), id);
 
   audit(req, {
     action: "gallery.update",
@@ -121,10 +121,10 @@ galleryRouter.patch("/:id", requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-galleryRouter.delete("/:id", requireAdmin, (req, res) => {
+galleryRouter.delete("/:id", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad photo id." }); return; }
-  db.prepare("DELETE FROM gallery_photos WHERE id = ?").run(id);
+  await db.prepare("DELETE FROM gallery_photos WHERE id = ?").run(id);
   audit(req, { action: "gallery.delete", targetType: "gallery_photo", targetId: id });
   res.json({ ok: true });
 });

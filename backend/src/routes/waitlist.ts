@@ -15,14 +15,14 @@ const joinLimit = rateLimit("waitlist-join", {
   message: "You have already joined recently. Speak to the host if something is wrong.",
 });
 
-waitlistRouter.get("/", (_req, res) => {
+waitlistRouter.get("/", async (_req, res) => {
   const waiting = (
-    db.prepare("SELECT COUNT(*) as c FROM waitlist_entries WHERE status = 'waiting'").get() as { c: number }
+    (await db.prepare("SELECT COUNT(*) as c FROM waitlist_entries WHERE status = 'waiting'").get()) as { c: number }
   ).c;
   res.json({ waiting, est_wait_minutes: waiting * AVG_TURN_MINUTES });
 });
 
-waitlistRouter.post("/", joinLimit, (req, res) => {
+waitlistRouter.post("/", joinLimit, async (req, res) => {
   const name = String(req.body?.name ?? "").trim();
   const phone = String(req.body?.phone ?? "").trim();
   const party_size = Number(req.body?.party_size);
@@ -36,9 +36,9 @@ waitlistRouter.post("/", joinLimit, (req, res) => {
   }
 
   // Rejoining while already on the list would push the real queue back.
-  const existing = db
+  const existing = await db
     .prepare(
-      "SELECT id FROM waitlist_entries WHERE phone = ? AND status IN ('waiting','notified') AND joined_at >= datetime('now', '-4 hours')"
+      "SELECT id FROM waitlist_entries WHERE phone = ? AND status IN ('waiting','notified') AND joined_at >= now_text_offset(interval '-4 hours')"
     )
     .get(phone);
   if (existing) {
@@ -46,14 +46,14 @@ waitlistRouter.post("/", joinLimit, (req, res) => {
     return;
   }
 
-  const info = db
+  const info = await db
     .prepare("INSERT INTO waitlist_entries (name, phone, party_size, note) VALUES (?, ?, ?, ?)")
     .run(name, phone, party_size, note);
 
   const position = (
-    db
+    (await db
       .prepare("SELECT COUNT(*) as c FROM waitlist_entries WHERE status = 'waiting' AND id <= ?")
-      .get(Number(info.lastInsertRowid)) as { c: number }
+      .get(Number(info.lastInsertRowid))) as { c: number }
   ).c;
 
   res.status(201).json({
@@ -65,16 +65,16 @@ waitlistRouter.post("/", joinLimit, (req, res) => {
 
 // ── Admin ────────────────────────────────────────────────
 
-waitlistRouter.get("/all", requireAdmin, (_req, res) => {
-  const entries = db
+waitlistRouter.get("/all", requireAdmin, async (_req, res) => {
+  const entries = await db
     .prepare(
-      "SELECT * FROM waitlist_entries WHERE joined_at >= datetime('now', '-12 hours') ORDER BY joined_at ASC"
+      "SELECT * FROM waitlist_entries WHERE joined_at >= now_text_offset(interval '-12 hours') ORDER BY joined_at ASC"
     )
     .all();
   res.json({ entries });
 });
 
-waitlistRouter.patch("/:id", requireAdmin, (req, res) => {
+waitlistRouter.patch("/:id", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   const status = String(req.body?.status ?? "");
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad entry id." }); return; }
@@ -83,7 +83,7 @@ waitlistRouter.patch("/:id", requireAdmin, (req, res) => {
     return;
   }
 
-  const entry = db.prepare("SELECT id, status FROM waitlist_entries WHERE id = ?").get(id) as
+  const entry = (await db.prepare("SELECT id, status FROM waitlist_entries WHERE id = ?").get(id)) as
     | { id: number; status: string }
     | undefined;
   if (!entry) { res.status(404).json({ error: "Waitlist entry not found." }); return; }
@@ -91,23 +91,23 @@ waitlistRouter.patch("/:id", requireAdmin, (req, res) => {
   // "Notify" previously stamped notified_at but left the status untouched, so
   // the row stayed in the waiting queue and the button appeared to do nothing.
   if (status === "notified") {
-    db.prepare(
-      "UPDATE waitlist_entries SET status = 'notified', notified_at = datetime('now') WHERE id = ?"
+    await db.prepare(
+      "UPDATE waitlist_entries SET status = 'notified', notified_at = now_text() WHERE id = ?"
     ).run(id);
   } else if (status === "seated") {
-    db.prepare(
-      "UPDATE waitlist_entries SET status = 'seated', seated_at = datetime('now') WHERE id = ?"
+    await db.prepare(
+      "UPDATE waitlist_entries SET status = 'seated', seated_at = now_text() WHERE id = ?"
     ).run(id);
   } else {
-    db.prepare("UPDATE waitlist_entries SET status = ? WHERE id = ?").run(status, id);
+    await db.prepare("UPDATE waitlist_entries SET status = ? WHERE id = ?").run(status, id);
   }
 
   res.json({ ok: true });
 });
 
-waitlistRouter.delete("/clear", requireAdmin, (req, res) => {
-  const info = db
-    .prepare("DELETE FROM waitlist_entries WHERE joined_at < datetime('now', '-24 hours')")
+waitlistRouter.delete("/clear", requireAdmin, async (req, res) => {
+  const info = await db
+    .prepare("DELETE FROM waitlist_entries WHERE joined_at < now_text_offset(interval '-24 hours')")
     .run();
   audit(req, { action: "waitlist.clear", targetType: "waitlist", detail: `${info.changes} removed` });
   res.json({ ok: true, removed: Number(info.changes) });

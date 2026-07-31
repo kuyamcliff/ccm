@@ -1,11 +1,11 @@
 import { Router } from "express";
-import { db } from "../db.js";
+import { db, transaction } from "../db.js";
 import { requireAuth, requireAdmin } from "../auth.js";
 
 export const settingsRouter = Router();
 
-settingsRouter.get("/", (_req, res) => {
-  const rows = db.prepare("SELECT key, value FROM site_settings").all() as { key: string; value: string }[];
+settingsRouter.get("/", async (_req, res) => {
+  const rows = (await db.prepare("SELECT key, value FROM site_settings").all()) as { key: string; value: string }[];
   const settings: Record<string, string> = {};
   for (const r of rows) settings[r.key] = r.value;
   res.json({ settings });
@@ -26,14 +26,13 @@ const EDITABLE_KEYS = [
 
 const MAX_VALUE_LENGTH = 400;
 
-settingsRouter.patch("/", requireAuth, requireAdmin, (req, res) => {
+settingsRouter.patch("/", requireAuth, requireAdmin, async (req, res) => {
   const updates = req.body as Record<string, unknown>;
   if (!updates || typeof updates !== "object" || Array.isArray(updates)) {
     res.status(400).json({ error: "Expected an object of settings." });
     return;
   }
 
-  const stmt = db.prepare("INSERT OR REPLACE INTO site_settings (key, value) VALUES (?, ?)");
   const written: string[] = [];
   const rejected: string[] = [];
   const entries: [string, string][] = [];
@@ -55,14 +54,12 @@ settingsRouter.patch("/", requireAuth, requireAdmin, (req, res) => {
 
   // All or nothing: a half-applied address change would leave the site showing
   // the old town beside the new street.
-  db.exec("BEGIN");
-  try {
-    for (const [key, value] of entries) stmt.run(key, value);
-    db.exec("COMMIT");
-  } catch (err) {
-    db.exec("ROLLBACK");
-    throw err;
-  }
+  await transaction(async () => {
+    const stmt = db.prepare(
+      "INSERT INTO site_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+    );
+    for (const [key, value] of entries) await stmt.run(key, value);
+  });
 
   res.json({ ok: true, updated: written, ignored: rejected });
 });

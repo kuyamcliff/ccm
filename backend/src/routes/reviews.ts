@@ -27,8 +27,8 @@ type DbReply = {
   text: string; created_at: string; author: string;
 };
 
-reviewsRouter.get("/", (req, res) => {
-  const rows = db.prepare(`
+reviewsRouter.get("/", async (req, res) => {
+  const rows = (await db.prepare(`
     SELECT r.id, r.rating, r.text, r.created_at, r.updated_at, r.user_id, r.media_urls,
            r.admin_reply, r.admin_reply_at,
            u.name AS author,
@@ -37,13 +37,13 @@ reviewsRouter.get("/", (req, res) => {
            (SELECT COUNT(*) FROM reservations res WHERE res.user_id = r.user_id AND res.status = 'completed') AS verified_count
     FROM reviews r JOIN users u ON u.id = r.user_id
     ORDER BY r.updated_at DESC LIMIT 100
-  `).all() as DbReview[];
+  `).all()) as DbReview[];
 
   const myVotes = new Map<number, string>();
   if (req.user?.id) {
-    const votes = db.prepare(
+    const votes = (await db.prepare(
       "SELECT review_id, vote FROM review_votes WHERE user_id = ?"
-    ).all(req.user.id) as { review_id: number; vote: string }[];
+    ).all(req.user.id)) as { review_id: number; vote: string }[];
     for (const v of votes) myVotes.set(v.review_id, v.vote);
   }
 
@@ -51,14 +51,14 @@ reviewsRouter.get("/", (req, res) => {
   // written, which grew without limit as the site aged.
   const ids = rows.map((r) => r.id);
   const allReplies = ids.length
-    ? (db
+    ? ((await db
         .prepare(
           `SELECT rr.id, rr.review_id, rr.user_id, rr.text, rr.created_at, u.name AS author
            FROM review_replies rr JOIN users u ON u.id = rr.user_id
            WHERE rr.review_id IN (${ids.map(() => "?").join(",")})
            ORDER BY rr.created_at ASC`
         )
-        .all(...ids) as DbReply[])
+        .all(...ids)) as DbReply[])
     : [];
 
   const repliesByReview = new Map<number, DbReply[]>();
@@ -78,7 +78,7 @@ reviewsRouter.get("/", (req, res) => {
   res.json({ reviews });
 });
 
-reviewsRouter.post("/", requireAuth, writeLimit, (req, res) => {
+reviewsRouter.post("/", requireAuth, writeLimit, async (req, res) => {
   const rating = Number(req.body?.rating);
   const text = String(req.body?.text ?? "").trim();
   const rawMedia: unknown = req.body?.media_urls;
@@ -106,24 +106,24 @@ reviewsRouter.post("/", requireAuth, writeLimit, (req, res) => {
     }
   }
 
-  db.prepare(
+  await db.prepare(
     `INSERT INTO reviews (user_id, rating, text, media_urls) VALUES (?, ?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
        rating = excluded.rating, text = excluded.text,
-       media_urls = excluded.media_urls, updated_at = datetime('now')`
+       media_urls = excluded.media_urls, updated_at = now_text()`
   ).run(req.user!.id, rating, text, JSON.stringify(media_urls));
 
-  const row = db.prepare(
+  const row = (await db.prepare(
     `SELECT r.id, r.rating, r.text, r.created_at, r.updated_at, r.user_id, r.media_urls, u.name AS author
      FROM reviews r JOIN users u ON u.id = r.user_id WHERE r.user_id = ?`
-  ).get(req.user!.id) as (DbReview & { media_urls: string }) | undefined;
+  ).get(req.user!.id)) as (DbReview & { media_urls: string }) | undefined;
 
   if (!row) { res.status(500).json({ error: "Could not retrieve review." }); return; }
   res.status(201).json({ review: { ...row, media_urls: safeJsonArray(row.media_urls) } });
 });
 
-reviewsRouter.delete("/mine", requireAuth, (req, res) => {
-  const info = db.prepare("DELETE FROM reviews WHERE user_id = ?").run(req.user!.id);
+reviewsRouter.delete("/mine", requireAuth, async (req, res) => {
+  const info = await db.prepare("DELETE FROM reviews WHERE user_id = ?").run(req.user!.id);
   if (info.changes === 0) {
     res.status(404).json({ error: "You have no review to delete." });
     return;
@@ -131,7 +131,7 @@ reviewsRouter.delete("/mine", requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-reviewsRouter.post("/:id/vote", requireAuth, (req, res) => {
+reviewsRouter.post("/:id/vote", requireAuth, async (req, res) => {
   const reviewId = Number(req.params.id);
   if (!Number.isInteger(reviewId)) { res.status(400).json({ error: "Bad review id." }); return; }
   const vote = String(req.body?.vote ?? "");
@@ -139,25 +139,25 @@ reviewsRouter.post("/:id/vote", requireAuth, (req, res) => {
     res.status(400).json({ error: "Vote must be 'like' or 'dislike'." });
     return;
   }
-  const exists = db.prepare("SELECT id FROM reviews WHERE id = ?").get(reviewId);
+  const exists = await db.prepare("SELECT id FROM reviews WHERE id = ?").get(reviewId);
   if (!exists) { res.status(404).json({ error: "Review not found." }); return; }
 
-  db.prepare(
+  await db.prepare(
     `INSERT INTO review_votes (review_id, user_id, vote) VALUES (?, ?, ?)
      ON CONFLICT(review_id, user_id) DO UPDATE SET vote = excluded.vote`
   ).run(reviewId, req.user!.id, vote);
 
-  res.json({ ok: true, ...voteCounts(reviewId), user_vote: vote });
+  res.json({ ok: true, ...(await voteCounts(reviewId)), user_vote: vote });
 });
 
-reviewsRouter.delete("/:id/vote", requireAuth, (req, res) => {
+reviewsRouter.delete("/:id/vote", requireAuth, async (req, res) => {
   const reviewId = Number(req.params.id);
   if (!Number.isInteger(reviewId)) { res.status(400).json({ error: "Bad review id." }); return; }
-  db.prepare("DELETE FROM review_votes WHERE review_id = ? AND user_id = ?").run(reviewId, req.user!.id);
-  res.json({ ok: true, ...voteCounts(reviewId), user_vote: null });
+  await db.prepare("DELETE FROM review_votes WHERE review_id = ? AND user_id = ?").run(reviewId, req.user!.id);
+  res.json({ ok: true, ...(await voteCounts(reviewId)), user_vote: null });
 });
 
-reviewsRouter.post("/:id/replies", requireAuth, writeLimit, (req, res) => {
+reviewsRouter.post("/:id/replies", requireAuth, writeLimit, async (req, res) => {
   const reviewId = Number(req.params.id);
   if (!Number.isInteger(reviewId)) { res.status(400).json({ error: "Bad review id." }); return; }
   const text = String(req.body?.text ?? "").trim();
@@ -165,14 +165,14 @@ reviewsRouter.post("/:id/replies", requireAuth, writeLimit, (req, res) => {
     res.status(400).json({ error: "Reply must be 1–500 characters." });
     return;
   }
-  const exists = db.prepare("SELECT id FROM reviews WHERE id = ?").get(reviewId);
+  const exists = await db.prepare("SELECT id FROM reviews WHERE id = ?").get(reviewId);
   if (!exists) { res.status(404).json({ error: "Review not found." }); return; }
 
-  const info = db.prepare(
+  const info = await db.prepare(
     "INSERT INTO review_replies (review_id, user_id, text) VALUES (?, ?, ?)"
   ).run(reviewId, req.user!.id, text);
 
-  const reply = db.prepare(
+  const reply = await db.prepare(
     `SELECT rr.id, rr.review_id, rr.user_id, rr.text, rr.created_at, u.name AS author
      FROM review_replies rr JOIN users u ON u.id = rr.user_id WHERE rr.id = ?`
   ).get(Number(info.lastInsertRowid));
@@ -180,10 +180,10 @@ reviewsRouter.post("/:id/replies", requireAuth, writeLimit, (req, res) => {
   res.status(201).json({ reply });
 });
 
-reviewsRouter.delete("/replies/:replyId", requireAuth, (req, res) => {
+reviewsRouter.delete("/replies/:replyId", requireAuth, async (req, res) => {
   const replyId = Number(req.params.replyId);
   if (!Number.isInteger(replyId)) { res.status(400).json({ error: "Bad reply id." }); return; }
-  const reply = db.prepare("SELECT id, user_id FROM review_replies WHERE id = ?").get(replyId) as { id: number; user_id: number } | undefined;
+  const reply = (await db.prepare("SELECT id, user_id FROM review_replies WHERE id = ?").get(replyId)) as { id: number; user_id: number } | undefined;
   if (!reply) { res.status(404).json({ error: "Reply not found." }); return; }
 
   const u = req.user!;
@@ -191,16 +191,16 @@ reviewsRouter.delete("/replies/:replyId", requireAuth, (req, res) => {
     res.status(403).json({ error: "You can only delete your own replies." });
     return;
   }
-  db.prepare("DELETE FROM review_replies WHERE id = ?").run(replyId);
+  await db.prepare("DELETE FROM review_replies WHERE id = ?").run(replyId);
   res.json({ ok: true });
 });
 
-function voteCounts(reviewId: number) {
-  return db.prepare(`
+async function voteCounts(reviewId: number) {
+  return (await db.prepare(`
     SELECT
       (SELECT COUNT(*) FROM review_votes WHERE review_id = ? AND vote = 'like') AS likes,
       (SELECT COUNT(*) FROM review_votes WHERE review_id = ? AND vote = 'dislike') AS dislikes
-  `).get(reviewId, reviewId) as { likes: number; dislikes: number };
+  `).get(reviewId, reviewId)) as { likes: number; dislikes: number };
 }
 
 function safeJsonArray(raw: string | null | undefined): string[] {
