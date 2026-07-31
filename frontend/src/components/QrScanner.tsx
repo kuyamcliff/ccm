@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import jsQR from "jsqr";
+import { useLanguage } from "../i18n/context";
 
 interface Props {
   /** Called with the raw decoded string. Paused until the caller resumes. */
@@ -22,6 +23,10 @@ interface Props {
  * fallback nobody tests.
  */
 export function QrScanner({ onDecode, active, onError }: Props) {
+  const { t } = useLanguage();
+  const tq = (key: string) => t("qrScanner", key);
+  const tqRef = useRef(tq);
+  tqRef.current = tq;
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -94,7 +99,7 @@ export function QrScanner({ onDecode, active, onError }: Props) {
     async function start() {
       if (!navigator.mediaDevices?.getUserMedia) {
         setStatus("unsupported");
-        onError?.("This browser cannot open the camera. Type the reference instead.");
+        onError?.(tqRef.current("errUnsupported"));
         return;
       }
 
@@ -133,13 +138,13 @@ export function QrScanner({ onDecode, active, onError }: Props) {
         const name = err instanceof DOMException ? err.name : "";
         if (name === "NotAllowedError" || name === "SecurityError") {
           setStatus("denied");
-          onError?.("Camera access was blocked. Allow it in your browser settings, or type the reference.");
+          onError?.(tqRef.current("errDenied"));
         } else if (name === "NotFoundError") {
           setStatus("unsupported");
-          onError?.("No camera found on this device.");
+          onError?.(tqRef.current("errNotFound"));
         } else {
           setStatus("unsupported");
-          onError?.("Could not start the camera. Type the reference instead.");
+          onError?.(tqRef.current("errGeneric"));
         }
       }
     }
@@ -164,7 +169,7 @@ export function QrScanner({ onDecode, active, onError }: Props) {
   return (
     <div className="qrs">
       <div className="qrs-stage">
-        <video ref={videoRef} className="qrs-video" playsInline muted aria-label="Camera viewfinder" />
+        <video ref={videoRef} className="qrs-video" playsInline muted aria-label={tq("viewfinderLabel")} />
 
         {/* Framing guide. Purely visual, the whole frame is decoded, so a
             code slightly outside the box still reads. */}
@@ -177,27 +182,27 @@ export function QrScanner({ onDecode, active, onError }: Props) {
         {status !== "running" && (
           <div className="qrs-overlay">
             {status === "starting" && (
-              <><span className="route-fallback-dot" aria-hidden="true" /><p>Opening camera…</p></>
+              <><span className="route-fallback-dot" aria-hidden="true" /><p>{tq("openingCamera")}</p></>
             )}
-            {status === "denied" && <p>Camera blocked. Allow access, or type the reference below.</p>}
-            {status === "unsupported" && <p>No camera available. Type the reference below.</p>}
+            {status === "denied" && <p>{tq("cameraBlocked")}</p>}
+            {status === "unsupported" && <p>{tq("noCamera")}</p>}
           </div>
         )}
 
         {!active && status === "running" && (
-          <div className="qrs-overlay qrs-paused"><p>Scanner paused</p></div>
+          <div className="qrs-overlay qrs-paused"><p>{tq("scannerPaused")}</p></div>
         )}
       </div>
 
       <div className="qrs-bar">
         <p className="qrs-hint">
           {status === "running"
-            ? active ? "Point at the QR code on the receipt" : "Clear the result to scan again"
-            : "Waiting for camera"}
+            ? active ? tq("pointAtCode") : tq("clearToScan")
+            : tq("waitingCamera")}
         </p>
         {torchAvailable && (
           <button type="button" className="btn btn-outline btn-sm" onClick={toggleTorch}>
-            {torchOn ? "Torch off" : "Torch on"}
+            {torchOn ? tq("torchOff") : tq("torchOn")}
           </button>
         )}
       </div>

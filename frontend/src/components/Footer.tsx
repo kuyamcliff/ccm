@@ -8,7 +8,7 @@ export function Footer() {
   const { address, city, region, hours, phone, tiktok, instagram: ig, facebook: fb, whatsappHref } =
     useSettings();
 
-  const chatHref = whatsappHref(`Hi, I'd like to ask about Cam Chop Meat in ${city}.`);
+  const chatHref = whatsappHref(t("chatMessage").replace("{city}", city));
 
   return (
     <footer className="site-footer">

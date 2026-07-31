@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
+import { useLanguage } from "../i18n/context";
 
 /**
  * Per-route document title. A single-page app keeps whatever title it loaded
@@ -50,10 +51,11 @@ export function RouteChrome() {
 
 /** Shown while a lazily loaded route is fetched. */
 export function RouteFallback() {
+  const { t } = useLanguage();
   return (
     <div className="route-fallback" role="status" aria-live="polite">
       <span className="route-fallback-dot" aria-hidden="true" />
-      <span className="visually-hidden">Loading</span>
+      <span className="visually-hidden">{t("common", "loading")}</span>
     </div>
   );
 }

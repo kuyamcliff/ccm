@@ -2,18 +2,20 @@ import { useState } from "react";
 import { api } from "../api";
 import type { ReceiptData } from "../api";
 import { useSettings } from "../settings";
+import { useLanguage } from "../i18n/context";
+import type { Lang } from "../i18n/translations";
 
-function methodLabel(method: string): string {
-  if (method === "mtn_momo") return "MTN Mobile Money";
-  if (method === "orange_money") return "Orange Money";
-  if (method === "free") return "Covered by promo / gift card";
+function methodLabel(method: string, tr: (key: string) => string): string {
+  if (method === "mtn_momo") return tr("methodMomo");
+  if (method === "orange_money") return tr("methodOrange");
+  if (method === "free") return tr("methodFree");
   return method || "";
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, lang: Lang): string {
   const d = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "long", year: "numeric" });
+  return d.toLocaleDateString(lang === "fr" ? "fr-FR" : "en-GB", { weekday: "short", day: "numeric", month: "long", year: "numeric" });
 }
 
 /**
@@ -25,6 +27,8 @@ function formatDate(iso: string): string {
  */
 export function Receipt({ data }: { data: ReceiptData }) {
   const { address } = useSettings();
+  const { lang, t } = useLanguage();
+  const tr = (key: string) => t("receipt", key);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
 
@@ -47,7 +51,7 @@ export function Receipt({ data }: { data: ReceiptData }) {
       // Revoked on the next tick so the download has taken hold of the blob.
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not download the receipt.");
+      setError(err instanceof Error ? err.message : tr("errDownload"));
     } finally {
       setDownloading(false);
     }
@@ -58,65 +62,65 @@ export function Receipt({ data }: { data: ReceiptData }) {
       <header className="rcpt-head">
         <div className="rcpt-brand">
           <p className="rcpt-brand-name">Cam Chop <em>Meat</em></p>
-          <p className="rcpt-brand-sub">Charcoal grill · {address}</p>
+          <p className="rcpt-brand-sub">{tr("charcoalGrill")} · {address}</p>
         </div>
         <span className={`rcpt-status rcpt-status-${data.status}`}>
-          {paid ? "Paid" : data.status === "failed" ? "Unpaid" : "Awaiting payment"}
+          {paid ? tr("statusPaid") : data.status === "failed" ? tr("statusUnpaid") : tr("statusAwaiting")}
         </span>
       </header>
 
       <div className="rcpt-code-band">
-        <p className="rcpt-code-label">Booking reference</p>
+        <p className="rcpt-code-label">{tr("bookingRef")}</p>
         <p className="rcpt-code mono">{data.code}</p>
-        <p className="rcpt-code-hint">Quote this at the door</p>
+        <p className="rcpt-code-hint">{tr("quoteAtDoor")}</p>
       </div>
 
       {/* Perforation between the ticket stub and the detail. */}
       <div className="rcpt-perf" aria-hidden="true"><span /><span /></div>
 
       <section className="rcpt-section">
-        <h3 className="rcpt-section-title">Booking</h3>
+        <h3 className="rcpt-section-title">{tr("booking")}</h3>
         <dl className="rcpt-rows">
-          <div><dt>Guest</dt><dd>{data.guestName}</dd></div>
-          <div><dt>Date</dt><dd>{formatDate(data.date)}</dd></div>
-          <div><dt>Time</dt><dd className="mono">{data.time}</dd></div>
-          <div><dt>Party</dt><dd>{data.partySize} {data.partySize === 1 ? "guest" : "guests"}</dd></div>
-          {data.tableLabel && <div><dt>Table</dt><dd>{data.tableLabel}</dd></div>}
-          {data.guestPhone && <div><dt>Phone</dt><dd className="mono">{data.guestPhone}</dd></div>}
+          <div><dt>{tr("guest")}</dt><dd>{data.guestName}</dd></div>
+          <div><dt>{tr("date")}</dt><dd>{formatDate(data.date, lang)}</dd></div>
+          <div><dt>{tr("time")}</dt><dd className="mono">{data.time}</dd></div>
+          <div><dt>{tr("party")}</dt><dd>{data.partySize} {data.partySize === 1 ? tr("guestSingular") : tr("guestPlural")}</dd></div>
+          {data.tableLabel && <div><dt>{tr("table")}</dt><dd>{data.tableLabel}</dd></div>}
+          {data.guestPhone && <div><dt>{tr("phone")}</dt><dd className="mono">{data.guestPhone}</dd></div>}
         </dl>
         {data.note && <p className="rcpt-note">“{data.note}”</p>}
       </section>
 
       <section className="rcpt-section">
-        <h3 className="rcpt-section-title">Payment</h3>
+        <h3 className="rcpt-section-title">{tr("payment")}</h3>
         <dl className="rcpt-money">
           <div>
-            <dt>Table deposit</dt>
+            <dt>{tr("tableDeposit")}</dt>
             <dd className="mono">{data.subtotalFcfa.toLocaleString()} FCFA</dd>
           </div>
           {data.discountFcfa > 0 && (
             <div className="rcpt-money-discount">
-              <dt>Discount applied</dt>
+              <dt>{tr("discountApplied")}</dt>
               <dd className="mono">−{data.discountFcfa.toLocaleString()} FCFA</dd>
             </div>
           )}
           <div className="rcpt-money-total">
-            <dt>{paid ? "Paid" : "Due"}</dt>
+            <dt>{paid ? tr("paidLabel") : tr("dueLabel")}</dt>
             <dd className="mono">{data.paidFcfa.toLocaleString()} FCFA</dd>
           </div>
         </dl>
 
         <dl className="rcpt-rows rcpt-rows-tight">
-          <div><dt>Method</dt><dd>{methodLabel(data.method)}</dd></div>
-          {data.momoPhone && <div><dt>Paid from</dt><dd className="mono">{data.momoPhone}</dd></div>}
+          <div><dt>{tr("method")}</dt><dd>{methodLabel(data.method, tr)}</dd></div>
+          {data.momoPhone && <div><dt>{tr("paidFrom")}</dt><dd className="mono">{data.momoPhone}</dd></div>}
           {data.reference && (
-            <div><dt>Transaction</dt><dd className="mono rcpt-ref">{data.reference}</dd></div>
+            <div><dt>{tr("transaction")}</dt><dd className="mono rcpt-ref">{data.reference}</dd></div>
           )}
           {data.paidAt && (
             <div>
-              <dt>Received</dt>
+              <dt>{tr("received")}</dt>
               <dd className="mono">
-                {new Date(data.paidAt.replace(" ", "T") + "Z").toLocaleString("en-GB", {
+                {new Date(data.paidAt.replace(" ", "T") + "Z").toLocaleString(lang === "fr" ? "fr-FR" : "en-GB", {
                   day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
                 })}
               </dd>
@@ -126,16 +130,13 @@ export function Receipt({ data }: { data: ReceiptData }) {
       </section>
 
       <footer className="rcpt-foot">
-        <p className="rcpt-foot-line">
-          The deposit comes off your bill. Arrive within 20 minutes of your slot or the table
-          may be released.
-        </p>
+        <p className="rcpt-foot-line">{tr("footLine")}</p>
         <p className="rcpt-foot-address mono">{address}</p>
 
         {paid && data.reservationId != null && (
           <>
             <button className="btn btn-outline btn-sm rcpt-download" onClick={download} disabled={downloading}>
-              {downloading ? "Preparing…" : "Download PDF"}
+              {downloading ? tr("preparing") : tr("download")}
             </button>
             {error && <p className="form-error" role="alert">{error}</p>}
           </>

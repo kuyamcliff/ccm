@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef } from "react";
 import type { ReactNode } from "react";
+import { useLanguage } from "../i18n/context";
 
 interface Props {
   open: boolean;
@@ -21,14 +22,17 @@ export function ConfirmModal({
   open,
   title,
   body,
-  confirmLabel = "Confirm",
+  confirmLabel,
   confirmClass = "btn-danger",
   confirmDisabled = false,
-  cancelLabel = "Cancel",
+  cancelLabel,
   onConfirm,
   onCancel,
   children,
 }: Props) {
+  const { t } = useLanguage();
+  const resolvedConfirmLabel = confirmLabel ?? t("common", "confirm");
+  const resolvedCancelLabel = cancelLabel ?? t("common", "cancel");
   const boxRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
@@ -103,7 +107,7 @@ export function ConfirmModal({
         {children}
         <div className="modal-actions">
           <button type="button" className="btn btn-outline" onClick={onCancel}>
-            {cancelLabel}
+            {resolvedCancelLabel}
           </button>
           <button
             type="button"
@@ -111,7 +115,7 @@ export function ConfirmModal({
             onClick={onConfirm}
             disabled={confirmDisabled}
           >
-            {confirmLabel}
+            {resolvedConfirmLabel}
           </button>
         </div>
       </div>
