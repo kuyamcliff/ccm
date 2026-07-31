@@ -1,62 +1,27 @@
 import { Link } from "react-router-dom";
 import { useSettings } from "../settings";
+import { useT } from "../i18n/context";
 
-const AMENITY_GROUPS = [
-  {
-    label: "Service options",
-    items: ["Takeaway", "Dine-in"],
-  },
-  {
-    label: "Popular for",
-    items: ["Lunch", "Dinner", "Solo dining"],
-  },
-  {
-    label: "Offerings",
-    items: ["Alcohol", "Beer", "Small plates", "Wine"],
-  },
-  {
-    label: "Dining options",
-    items: ["Lunch", "Dinner", "Table service"],
-  },
-  {
-    label: "Amenities",
-    items: ["Toilet"],
-  },
-  {
-    label: "Atmosphere",
-    items: ["Casual", "Cosy", "Trendy"],
-  },
-  {
-    label: "Crowd",
-    items: ["Groups", "Tourists"],
-  },
-  {
-    label: "Planning",
-    items: ["Accepts reservations"],
-  },
-  {
-    label: "Children",
-    items: ["Good for kids"],
-  },
-  {
-    label: "Parking",
-    items: ["Free street parking", "Free parking lot"],
-  },
-];
+const AMENITY_GROUP_KEYS = [
+  { label: "group_service", items: ["amenity_takeaway", "amenity_dinein"] },
+  { label: "group_popular", items: ["amenity_lunch", "amenity_dinner", "amenity_solodining"] },
+  { label: "group_offerings", items: ["amenity_alcohol", "amenity_beer", "amenity_smallplates", "amenity_wine"] },
+  { label: "group_dining", items: ["amenity_lunch", "amenity_dinner", "amenity_tableservice"] },
+  { label: "group_amenities", items: ["amenity_toilet"] },
+  { label: "group_atmosphere", items: ["amenity_casual", "amenity_cosy", "amenity_trendy"] },
+  { label: "group_crowd", items: ["amenity_groups", "amenity_tourists"] },
+  { label: "group_planning", items: ["amenity_reservations"] },
+  { label: "group_children", items: ["amenity_kids"] },
+  { label: "group_parking", items: ["amenity_streetparking", "amenity_parkinglot"] },
+] as const;
 
-const HOURS = [
-  { day: "Monday", hours: "9:00 am to late" },
-  { day: "Tuesday", hours: "9:00 am to late" },
-  { day: "Wednesday", hours: "9:00 am to late" },
-  { day: "Thursday", hours: "9:00 am to late" },
-  { day: "Friday", hours: "9:00 am to late" },
-  { day: "Saturday", hours: "9:00 am to late" },
-  { day: "Sunday", hours: "9:00 am to late" },
-];
+const DAY_KEYS = ["day_mon", "day_tue", "day_wed", "day_thu", "day_fri", "day_sat", "day_sun"] as const;
 
 export function About() {
+  const t = useT("about");
   const { city, address, hours } = useSettings();
-  const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
+  // getDay(): 0 = Sunday .. 6 = Saturday. DAY_KEYS starts Monday, so shift by one.
+  const todayIndex = (new Date().getDay() + 6) % 7;
 
   return (
     <>
@@ -65,29 +30,28 @@ export function About() {
         <div className="section-inner">
           <div className="about-hero-inner">
             <div className="animate-up">
-              <p className="eyebrow">About us</p>
-              <h1 className="page-title">A proper charcoal grill in {city}.</h1>
+              <p className="eyebrow">{t("eyebrow")}</p>
+              <h1 className="page-title">{t("pageTitle").replace("{city}", city)}</h1>
               <p style={{ color: "var(--text-muted)", fontSize: "1.05rem", maxWidth: "48ch", lineHeight: 1.7 }}>
-                No gas. No shortcuts. Wood charcoal, a good fire, and meat that earns its reputation.
-                Sit down, eat well, leave satisfied.
+                {t("heroLede")}
               </p>
               <div style={{ display: "flex", gap: "0.75rem", marginTop: "2rem", flexWrap: "wrap" }}>
-                <Link to="/reserve" className="btn btn-amber">Book a table</Link>
-                <Link to="/menu" className="btn btn-outline">See the menu</Link>
+                <Link to="/reserve" className="btn btn-amber">{t("bookTable")}</Link>
+                <Link to="/menu" className="btn btn-outline">{t("seeMenu")}</Link>
               </div>
             </div>
             <div className="about-hero-stats animate-up delay-2">
               <div className="about-stat">
                 <span className="about-stat-num">2,500</span>
-                <span className="about-stat-label">FCFA starting price</span>
+                <span className="about-stat-label">{t("statPriceLabel")}</span>
               </div>
               <div className="about-stat">
                 <span className="about-stat-num">3</span>
-                <span className="about-stat-label">Meats on the fire</span>
+                <span className="about-stat-label">{t("statMeatsLabel")}</span>
               </div>
               <div className="about-stat">
-                <span className="about-stat-num">Daily</span>
-                <span className="about-stat-label">9am till late</span>
+                <span className="about-stat-num">{t("statDailyValue")}</span>
+                <span className="about-stat-label">{t("statDailyLabel")}</span>
               </div>
             </div>
           </div>
@@ -98,24 +62,14 @@ export function About() {
       <section className="section">
         <div className="section-inner split">
           <div className="split-text animate-up">
-            <p className="section-label">The story</p>
-            <h2 className="section-title">The smell finds you before the sign does.</h2>
-            <p>
-              Cam Chop Meat sits at {address}, in the neighbourhood near Mariton hôtel.
-              The fire starts in the afternoon. By early evening the smoke has already
-              done the marketing.
-            </p>
-            <p>
-              Chicken, pork and goat, grilled slow over charcoal the way it has always been done in this part of
-              Cameroon. The pepper sauce is made fresh. The matango comes when the calabash arrives. The music
-              stays at a level where you can still hear your friends laugh.
-            </p>
-            <p>
-              {hours}. Walk-ins welcome. Reservations hold your seat.
-            </p>
+            <p className="section-label">{t("storyLabel")}</p>
+            <h2 className="section-title">{t("storyTitle")}</h2>
+            <p>{t("storyBody1").replace("{address}", address)}</p>
+            <p>{t("storyBody2")}</p>
+            <p>{t("storyBody3").replace("{hours}", hours)}</p>
           </div>
           <blockquote className="pull-quote animate-up delay-2">
-            "The fire starts in the afternoon. The smell does the advertising."
+            &ldquo;{t("storyQuote")}&rdquo;
           </blockquote>
         </div>
       </section>
@@ -126,15 +80,15 @@ export function About() {
           <div className="about-info-grid">
             {/* Location */}
             <div className="animate-up">
-              <p className="section-label">Find us</p>
-              <h2 className="section-title" style={{ fontSize: "clamp(1.5rem, 3vw, 2.2rem)" }}>Getting here.</h2>
+              <p className="section-label">{t("findUsLabel")}</p>
+              <h2 className="section-title" style={{ fontSize: "clamp(1.35rem, 4vw, 2.2rem)" }}>{t("gettingHere")}</h2>
               <div className="ticket" style={{ marginTop: "1.25rem" }}>
                 <dl className="ticket-rows">
-                  <div><dt>Address</dt><dd>{address}</dd></div>
-                  <div><dt>Town</dt><dd>{city}</dd></div>
-                  <div><dt>Landmark</dt><dd>Near Mariton hôtel</dd></div>
-                  <div><dt>Hours</dt><dd>{hours}</dd></div>
-                  <div><dt>Parking</dt><dd>Free street + lot</dd></div>
+                  <div><dt>{t("dtAddress")}</dt><dd>{address}</dd></div>
+                  <div><dt>{t("dtTown")}</dt><dd>{city}</dd></div>
+                  <div><dt>{t("dtLandmark")}</dt><dd>{t("landmarkValue")}</dd></div>
+                  <div><dt>{t("dtHours")}</dt><dd>{hours}</dd></div>
+                  <div><dt>{t("dtParking")}</dt><dd>{t("parkingValue")}</dd></div>
                 </dl>
                 <div style={{ marginTop: "1.25rem", display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
                   <a
@@ -143,7 +97,7 @@ export function About() {
                     rel="noopener noreferrer"
                     className="btn btn-amber btn-sm"
                   >
-                    Open in Google Maps
+                    {t("openGoogleMaps")}
                   </a>
                   <a
                     href={`https://maps.apple.com/?q=${encodeURIComponent(address)}`}
@@ -151,7 +105,7 @@ export function About() {
                     rel="noopener noreferrer"
                     className="btn btn-outline btn-sm"
                   >
-                    Apple Maps
+                    {t("appleMaps")}
                   </a>
                 </div>
                 <p className="ticket-foot" style={{ marginTop: "0.75rem", fontSize: "0.82rem" }}>
@@ -162,14 +116,14 @@ export function About() {
 
             {/* Hours */}
             <div className="animate-up delay-2">
-              <p className="section-label">Opening hours</p>
-              <h2 className="section-title" style={{ fontSize: "clamp(1.5rem, 3vw, 2.2rem)" }}>We're open.</h2>
+              <p className="section-label">{t("openingHoursLabel")}</p>
+              <h2 className="section-title" style={{ fontSize: "clamp(1.35rem, 4vw, 2.2rem)" }}>{t("weAreOpen")}</h2>
               <div className="hours-table">
-                {HOURS.map((h) => (
-                  <div key={h.day} className={`hours-row${h.day === today ? " today" : ""}`}>
-                    <span className="hours-day">{h.day}</span>
-                    <span className="hours-time">{h.hours}</span>
-                    {h.day === today && <span className="hours-today-badge">Today</span>}
+                {DAY_KEYS.map((dayKey, i) => (
+                  <div key={dayKey} className={`hours-row${i === todayIndex ? " today" : ""}`}>
+                    <span className="hours-day">{t(dayKey)}</span>
+                    <span className="hours-time">{t("hoursValue")}</span>
+                    {i === todayIndex && <span className="hours-today-badge">{t("today")}</span>}
                   </div>
                 ))}
               </div>
@@ -181,15 +135,15 @@ export function About() {
       {/* ── AMENITIES ── */}
       <section className="section">
         <div className="section-inner">
-          <p className="section-label animate-up">Full details</p>
-          <h2 className="section-title animate-up delay-1">What to expect.</h2>
+          <p className="section-label animate-up">{t("fullDetailsLabel")}</p>
+          <h2 className="section-title animate-up delay-1">{t("whatToExpect")}</h2>
           <div className="amenities-section" style={{ marginTop: "2rem" }}>
-            {AMENITY_GROUPS.map((group, i) => (
+            {AMENITY_GROUP_KEYS.map((group, i) => (
               <div key={group.label} className={`amenity-group animate-up delay-${Math.min(i % 3 + 1, 3) as 1|2|3}`}>
-                <h3>{group.label}</h3>
+                <h3>{t(group.label)}</h3>
                 <div className="amenity-tags">
                   {group.items.map((item) => (
-                    <span key={item} className="amenity-tag">{item}</span>
+                    <span key={item} className="amenity-tag">{t(item)}</span>
                   ))}
                 </div>
               </div>
@@ -201,11 +155,11 @@ export function About() {
       {/* ── CTA ── */}
       <section className="section section-dark">
         <div className="section-inner center">
-          <h2 className="closing-head animate-up">Ready to sit down?</h2>
+          <h2 className="closing-head animate-up">{t("readyTitle")}</h2>
           <p className="animate-up delay-1" style={{ color: "var(--text-muted)", marginBottom: "2rem" }}>
-            Book your table in two minutes. The fire starts in the afternoon.
+            {t("readyBody")}
           </p>
-          <Link to="/reserve" className="btn btn-amber btn-big animate-up delay-2">Book a table</Link>
+          <Link to="/reserve" className="btn btn-amber btn-big animate-up delay-2">{t("bookTable")}</Link>
         </div>
       </section>
     </>
