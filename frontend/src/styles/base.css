@@ -1,0 +1,332 @@
+/* Reset, document defaults, and the handful of layout helpers used everywhere. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Stops a horizontal wobble on phones when a wide element overshoots by a
+     pixel; genuinely wide content scrolls inside its own container instead. */
+  overflow-x: hidden;
+}
+
+/*
+ * Grain. Charcoal cooking is dusty and this keeps large flat panels from
+ * looking like plastic. It is one repeating SVG, painted once over the whole
+ * document at very low opacity, and it never intercepts a click.
+ */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+img,
+svg,
+video {
+  display: block;
+  max-width: 100%;
+}
+
+img {
+  height: auto;
+  /* Photographs of food sit on a dark ground; a hairline keeps a bright plate
+     from bleeding into the surface behind it. */
+  background: var(--coal-900);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+p a:not([class]) {
+  color: var(--ember-hi);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+
+p a:not([class]):hover {
+  color: var(--bone);
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--line);
+}
+
+/* Focus is never removed, only replaced. The ring is ember on an offset so it
+   reads against both a card and the page. */
+:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+::selection {
+  background: var(--ember);
+  color: var(--on-accent);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--coal-1000);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--coal-700);
+  border-radius: var(--r-full);
+  border: 2px solid var(--coal-1000);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--coal-700);
+}
+
+/* ── Headings ─────────────────────────────────────────────────────────────
+   Anton only comes in one weight, so hierarchy is carried by size and colour.
+   It is set uppercase with the line height pulled tight, which is how painted
+   signage stacks. */
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 400;
+  line-height: var(--lh-head);
+  text-wrap: balance;
+}
+
+.display {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: var(--track-display);
+  line-height: var(--lh-tight);
+}
+
+.display--hero {
+  font-size: var(--t-hero);
+}
+.display--xl {
+  font-size: var(--t-display);
+}
+.display--lg {
+  font-size: var(--t-title);
+}
+.display--md {
+  font-size: var(--t-head);
+  letter-spacing: 0;
+}
+
+/* Small all-caps labels. Karla, not Anton — Anton is unreadable this small. */
+.label {
+  font-size: var(--t-label);
+  font-weight: 700;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.lead {
+  font-size: var(--t-lead);
+  color: var(--text-2);
+  max-width: var(--prose-max);
+}
+
+.muted {
+  color: var(--text-2);
+}
+
+.faint {
+  color: var(--text-3);
+}
+
+.fine {
+  font-size: var(--t-fine);
+  line-height: 1.5;
+}
+
+.hot {
+  color: var(--ember-hi);
+}
+
+/* ── Layout helpers ────────────────────────────────────────────────────── */
+
+.page {
+  width: 100%;
+  max-width: var(--page-max);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+.page--narrow {
+  max-width: 46rem;
+}
+
+.section {
+  padding-block: clamp(3rem, 8vw, 6rem);
+}
+
+/* Two sections back to back would otherwise stack their padding into a gap
+   twice the size of the one the rhythm intends. */
+.section + .section {
+  padding-top: 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.stack--tight {
+  gap: var(--s-2);
+}
+
+.stack--loose {
+  gap: var(--s-6);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.row--between {
+  justify-content: space-between;
+}
+
+.row--wrap {
+  flex-wrap: wrap;
+}
+
+.push {
+  margin-inline-start: auto;
+}
+
+.grid {
+  display: grid;
+  gap: var(--s-4);
+}
+
+/*
+ * The heat rule: a hairline that fades from ember to nothing. It is the one
+ * piece of ornament in the system and it marks the start of a section, never
+ * the end.
+ */
+.heat-rule {
+  height: 2px;
+  border: 0;
+  background: linear-gradient(90deg, var(--ember) 0%, rgba(255, 91, 31, 0) 60%);
+}
+
+/* Keeps a heading and its rule together as one unit. */
+.section-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  margin-block-end: var(--s-6);
+}
+
+.section-head > .heat-rule {
+  width: 4.5rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Keyboard users get a way past the navigation on every page. */
+.skip-link {
+  position: absolute;
+  top: var(--s-3);
+  left: var(--s-3);
+  z-index: var(--z-toast);
+  padding: var(--s-3) var(--s-4);
+  background: var(--ember);
+  color: var(--on-accent);
+  border-radius: var(--r-sm);
+  font-weight: 700;
+  transform: translateY(-160%);
+  transition: transform var(--dur-1) var(--ease);
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* Content wide by nature — a floor plan, a table of takings — scrolls inside
+   itself rather than pushing the page sideways. */
+.scroll-x {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}

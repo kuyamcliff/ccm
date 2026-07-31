@@ -1,33 +1,47 @@
-# Cam Chop Meat website plan (v2, full-stack)
+# Cam Chop Meat website plan (v3, frontend rebuilt)
 
 ## The business (researched 2026-07-19)
-Cam Chop Meat is a grilled meat restaurant in Buea, Cameroon, opposite the Survey School
-in Clerks Quarters. Known for grilled chicken, pork and goat over charcoal, plus matango
-(palm wine). Food from about 2,500 FCFA, drinks from about 1,000 FCFA. Word of mouth
-runs through TikTok (@cam.chop.meat). Google Maps has a pin for "Cam chop meat".
+Cam Chop Meat is a grilled meat restaurant in Buea, Cameroon, opposite the
+Survey School in Clerks Quarters. Known for grilled chicken, pork and goat over
+charcoal, plus matango. Food from about 2,500 FCFA, drinks from about 500 FCFA.
+Word of mouth runs through TikTok (@cam.chop.meat), so most visitors arrive on a
+phone.
 
-## Agreed scope (user, 2026-07-19)
-v1 was a static HTML site; user rejected it and the design. v2 requirements:
-- Two folders: frontend/ and backend/.
-- Stack: TypeScript, Node.js, React. No plain HTML site.
-- Users can create accounts and sign in.
-- Users can book tables online (reservations), view and cancel them.
-- Users can leave reviews (one per user, editable, deletable).
-- Completely new design, nothing that reads as default AI output.
+## Scope of v3 (user, 2026-07-31)
+Delete the frontend and build a new one from nothing: a different design, a
+different structure, nothing carried over. Keep every feature and keep speaking
+to the same backend, which is untouched.
 
 ## Stack
-- backend/: Node.js + Express 5 + TypeScript. SQLite through the node:sqlite module
-  built into Node 24 (no native compilation). Passwords hashed with bcryptjs. Sessions
-  are JWTs in an httpOnly cookie. Port 4000. All endpoints under /api.
-- frontend/: Vite + React 19 + TypeScript + react-router. Dev server on 5173 proxies
-  /api to the backend, so no CORS and cookies stay same-origin.
+- backend/: unchanged. Express 5 + TypeScript on Postgres (Supabase), 23 routers
+  under /api, MTN MoMo for payments, sessions as JWTs in an httpOnly cookie.
+- frontend/: Vite + React 19 + TypeScript + react-router. Fonts bundled, no
+  runtime CSS framework, no component library, no charting library. The staff
+  console is a separate bundle chunk.
 
 ## Design direction (one sentence)
-Butcher-paper editorial: warm cream paper with grain, heavy Fraunces serif headlines,
-Space Mono receipt details, stamp-red accents, dashed ticket cards, hard offset
-shadows; reservations are literal "table tickets".
+Charcoal and Ember: a dark, warm, type-led interface built for a phone at
+night, with Anton signage headlines, one hot colour that always means "act
+here", and bookings that behave like a torn pass rather than a form receipt.
 
-## API surface
-- POST /api/auth/register, /login, /logout; GET /api/auth/me
-- GET/POST /api/reservations; DELETE /api/reservations/:id (cancel, own only)
-- GET /api/reviews (public); POST /api/reviews (upsert own); DELETE /api/reviews/mine
+Committed to dark rather than offering a light mode: it is the brand, and one
+well-made theme beats two half-checked ones.
+
+## What was rebuilt
+- A token layer that nothing is allowed to reach past (`styles/tokens.css`).
+- Primitives: button, field, sheet, toast, icon set drawn by hand, feedback
+  states, resilient photo.
+- A new data layer: one fetch core, a typed API grouped by task, a small
+  resource hook, an SSE client.
+- 16 customer screens and 20 console screens, plus the shared payment dialog.
+- Charts drawn in SVG, one series each, with a table alternative for screen
+  readers.
+
+## Navigation
+Customers: bottom tab bar on phones (Home, Menu, Book, Mine, You), top bar from
+60rem. Staff: a rail that collapses to a drawer, grouped by Tonight, The place,
+Money, People, Settings.
+
+## API surface used
+Everything the backend serves. See `frontend/src/lib/api/` — one file per area,
+each function named after what a person is doing rather than after its route.

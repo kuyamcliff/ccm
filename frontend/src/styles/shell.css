@@ -1,0 +1,363 @@
+/*
+ * The chrome around every customer-facing page.
+ *
+ * Two navigations, one per class of device, and the same five destinations in
+ * both. On a phone they sit in a bottom bar, because that is where the thumb
+ * already is; from 60rem up they move into a top bar, because a bottom bar on a
+ * desktop is a phone app pretending.
+ */
+
+.shell {
+  position: relative;
+  z-index: var(--z-base);
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.shell__main {
+  flex: 1;
+  /* Clears the fixed tab bar, including the home indicator on an iPhone. */
+  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 60rem) {
+  .shell__main {
+    padding-bottom: 0;
+  }
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────────
+   On a phone it carries the wordmark and the two things a visitor reaches for
+   mid-scroll: the basket and their account. The full navigation is below. */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-nav);
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding-inline: var(--gutter);
+  background: rgba(10, 10, 9, 0.82);
+  backdrop-filter: blur(14px) saturate(1.4);
+  border-bottom: 1px solid var(--line);
+}
+
+/* The bar only earns its border once the page has moved under it. */
+.topbar[data-scrolled="false"] {
+  border-bottom-color: transparent;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex: none;
+}
+
+.brand__mark {
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+}
+
+.brand__name {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: 1.0625rem;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.brand__name span {
+  color: var(--ember);
+}
+
+.topnav {
+  display: none;
+}
+
+@media (min-width: 60rem) {
+  .topnav {
+    display: flex;
+    align-items: center;
+    gap: var(--s-1);
+    margin-inline-start: var(--s-5);
+  }
+}
+
+.topnav__link {
+  position: relative;
+  padding: var(--s-2) var(--s-4);
+  border-radius: var(--r-full);
+  font-size: var(--t-small);
+  font-weight: 600;
+  color: var(--text-2);
+  transition: color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+
+.topnav__link:hover {
+  color: var(--text);
+  background: rgba(244, 239, 231, 0.06);
+}
+
+.topnav__link[aria-current="page"] {
+  color: var(--text);
+}
+
+.topnav__link[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0.15rem;
+  width: 1rem;
+  height: 2px;
+  border-radius: var(--r-full);
+  background: var(--ember);
+}
+
+.topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-inline-start: auto;
+}
+
+/* Basket count. Sits on the icon, never covers it. */
+.tally {
+  position: relative;
+}
+
+.tally__count {
+  position: absolute;
+  top: -0.25rem;
+  right: -0.25rem;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding-inline: 0.25rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  background: var(--ember);
+  color: var(--on-accent);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 500;
+  line-height: 1;
+  border: 2px solid var(--bg);
+}
+
+/* ── Tab bar ─────────────────────────────────────────────────────────── */
+
+.tabbar {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: var(--z-nav);
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: rgba(13, 12, 11, 0.94);
+  backdrop-filter: blur(18px);
+  border-top: 1px solid var(--line);
+}
+
+@media (min-width: 60rem) {
+  .tabbar {
+    display: none;
+  }
+}
+
+.tabbar__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  color: var(--text-3);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition: color var(--dur-1) var(--ease);
+}
+
+.tabbar__item[aria-current="page"] {
+  color: var(--text);
+}
+
+/* The active tab is marked twice — colour and a lit bar — so it does not rely
+   on colour alone. */
+.tabbar__item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 2.25rem;
+  height: 2px;
+  border-radius: var(--r-full);
+  background: var(--ember);
+}
+
+.tabbar__item {
+  position: relative;
+}
+
+.tabbar__icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────── */
+
+.footer {
+  margin-top: var(--s-9);
+  border-top: 1px solid var(--line);
+  background: var(--bg-sunk);
+  padding-block: var(--s-7) var(--s-6);
+}
+
+.footer__grid {
+  display: grid;
+  gap: var(--s-6);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 48rem) {
+  .footer__grid {
+    grid-template-columns: 1.4fr 1fr 1fr;
+    gap: var(--s-7);
+  }
+}
+
+.footer__heading {
+  font-size: var(--t-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-3);
+  margin-bottom: var(--s-3);
+}
+
+.footer__links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.footer__links a {
+  color: var(--text-2);
+  font-size: var(--t-small);
+  padding-block: 0.35rem;
+  transition: color var(--dur-1) var(--ease);
+}
+
+.footer__links a:hover {
+  color: var(--text);
+}
+
+.footer__bottom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--s-7);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--line);
+  color: var(--text-3);
+  font-size: var(--t-fine);
+}
+
+/* ── Support launcher ────────────────────────────────────────────────────
+   A single button, above the tab bar on a phone and bottom-right on a desktop.
+   It never covers the primary action of a page. */
+
+/*
+ * Hidden on phones on purpose. A button floating in the bottom-right corner
+ * sits exactly where a page's own primary action lands on a small screen, and
+ * covering "Book this table" to offer a chat is a bad trade. On a phone the
+ * ways to support are the footer link and the help page; from 60rem up there is
+ * room for it to float without landing on anything.
+ */
+.helper {
+  display: none;
+  position: fixed;
+  right: var(--gutter);
+  bottom: var(--s-5);
+  z-index: var(--z-sticky);
+  align-items: center;
+  gap: var(--s-2);
+  height: 3rem;
+  padding-inline: var(--s-4);
+  border-radius: var(--r-full);
+  background: var(--coal-750);
+  border: 1px solid var(--line-2);
+  color: var(--text);
+  font-size: var(--t-fine);
+  font-weight: 700;
+  box-shadow: var(--shadow-2);
+  transition: background var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+
+.helper:hover {
+  background: var(--coal-700);
+}
+
+.helper:active {
+  transform: translateY(1px);
+}
+
+@media (min-width: 60rem) {
+  .helper {
+    display: inline-flex;
+  }
+}
+
+.helper__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--palm);
+}
+
+.helper__dot[data-staffed="false"] {
+  background: var(--text-3);
+}
+
+/* ── Auth pages ──────────────────────────────────────────────────────────
+   Deliberately plain: one column, one job, nothing to look at but the form. */
+
+.auth {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: calc(100dvh - var(--topbar-h) - var(--tabbar-h));
+  padding-block: var(--s-7);
+}
+
+.auth__card {
+  width: 100%;
+  max-width: 26rem;
+  margin-inline: auto;
+}
+
+.auth__switch {
+  margin-top: var(--s-5);
+  text-align: center;
+  font-size: var(--t-small);
+  color: var(--text-2);
+}
+
+/* A row of small print under a form — legal links, a "forgot" link. */
+.auth__fine {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-3);
+  font-size: var(--t-fine);
+}

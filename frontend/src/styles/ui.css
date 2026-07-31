@@ -1,0 +1,1017 @@
+/*
+ * Primitives. Every interactive control in the product is one of these.
+ *
+ * Two rules run through the whole file: a touch target is never under 44px,
+ * and a press never changes an element's layout box — feedback comes from
+ * colour, a lit edge, or a 1px settle, so nothing around it shifts.
+ */
+
+/* ── Button ───────────────────────────────────────────────────────────────
+   Four intents. `primary` is the one action a screen is asking for, so a page
+   never carries two of them. */
+
+.btn {
+  --btn-bg: var(--coal-750);
+  --btn-fg: var(--text);
+  --btn-line: var(--line-2);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  min-height: 2.875rem;
+  padding: 0.6875rem var(--s-5);
+  border: 1px solid var(--btn-line);
+  border-radius: var(--r-full);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-size: var(--t-small);
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
+  touch-action: manipulation;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease),
+    transform var(--dur-1) var(--ease);
+}
+
+.btn:hover:not(:disabled) {
+  --btn-bg: var(--coal-700);
+  --btn-line: var(--line-2);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  --btn-bg: var(--ember);
+  --btn-fg: var(--on-accent);
+  --btn-line: transparent;
+  box-shadow: 0 10px 30px -18px var(--ember);
+}
+
+.btn--primary:hover:not(:disabled) {
+  --btn-bg: var(--ember-hi);
+}
+
+.btn--ghost {
+  --btn-bg: transparent;
+  --btn-line: var(--line-2);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  --btn-bg: rgba(244, 239, 231, 0.06);
+}
+
+.btn--quiet {
+  --btn-bg: transparent;
+  --btn-line: transparent;
+  --btn-fg: var(--text-2);
+  padding-inline: var(--s-3);
+}
+
+.btn--quiet:hover:not(:disabled) {
+  --btn-fg: var(--text);
+  --btn-bg: rgba(244, 239, 231, 0.06);
+}
+
+/* Destructive actions are red and are always separated from the thing they
+   would destroy by at least a confirmation. */
+.btn--danger {
+  --btn-bg: transparent;
+  --btn-fg: var(--blood);
+  --btn-line: rgba(232, 85, 90, 0.4);
+}
+
+.btn--danger:hover:not(:disabled) {
+  --btn-bg: var(--blood-wash);
+}
+
+.btn--sm {
+  min-height: 2.25rem;
+  padding: var(--s-2) var(--s-4);
+  font-size: var(--t-fine);
+}
+
+.btn--lg {
+  min-height: 3.375rem;
+  padding-inline: var(--s-6);
+  font-size: var(--t-body);
+}
+
+.btn--block {
+  width: 100%;
+}
+
+/* Icon-only buttons keep the 44px target even when the glyph is 20px. */
+.btn--icon {
+  min-width: 2.875rem;
+  padding-inline: 0;
+}
+
+.btn--icon.btn--sm {
+  min-width: 2.25rem;
+}
+
+.btn__spinner {
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 620ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn__spinner {
+    animation-duration: 1600ms;
+  }
+}
+
+/* ── Form fields ─────────────────────────────────────────────────────────
+   Labels are always visible. Placeholders hint at format, never at meaning. */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.field__label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  font-size: var(--t-fine);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.field__req {
+  color: var(--ember);
+  font-size: var(--t-label);
+}
+
+.field__hint {
+  font-size: var(--t-fine);
+  color: var(--text-3);
+}
+
+.field__error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  font-size: var(--t-fine);
+  color: var(--blood);
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  min-height: 2.875rem;
+  padding: 0.6875rem var(--s-4);
+  background: var(--coal-900);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  color: var(--text);
+  /* 16px minimum: anything smaller and iOS zooms the page on focus. */
+  font-size: 1rem;
+  transition:
+    border-color var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease);
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--text-3);
+}
+
+.input:hover:not(:disabled),
+.select:hover:not(:disabled),
+.textarea:hover:not(:disabled) {
+  border-color: rgba(244, 239, 231, 0.24);
+}
+
+.input:focus-visible,
+.select:focus-visible,
+.textarea:focus-visible {
+  outline: none;
+  border-color: var(--ember);
+  box-shadow: 0 0 0 3px var(--ember-wash);
+}
+
+.input[aria-invalid="true"],
+.textarea[aria-invalid="true"],
+.select[aria-invalid="true"] {
+  border-color: var(--blood);
+}
+
+.input:disabled,
+.select:disabled,
+.textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.input[readonly] {
+  background: var(--coal-1000);
+  color: var(--text-2);
+}
+
+.textarea {
+  min-height: 7rem;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.select {
+  appearance: none;
+  padding-inline-end: var(--s-7);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23877d72' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M5 8l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--s-4) center;
+  background-size: 1.125rem;
+}
+
+.field__row {
+  display: flex;
+  gap: var(--s-2);
+  align-items: stretch;
+}
+
+.field__row .input {
+  flex: 1;
+}
+
+/* Checkbox and radio keep the native control — it is the accessible one — and
+   only restyle its colour and size. */
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  min-height: 2.75rem;
+  padding-block: var(--s-2);
+  cursor: pointer;
+}
+
+.check input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.15rem;
+  accent-color: var(--ember);
+  flex: none;
+  cursor: pointer;
+}
+
+.check__text {
+  font-size: var(--t-small);
+  line-height: 1.45;
+}
+
+/* ── Surfaces ────────────────────────────────────────────────────────────
+   Depth is a surface step plus a lit top edge. There is no drop shadow on a
+   resting card — on this ground it would be invisible anyway. */
+
+.card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--s-5);
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  background: linear-gradient(90deg, transparent, rgba(244, 239, 231, 0.14), transparent);
+  pointer-events: none;
+}
+
+.card--flat {
+  background: var(--coal-900);
+}
+
+.card--tight {
+  padding: var(--s-4);
+}
+
+/* A card that is itself a link or button. */
+.card--action {
+  display: block;
+  width: 100%;
+  text-align: start;
+  transition:
+    border-color var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease);
+}
+
+.card--action:hover {
+  border-color: var(--line-2);
+  background: var(--surface-2);
+}
+
+.card--action:active {
+  background: var(--coal-900);
+}
+
+/* Marks a card as needing attention without shouting. */
+.card--hot {
+  border-color: var(--line-hot);
+}
+
+.card__title {
+  font-size: var(--t-head);
+  font-weight: 700;
+}
+
+/* Stands in for a photograph that failed to load or was never set. */
+.photo--blank {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 3rem;
+  background: var(--coal-900);
+  color: var(--coal-700);
+}
+
+/* ── Badge and chip ──────────────────────────────────────────────────────
+   A badge states a fact (a status). A chip is something you can press. */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem var(--s-3);
+  border-radius: var(--r-full);
+  background: rgba(244, 239, 231, 0.08);
+  color: var(--text-2);
+  font-size: var(--t-label);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.badge::before {
+  content: "";
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.badge--plain::before {
+  display: none;
+}
+
+.badge--good {
+  background: var(--palm-wash);
+  color: var(--palm);
+}
+.badge--warn {
+  background: var(--gold-wash);
+  color: var(--gold);
+}
+.badge--bad {
+  background: var(--blood-wash);
+  color: var(--blood);
+}
+.badge--hot {
+  background: var(--ember-wash);
+  color: var(--ember-hi);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 2.375rem;
+  padding: var(--s-2) var(--s-4);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--t-fine);
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+
+.chip:hover {
+  color: var(--text);
+  border-color: rgba(244, 239, 231, 0.28);
+}
+
+.chip[aria-pressed="true"],
+.chip--on {
+  background: var(--ember);
+  border-color: var(--ember);
+  color: var(--on-accent);
+}
+
+/* A horizontal row of chips that scrolls rather than wrapping — categories,
+   date pickers, status filters. */
+.chip-rail {
+  display: flex;
+  gap: var(--s-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-block: var(--s-1);
+  scroll-snap-type: x proximity;
+}
+
+.chip-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.chip-rail > * {
+  scroll-snap-align: start;
+  flex: none;
+}
+
+/* ── Tabs ────────────────────────────────────────────────────────────────
+   Underline follows the active tab. Used for switching views, never for
+   navigating to a different page. */
+
+.tabs {
+  display: flex;
+  gap: var(--s-1);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  position: relative;
+  padding: var(--s-3) var(--s-4);
+  color: var(--text-3);
+  font-size: var(--t-small);
+  font-weight: 700;
+  white-space: nowrap;
+  transition: color var(--dur-1) var(--ease);
+}
+
+.tab:hover {
+  color: var(--text-2);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--text);
+}
+
+.tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 2px;
+  background: var(--ember);
+  border-radius: var(--r-full);
+}
+
+/* ── Overlays ────────────────────────────────────────────────────────────
+   One component behind both: a centred dialog on a wide screen, a sheet that
+   rises from the bottom on a phone, which is where the thumb already is. */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+  background: rgba(6, 6, 5, 0.72);
+  backdrop-filter: blur(3px);
+  animation: scrim-in var(--dur-2) var(--ease);
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.sheet {
+  position: relative;
+  width: 100%;
+  max-width: 34rem;
+  max-height: 92dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-bottom: 0;
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  padding: var(--s-5);
+  padding-bottom: calc(var(--s-5) + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow-3);
+  animation: sheet-up var(--dur-3) var(--ease);
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(12%);
+    opacity: 0;
+  }
+}
+
+/* The grab handle is decoration on desktop, an affordance on a phone. */
+.sheet__grip {
+  width: 2.5rem;
+  height: 0.25rem;
+  border-radius: var(--r-full);
+  background: var(--coal-700);
+  margin: 0 auto var(--s-4);
+}
+
+.sheet__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-4);
+  margin-bottom: var(--s-4);
+}
+
+.sheet__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.sheet__foot {
+  display: flex;
+  gap: var(--s-3);
+  margin-top: var(--s-5);
+}
+
+.sheet__foot > .btn {
+  flex: 1;
+}
+
+@media (min-width: 42rem) {
+  .scrim {
+    align-items: center;
+    padding: var(--s-5);
+  }
+
+  .sheet {
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-xl);
+    padding-bottom: var(--s-5);
+    animation-name: sheet-in;
+  }
+
+  .sheet__grip {
+    display: none;
+  }
+
+  @keyframes sheet-in {
+    from {
+      transform: scale(0.97);
+      opacity: 0;
+    }
+  }
+}
+
+/* ── Toast ───────────────────────────────────────────────────────────────
+   Announced politely, never steals focus, and sits above the tab bar so it
+   does not cover the thing the visitor just pressed. */
+
+.toaster {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s-3));
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  width: min(26rem, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+@media (min-width: 60rem) {
+  .toaster {
+    left: auto;
+    right: var(--s-5);
+    bottom: var(--s-5);
+    transform: none;
+  }
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  background: var(--coal-800);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+  font-size: var(--t-small);
+  pointer-events: auto;
+  animation: toast-in var(--dur-2) var(--ease);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+}
+
+.toast--good {
+  border-color: rgba(95, 196, 122, 0.45);
+}
+.toast--bad {
+  border-color: rgba(232, 85, 90, 0.5);
+}
+
+.toast__icon {
+  flex: none;
+  margin-top: 0.1rem;
+}
+
+.toast--good .toast__icon {
+  color: var(--palm);
+}
+.toast--bad .toast__icon {
+  color: var(--blood);
+}
+
+.toast__close {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--text-3);
+  padding: var(--s-1);
+}
+
+.toast__close:hover {
+  color: var(--text);
+}
+
+/* ── Loading and empty ───────────────────────────────────────────────────
+   A skeleton holds the exact space its content will take, so nothing jumps
+   when the data lands. */
+
+.skeleton {
+  background: linear-gradient(90deg, var(--coal-850) 25%, var(--coal-800) 37%, var(--coal-850) 63%);
+  background-size: 400% 100%;
+  border-radius: var(--r-sm);
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-7) var(--s-5);
+  text-align: center;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-lg);
+  color: var(--text-2);
+}
+
+.empty__icon {
+  color: var(--text-3);
+}
+
+.empty__title {
+  font-size: var(--t-head);
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* A failure always offers the way out of it. */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--coal-900);
+  font-size: var(--t-small);
+}
+
+.notice--bad {
+  border-color: rgba(232, 85, 90, 0.45);
+  background: var(--blood-wash);
+}
+
+.notice--good {
+  border-color: rgba(95, 196, 122, 0.4);
+  background: var(--palm-wash);
+}
+
+.notice--warn {
+  border-color: rgba(240, 180, 41, 0.4);
+  background: var(--gold-wash);
+}
+
+.notice__icon {
+  flex: none;
+  margin-top: 0.1rem;
+}
+
+/* ── Stars ───────────────────────────────────────────────────────────────
+   The rating is written out beside the stars, so the value never depends on
+   counting shapes or seeing gold. */
+
+.stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  color: var(--gold);
+}
+
+.stars--input .stars__btn {
+  padding: var(--s-1);
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  display: grid;
+  place-items: center;
+  color: var(--coal-700);
+  transition: color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+
+.stars--input .stars__btn[data-on="true"] {
+  color: var(--gold);
+}
+
+.stars--input .stars__btn:hover {
+  transform: scale(1.08);
+}
+
+/* ── Tables ──────────────────────────────────────────────────────────────
+   Used only in the staff console, where reading a hundred rows at a glance
+   matters more than air. */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-fine);
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--coal-900);
+  text-align: start;
+  font-weight: 700;
+  color: var(--text-3);
+  font-size: var(--t-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--s-3) var(--s-3);
+  border-bottom: 1px solid var(--line-2);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: var(--s-3);
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.table tbody tr:hover td {
+  background: rgba(244, 239, 231, 0.03);
+}
+
+.table__num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.table__actions {
+  display: flex;
+  gap: var(--s-2);
+  justify-content: flex-end;
+}
+
+/* ── Switch ──────────────────────────────────────────────────────────────
+   For settings that take effect immediately. Anything needing a save button
+   is a checkbox instead. */
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: 2.75rem;
+  cursor: pointer;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch__track {
+  position: relative;
+  width: 2.75rem;
+  height: 1.625rem;
+  border-radius: var(--r-full);
+  background: var(--coal-700);
+  border: 1px solid var(--line-2);
+  transition: background var(--dur-1) var(--ease);
+  flex: none;
+}
+
+.switch__track::after {
+  content: "";
+  position: absolute;
+  top: 0.1875rem;
+  left: 0.1875rem;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  background: var(--bone-2);
+  transition: transform var(--dur-2) var(--ease), background var(--dur-1) var(--ease);
+}
+
+.switch input:checked + .switch__track {
+  background: var(--ember);
+  border-color: var(--ember);
+}
+
+.switch input:checked + .switch__track::after {
+  transform: translateX(1.125rem);
+  background: var(--on-accent);
+}
+
+.switch input:focus-visible + .switch__track {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+
+/* ── Segmented control ───────────────────────────────────────────────────
+   Two to four mutually exclusive options that fit on one line. */
+
+.segmented {
+  display: inline-flex;
+  padding: 0.1875rem;
+  background: var(--coal-900);
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  gap: 0.1875rem;
+}
+
+.segmented__opt {
+  min-height: 2.25rem;
+  padding: var(--s-2) var(--s-4);
+  border-radius: var(--r-full);
+  color: var(--text-3);
+  font-size: var(--t-fine);
+  font-weight: 700;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+
+.segmented__opt[aria-pressed="true"] {
+  background: var(--coal-750);
+  color: var(--text);
+}
+
+/* ── Counter ─────────────────────────────────────────────────────────────
+   Minus, value, plus. Used for party size and for basket quantities. */
+
+.counter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  padding: 0.1875rem;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-full);
+  background: var(--coal-900);
+}
+
+.counter__btn {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--text);
+  transition: background var(--dur-1) var(--ease);
+}
+
+.counter__btn:hover:not(:disabled) {
+  background: var(--coal-750);
+}
+
+.counter__btn:disabled {
+  color: var(--text-3);
+  cursor: not-allowed;
+}
+
+.counter__value {
+  min-width: 2.5rem;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-body);
+  font-weight: 500;
+}
+
+/* ── Money ───────────────────────────────────────────────────────────────
+   Tabular figures everywhere, so a column of prices lines up and a changing
+   total does not shuffle the layout sideways. */
+
+.money {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.money__unit {
+  font-size: 0.75em;
+  color: var(--text-3);
+  margin-inline-start: 0.2em;
+}
+
+/* ── Avatar ──────────────────────────────────────────────────────────── */
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--coal-750);
+  border: 1px solid var(--line-2);
+  color: var(--text-2);
+  font-size: var(--t-fine);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.avatar--lg {
+  width: 3.25rem;
+  height: 3.25rem;
+  font-size: var(--t-body);
+}
+
+/* ── Progress ────────────────────────────────────────────────────────── */
+
+.meter {
+  height: 0.375rem;
+  border-radius: var(--r-full);
+  background: var(--coal-800);
+  overflow: hidden;
+}
+
+.meter__fill {
+  height: 100%;
+  border-radius: var(--r-full);
+  background: var(--heat);
+  transition: width var(--dur-3) var(--ease);
+}

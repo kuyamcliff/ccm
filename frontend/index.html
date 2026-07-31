@@ -1,51 +1,42 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0b0906" />
-    <title>Cam Chop Meat | Charcoal grill in Buea. Book a table.</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0a0a09" />
+
+    <title>Cam Chop Meat — charcoal grill, Buea</title>
     <meta
       name="description"
-      content="Cam Chop Meat grills chicken, pork and goat over charcoal in Clerks Quarters, Buea. Book a table online, read reviews, see the menu."
+      content="Chicken, pork and goat over charcoal in Clerks Quarters, Buea. Book a table, order for collection, see tonight's prices."
     />
-    <meta property="og:type" content="restaurant" />
-    <meta property="og:title" content="Cam Chop Meat | Charcoal grill in Buea" />
-    <meta property="og:description" content="Chicken, pork and goat over real charcoal. Opposite the Survey School, Clerks Quarters, Buea. Book a table online." />
-    <meta property="og:url" content="https://camchopmeat.com" />
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="Cam Chop Meat | Charcoal grill in Buea" />
-    <meta name="twitter:description" content="Chicken, pork and goat over real charcoal. Opposite the Survey School, Clerks Quarters, Buea." />
     <link rel="canonical" href="https://camchopmeat.com/" />
-    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/icon.svg" />
-    <link rel="manifest" href="/manifest.json" />
 
-    <!--
-      Fonts are preloaded rather than linked as a stylesheet, so the request
-      starts immediately but never blocks the first paint. main.tsx promotes it
-      to a real stylesheet once the page is interactive; the noscript copy
-      covers visitors without JavaScript. Doing the swap from the module script
-      instead of an inline onload keeps the strict script-src CSP intact.
-    -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      id="webfonts"
-      rel="preload"
-      as="style"
-      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..900&family=Archivo:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap"
+    <meta property="og:type" content="restaurant" />
+    <meta property="og:site_name" content="Cam Chop Meat" />
+    <meta property="og:title" content="Cam Chop Meat — charcoal grill, Buea" />
+    <meta
+      property="og:description"
+      content="Chicken, pork and goat over charcoal in Clerks Quarters, Buea. Book a table or order for collection."
     />
-    <noscript>
-      <link
-        rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..900&family=Archivo:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap"
-      />
-    </noscript>
+    <meta property="og:url" content="https://camchopmeat.com/" />
+    <meta name="twitter:card" content="summary" />
+
+    <link rel="icon" href="/mark.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/mark.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Fonts are bundled with the app and served from this origin, so there is
+         no third-party connection to warm up here. See src/main.tsx. -->
   </head>
   <body>
     <div id="root"></div>
-    <noscript><p style="font-family:sans-serif;padding:2rem;text-align:center;background:#0b0906;color:#f2e8d5">Cam Chop Meat needs JavaScript to run. Enable it in your browser settings and reload.</p></noscript>
+    <noscript>
+      <p style="font-family: system-ui, sans-serif; padding: 2rem; color: #f4efe7; background: #0a0a09">
+        This site needs JavaScript. Turn it on and reload, or call the restaurant to book.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

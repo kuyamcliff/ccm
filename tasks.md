@@ -1,24 +1,34 @@
 # Tasks
 
-## Done (2026-07-19, v2 rebuild)
-- [x] v1 static site built, then rejected by user; removed (in git history)
-- [x] Node.js LTS 24 installed (winget)
-- [x] backend/: Express 5 + TS + node:sqlite, JWT cookie auth, reservations, reviews
-- [x] backend/scripts/smoke.ts: endpoint smoke tests
-- [x] frontend/: Vite + React 19 + TS, router, auth context, 8 pages
-- [x] Complete redesign: butcher-paper editorial (Fraunces/Archivo/Space Mono)
-- [x] Docs rewritten (plan, context, HANDOFF)
-
-## In flight
-- [x] npm install both folders, typecheck both (clean), 19/19 smoke tests pass
-- [x] Browser end-to-end verified: register, auth gate, book, ticket, review
-      post + edit mode, account list, cancel with CANCELLED stamp
-- [x] Commit v2
+## Done (2026-07-31, v3 frontend rebuild)
+- [x] Deleted frontend/ entirely and scaffolded a new Vite + React 19 + TS app
+- [x] New design language, Charcoal and Ember, in `styles/tokens.css`
+- [x] Primitives, a hand-drawn icon set, and a resilient photo component
+- [x] New data layer: `lib/http.ts`, `lib/api/*`, `useResource`, SSE client
+- [x] 16 customer screens: home, menu, basket and checkout, booking in three
+      steps with the real floor plan, pass, mine, reviews, gallery, events,
+      queue, offers, account and security, sign in, join, reset, help, legal
+- [x] 20 console screens, including the door scanner, kitchen board, floor
+      editor, support desk, insights and the audit log
+- [x] Fonts self-hosted; service worker replaced (the old one is superseded)
+- [x] Typecheck clean, production build clean, console chunk split out
+- [x] Driven in a real browser against a real Postgres: sign in, book, order,
+      pay, reply to a review, check a code at the door. No console errors on
+      any of the 38 routes, signed out or as the owner.
 
 ## Waiting on the owner
-- [ ] Real phone number (search "+237 000 000 000" in frontend/src)
-- [ ] Real opening hours (search "midday till late")
-- [ ] Real dish photos, then a photo pass on the design
-- [ ] Confirm menu items and prices (frontend/src/data/menu.ts)
-- [ ] Production deploy (see HANDOFF.md) + JWT_SECRET env var
-- [ ] Later upgrade: admin dashboard for reservations
+- [ ] Real photographs of the grill and the plates, uploaded in Desk > Menu.
+      Everything else on the site is now real; the pictures are the last thing
+      standing in for something.
+- [ ] Confirm the phone number and hours in Desk > Details.
+- [ ] Confirm menu prices in Desk > Menu.
+
+## Known gaps, deliberately left
+- `/api/admin/reviews` returns a thinner row than `/api/reviews` (no
+  admin_reply, no votes), so the console reads the public list instead. Worth
+  tidying in the backend one day; it changes nothing for the user.
+- Passkeys can be listed and removed in the account, but not registered: the
+  backend has no registration endpoint yet.
+- The customer site is English only. The previous version had French strings;
+  they were written against screens that no longer exist, so translation should
+  start from the new copy when it is wanted.

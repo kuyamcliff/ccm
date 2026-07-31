@@ -1,0 +1,677 @@
+/*
+ * The staff console.
+ *
+ * Same tokens, different temperature. Where the customer site is spacious and
+ * photographic, this is dense and quiet: someone is reading it mid-service with
+ * a queue in front of them, so nothing here is decorative and the type is a
+ * step smaller throughout.
+ *
+ * Loaded only with the console chunk, so none of it reaches a diner.
+ */
+
+.desk {
+  --desk-bar: 3.5rem;
+  --desk-rail: 15rem;
+
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--bg-sunk);
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────── */
+
+.desk__bar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-nav);
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  height: var(--desk-bar);
+  padding-inline: var(--s-4);
+  background: var(--coal-900);
+  border-bottom: 1px solid var(--line);
+}
+
+.desk__who {
+  display: none;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+@media (min-width: 48rem) {
+  .desk__who {
+    display: flex;
+  }
+}
+
+.desk__body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* ── Rail ────────────────────────────────────────────────────────────────
+   A drawer under 64rem, a fixed column above it. */
+
+.desk__rail {
+  position: fixed;
+  inset: var(--desk-bar) auto 0 0;
+  z-index: var(--z-overlay);
+  width: min(17rem, 82vw);
+  padding: var(--s-4) var(--s-3);
+  overflow-y: auto;
+  background: var(--coal-900);
+  border-right: 1px solid var(--line);
+  transform: translateX(-102%);
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.desk__rail--open {
+  transform: none;
+}
+
+.desk__scrim {
+  position: fixed;
+  inset: var(--desk-bar) 0 0;
+  z-index: var(--z-sticky);
+  background: rgba(6, 6, 5, 0.6);
+  border: 0;
+}
+
+@media (min-width: 64rem) {
+  .desk__rail {
+    position: sticky;
+    top: var(--desk-bar);
+    height: calc(100dvh - var(--desk-bar));
+    width: var(--desk-rail);
+    flex: none;
+    transform: none;
+  }
+
+  .desk__burger,
+  .desk__scrim {
+    display: none;
+  }
+}
+
+.desk__group {
+  margin-bottom: var(--s-5);
+}
+
+.desk__grouptitle {
+  font-size: var(--t-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding-inline: var(--s-3);
+  margin-bottom: var(--s-2);
+}
+
+.desk__link {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: 2.5rem;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  font-size: var(--t-small);
+  font-weight: 600;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+
+.desk__link:hover {
+  background: rgba(244, 239, 231, 0.05);
+  color: var(--text);
+}
+
+.desk__link svg {
+  color: var(--text-3);
+  flex: none;
+}
+
+/* The current screen is marked by an ember edge as well as colour. */
+.desk__link[aria-current="page"] {
+  background: var(--ember-wash);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--ember);
+}
+
+.desk__link[aria-current="page"] svg {
+  color: var(--ember-hi);
+}
+
+.desk__main {
+  flex: 1;
+  min-width: 0;
+  padding: var(--s-5) var(--s-4) var(--s-8);
+}
+
+@media (min-width: 64rem) {
+  .desk__main {
+    padding: var(--s-6);
+  }
+}
+
+/* ── Page furniture ──────────────────────────────────────────────────── */
+
+.desk-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  max-width: 80rem;
+}
+
+.desk-page__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+  padding-bottom: var(--s-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.desk-page__actions {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+
+.desk-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.desk-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  padding: var(--s-3);
+  background: var(--coal-900);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.desk-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 9rem;
+}
+
+.desk-field--grow {
+  flex: 1;
+  min-width: 12rem;
+}
+
+/* Console inputs are a size down from the site's: a form here is a filter, not
+   a conversation. */
+.desk-toolbar .input,
+.desk-toolbar .select {
+  min-height: 2.375rem;
+  padding-block: var(--s-2);
+  font-size: var(--t-fine);
+}
+
+.desk-table {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--coal-900);
+  max-height: 70dvh;
+}
+
+.desk-nothing {
+  padding: var(--s-6);
+  text-align: center;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-md);
+}
+
+.desk-thumb {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--r-sm);
+  object-fit: cover;
+}
+
+/* ── Stats ───────────────────────────────────────────────────────────── */
+
+.stat-grid {
+  display: grid;
+  gap: var(--s-3);
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.stat__icon {
+  color: var(--text-3);
+}
+
+.stat__value {
+  font-size: 1.75rem;
+  line-height: 1;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--t-fine);
+  font-weight: 700;
+}
+
+.delta--up {
+  color: var(--palm);
+}
+
+.delta--down {
+  color: var(--blood);
+}
+
+/* An arrow that points the way the number went, so the direction does not
+   depend on telling green from red. */
+.delta--down svg {
+  transform: rotate(45deg);
+}
+
+.delta--up svg {
+  transform: rotate(-45deg);
+}
+
+/* ── Charts ──────────────────────────────────────────────────────────── */
+
+.chart-grid {
+  display: grid;
+  gap: var(--s-4);
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+}
+
+.chart-grid__wide {
+  grid-column: 1 / -1;
+}
+
+.chart {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.chart__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.chart__readout {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+}
+
+.chart__svg {
+  width: 100%;
+  height: 11rem;
+  overflow: visible;
+}
+
+.chart__axis {
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Vertical bars. The column is the track, the fill is the value; both are
+   anchored to the same baseline so heights are comparable. */
+.vbars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  height: 11rem;
+}
+
+.vbar {
+  flex: 1;
+  min-width: 0;
+  /* Two hours of data must not become two colour fields the width of the
+     panel: a bar's width stops meaning anything past a point, and a slab
+     reads as a design element rather than a measurement. */
+  max-width: 4.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  height: 100%;
+}
+
+.vbar__col {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(244, 239, 231, 0.03);
+  border-radius: var(--r-xs);
+}
+
+.vbar__fill {
+  width: 100%;
+  background: var(--ember);
+  border-radius: var(--r-xs) var(--r-xs) 0 0;
+  transition: height var(--dur-3) var(--ease);
+}
+
+.vbar__label {
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Horizontal bars, for labels that are words. */
+.hbars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.hbar {
+  display: grid;
+  grid-template-columns: minmax(6rem, 12rem) 1fr auto;
+  align-items: center;
+  gap: var(--s-3);
+  font-size: var(--t-fine);
+}
+
+.hbar__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.hbar__track {
+  height: 0.75rem;
+  background: rgba(244, 239, 231, 0.04);
+  border-radius: var(--r-xs);
+  overflow: hidden;
+}
+
+.hbar__fill {
+  display: block;
+  height: 100%;
+  background: var(--ember);
+  border-radius: 0 var(--r-xs) var(--r-xs) 0;
+}
+
+.hbar__value {
+  min-width: 3.5rem;
+  text-align: end;
+}
+
+/* ── The door ────────────────────────────────────────────────────────── */
+
+.door {
+  display: grid;
+  gap: var(--s-5);
+  align-items: start;
+}
+
+@media (min-width: 60rem) {
+  .door {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.door__scanner {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  display: grid;
+  place-items: center;
+  background: var(--coal-1000);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.door__video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.door__idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-5);
+  color: var(--text-3);
+  text-align: center;
+}
+
+/* The reticle is where to hold the phone. It is drawn, not photographed, so it
+   stays crisp at any camera resolution. */
+.door__reticle {
+  position: absolute;
+  inset: 18%;
+  border: 2px solid var(--ember);
+  border-radius: var(--r-lg);
+  box-shadow: 0 0 0 100vmax rgba(6, 6, 5, 0.45);
+  pointer-events: none;
+}
+
+.door__stop {
+  position: absolute;
+  bottom: var(--s-3);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(6, 6, 5, 0.7);
+}
+
+/* The verdict fills the panel and is readable at arm's length. */
+.verdict {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-5);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+}
+
+.verdict--good {
+  border-color: var(--palm);
+  background: linear-gradient(180deg, var(--palm-wash), transparent 60%), var(--surface);
+}
+
+.verdict--warn {
+  border-color: var(--gold);
+  background: linear-gradient(180deg, var(--gold-wash), transparent 60%), var(--surface);
+}
+
+.verdict--bad {
+  border-color: var(--blood);
+  background: linear-gradient(180deg, var(--blood-wash), transparent 60%), var(--surface);
+}
+
+.verdict--good .verdict__title {
+  color: var(--palm);
+}
+.verdict--warn .verdict__title {
+  color: var(--gold);
+}
+.verdict--bad .verdict__title {
+  color: var(--blood);
+}
+
+.verdict__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: var(--s-3);
+}
+
+.verdict__facts dd {
+  margin: 0.2rem 0 0;
+  font-size: var(--t-small);
+}
+
+/* ── Order board ─────────────────────────────────────────────────────── */
+
+.order-board {
+  display: grid;
+  gap: var(--s-3);
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+}
+
+.order-card__no {
+  font-size: var(--t-lead);
+  letter-spacing: 0.06em;
+}
+
+.order-card__time {
+  font-size: var(--t-lead);
+  color: var(--ember-hi);
+}
+
+/* ── Photo review ────────────────────────────────────────────────────── */
+
+.photo-grid {
+  display: grid;
+  gap: var(--s-3);
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+}
+
+.photo-card {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.photo-card img,
+.photo-card .photo--blank {
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  object-fit: cover;
+}
+
+.photo-card figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3);
+}
+
+/* ── Inbox ───────────────────────────────────────────────────────────── */
+
+.inbox {
+  display: grid;
+  gap: var(--s-4);
+  min-height: 60dvh;
+}
+
+/* On a phone, one pane at a time: the list, or the conversation. */
+.inbox--open .inbox__list {
+  display: none;
+}
+
+.inbox:not(.inbox--open) .inbox__thread {
+  display: none;
+}
+
+@media (min-width: 64rem) {
+  .inbox {
+    grid-template-columns: 20rem 1fr;
+  }
+
+  .inbox--open .inbox__list,
+  .inbox:not(.inbox--open) .inbox__thread {
+    display: flex;
+  }
+
+  .inbox__back {
+    display: none;
+  }
+}
+
+.inbox__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  max-height: 70dvh;
+  overflow-y: auto;
+  padding-right: var(--s-1);
+}
+
+.inbox__item {
+  display: flex;
+  gap: var(--s-3);
+  align-items: flex-start;
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  text-align: start;
+  transition: background var(--dur-1) var(--ease);
+}
+
+.inbox__item:hover {
+  background: rgba(244, 239, 231, 0.04);
+}
+
+.inbox__item[aria-current="true"] {
+  background: var(--surface);
+  border-color: var(--line-2);
+}
+
+.inbox__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.inbox__preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox__thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  min-height: 0;
+}
+
+.inbox__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.inbox__thread .chat__log {
+  max-height: 52dvh;
+}
