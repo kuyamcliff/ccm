@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useSettings } from "../settings";
+import { useT } from "../i18n/context";
 
 const MIN_PASSWORD = 8;
 
@@ -15,6 +16,7 @@ const MIN_PASSWORD = 8;
  * pre-filled; nothing else about the flow changes.
  */
 export function ResetPassword() {
+  const t = useT("auth");
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { city } = useSettings();
@@ -40,7 +42,7 @@ export function ResetPassword() {
   async function requestCode(e: FormEvent) {
     e.preventDefault();
     setError("");
-    if (!email.trim()) { setError("Enter your email address."); return; }
+    if (!email.trim()) { setError(t("errEnterEmail")); return; }
 
     setBusy(true);
     try {
@@ -48,7 +50,7 @@ export function ResetPassword() {
       setNotice(r.message);
       setStep("code");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send a code.");
+      setError(err instanceof Error ? err.message : t("errSendCode"));
     } finally {
       setBusy(false);
     }
@@ -58,9 +60,9 @@ export function ResetPassword() {
     e.preventDefault();
     setError("");
 
-    if (!/^\d{6}$/.test(code.trim())) { setError("Enter the 6-digit code from your email."); return; }
-    if (password.length < MIN_PASSWORD) { setError(`Use at least ${MIN_PASSWORD} characters.`); return; }
-    if (password !== confirm) { setError("The two passwords do not match."); return; }
+    if (!/^\d{6}$/.test(code.trim())) { setError(t("errCodeFormat")); return; }
+    if (password.length < MIN_PASSWORD) { setError(t("errPasswordLength").replace("{min}", String(MIN_PASSWORD))); return; }
+    if (password !== confirm) { setError(t("errPasswordMatch")); return; }
 
     setBusy(true);
     try {
@@ -68,7 +70,7 @@ export function ResetPassword() {
       setDone(true);
       setTimeout(() => navigate("/login"), 2200);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not change the password.");
+      setError(err instanceof Error ? err.message : t("errChangePassword"));
     } finally {
       setBusy(false);
     }
@@ -82,7 +84,7 @@ export function ResetPassword() {
       setNotice(r.message);
       setCode("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send a code.");
+      setError(err instanceof Error ? err.message : t("errSendCode"));
     } finally {
       setBusy(false);
     }
@@ -93,10 +95,10 @@ export function ResetPassword() {
       <aside className="auth-brand-panel">
         <div className="auth-brand-top">
           <p className="auth-brand-logo">Cam Chop <em>Meat</em></p>
-          <p className="auth-brand-tagline">Charcoal grill · {city}</p>
+          <p className="auth-brand-tagline">{t("tagline").replace("{city}", city)}</p>
         </div>
         <div className="auth-brand-center">
-          <p className="auth-brand-big">Reset</p>
+          <p className="auth-brand-big">{t("resetBrandBig")}</p>
         </div>
       </aside>
 
@@ -104,20 +106,20 @@ export function ResetPassword() {
         <div className="auth-form-inner">
           {done ? (
             <>
-              <h1 className="page-title">Password changed</h1>
+              <h1 className="page-title">{t("passwordChanged")}</h1>
               <p className="notice" style={{ borderColor: "var(--green)" }}>
-                Taking you to the sign-in page…
+                {t("takingYouToSignIn")}
               </p>
             </>
           ) : step === "request" ? (
             <>
-              <h1 className="page-title">Reset your password</h1>
+              <h1 className="page-title">{t("resetYourPassword")}</h1>
               <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", marginBottom: "1.25rem" }}>
-                We'll email a 6-digit code to your account's address.
+                {t("resetLede")}
               </p>
               <form className="form" onSubmit={requestCode}>
                 <label>
-                  Email
+                  {t("email")}
                   <input
                     type="email"
                     value={email}
@@ -131,23 +133,23 @@ export function ResetPassword() {
                 {error && <p className="form-error" role="alert">{error}</p>}
 
                 <button className="btn btn-amber" disabled={busy}>
-                  {busy ? "Sending…" : "Send code"}
+                  {busy ? t("sendingCode") : t("sendCode")}
                 </button>
 
                 <p className="form-fine">
-                  <Link to="/login">Back to sign in</Link>
+                  <Link to="/login">{t("backToSignIn")}</Link>
                 </p>
               </form>
             </>
           ) : (
             <>
-              <h1 className="page-title">Enter your code</h1>
+              <h1 className="page-title">{t("enterCode")}</h1>
               {notice && (
                 <p className="notice" style={{ marginBottom: "1.25rem" }}>{notice}</p>
               )}
               <form className="form" onSubmit={redeem}>
                 <label>
-                  6-digit code
+                  {t("sixDigitCode")}
                   <input
                     ref={codeRef}
                     type="text"
@@ -163,7 +165,7 @@ export function ResetPassword() {
                 </label>
 
                 <label>
-                  New password
+                  {t("newPassword")}
                   <div className="pw-wrap">
                     <input
                       type={showPw ? "text" : "password"}
@@ -177,15 +179,15 @@ export function ResetPassword() {
                       type="button"
                       className="pw-toggle"
                       onClick={() => setShowPw((v) => !v)}
-                      aria-label={showPw ? "Hide password" : "Show password"}
+                      aria-label={showPw ? t("hidePassword") : t("showPassword")}
                     >
-                      {showPw ? "HIDE" : "SHOW"}
+                      {showPw ? t("hide").toUpperCase() : t("show").toUpperCase()}
                     </button>
                   </div>
                 </label>
 
                 <label>
-                  Confirm new password
+                  {t("confirmNewPassword")}
                   <input
                     type={showPw ? "text" : "password"}
                     value={confirm}
@@ -199,17 +201,17 @@ export function ResetPassword() {
                 {error && <p className="form-error" role="alert">{error}</p>}
 
                 <button className="btn btn-amber" disabled={busy}>
-                  {busy ? "Saving…" : "Change password"}
+                  {busy ? t("saving") : t("changePassword")}
                 </button>
 
                 <p className="form-fine">
-                  Didn't get it?{" "}
+                  {t("didntGetIt")}{" "}
                   <button type="button" className="link-btn" onClick={resend} disabled={busy}>
-                    Send a new code
+                    {t("sendNewCode")}
                   </button>
                 </p>
                 <p style={{ fontSize: "0.82rem", color: "var(--text-faint)", lineHeight: 1.6 }}>
-                  Changing your password signs you out everywhere else.
+                  {t("signOutEverywhere")}
                 </p>
               </form>
             </>
