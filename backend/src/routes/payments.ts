@@ -35,24 +35,24 @@ type PaymentRow = {
    Both the status poll and any later reconciliation can land on the same
    payment. The conditional UPDATE means only the first caller does the work.  */
 
-function settlePayment(paymentId: number, financialTransactionId?: string | null): boolean {
-  const won = db
+async function settlePayment(paymentId: number, financialTransactionId?: string | null): Promise<boolean> {
+  const won = await db
     .prepare(
-      "UPDATE payments SET status = 'completed', updated_at = datetime('now') WHERE id = ? AND status != 'completed'"
+      "UPDATE payments SET status = 'completed', updated_at = now_text() WHERE id = ? AND status != 'completed'"
     )
     .run(paymentId);
 
   if (won.changes !== 1) return false;
 
   if (financialTransactionId) {
-    db.prepare("UPDATE payments SET momo_transaction_id = ? WHERE id = ?").run(financialTransactionId, paymentId);
+    await db.prepare("UPDATE payments SET momo_transaction_id = ? WHERE id = ?").run(financialTransactionId, paymentId);
   }
 
-  const row = db.prepare("SELECT reservation_id FROM payments WHERE id = ?").get(paymentId) as
+  const row = (await db.prepare("SELECT reservation_id FROM payments WHERE id = ?").get(paymentId)) as
     | { reservation_id: number }
     | undefined;
   if (row?.reservation_id) {
-    db.prepare(
+    await db.prepare(
       "UPDATE reservations SET payment_status = 'paid', status = 'confirmed' WHERE id = ? AND status = 'pending_payment'"
     ).run(row.reservation_id);
   }
@@ -60,25 +60,25 @@ function settlePayment(paymentId: number, financialTransactionId?: string | null
 }
 
 /** Marks a payment failed and hands back any discount it was holding. */
-function failPayment(paymentId: number, reason?: string | null): void {
-  const lost = db
+async function failPayment(paymentId: number, reason?: string | null): Promise<void> {
+  const lost = await db
     .prepare(
-      "UPDATE payments SET status = 'failed', updated_at = datetime('now'), fail_reason = ? WHERE id = ? AND status = 'pending'"
+      "UPDATE payments SET status = 'failed', updated_at = now_text(), fail_reason = ? WHERE id = ? AND status = 'pending'"
     )
     .run(reason ?? null, paymentId);
 
   if (lost.changes !== 1) return;
 
-  const row = db
+  const row = (await db
     .prepare("SELECT promo_code, gift_card_code, discount_fcfa, redeemed_at FROM payments WHERE id = ?")
-    .get(paymentId) as PaymentRow | undefined;
+    .get(paymentId)) as PaymentRow | undefined;
   if (!row?.redeemed_at) return;
 
-  if (row.promo_code) releasePromoCode(row.promo_code);
+  if (row.promo_code) await releasePromoCode(row.promo_code);
   if (row.gift_card_code && row.discount_fcfa > 0) {
-    refundGiftCard(row.gift_card_code, row.discount_fcfa, { type: "payment_failed", id: paymentId });
+    await refundGiftCard(row.gift_card_code, row.discount_fcfa, { type: "payment_failed", id: paymentId });
   }
-  db.prepare("UPDATE payments SET redeemed_at = NULL WHERE id = ?").run(paymentId);
+  await db.prepare("UPDATE payments SET redeemed_at = NULL WHERE id = ?").run(paymentId);
 }
 
 /** Seconds left in the customer's approval window for a pending payment. */
@@ -117,12 +117,12 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
     return;
   }
 
-  const reservation = db
+  const reservation = (await db
     .prepare(
       `SELECT r.id, r.user_id, r.payment_status, r.status, r.date, r.time, r.ccm_code
        FROM reservations r WHERE r.id = ?`
     )
-    .get(reservationId) as
+    .get(reservationId)) as
     | { id: number; user_id: number; payment_status: string; status: string; date: string; time: string; ccm_code: string | null }
     | undefined;
 
@@ -141,17 +141,17 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
 
   // Release any earlier attempt still holding discount value, so retrying
   // checkout cannot stack discounts.
-  const stale = db
+  const stale = (await db
     .prepare("SELECT id FROM payments WHERE reservation_id = ? AND status = 'pending'")
-    .all(reservationId) as { id: number }[];
-  for (const p of stale) failPayment(p.id, "SUPERSEDED");
+    .all(reservationId)) as { id: number }[];
+  for (const p of stale) await failPayment(p.id, "SUPERSEDED");
 
   // ── Claim the discounts ──
   let promoDiscount = 0;
   let claimedPromo: string | null = null;
   if (promoCode) {
-    const verdict = evaluatePromo(promoCode, DEPOSIT_FCFA);
-    if (verdict.ok && usePromoCode(promoCode)) {
+    const verdict = await evaluatePromo(promoCode, DEPOSIT_FCFA);
+    if (verdict.ok && (await usePromoCode(promoCode))) {
       promoDiscount = verdict.discount;
       claimedPromo = promoCode;
     }
@@ -161,30 +161,30 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
   let claimedGift: string | null = null;
   const giftTarget = Math.max(0, DEPOSIT_FCFA - promoDiscount);
   if (giftCardCode && giftTarget > 0) {
-    giftDiscount = redeemGiftCard(giftCardCode, giftTarget, { type: "reservation", id: reservationId });
+    giftDiscount = await redeemGiftCard(giftCardCode, giftTarget, { type: "reservation", id: reservationId });
     if (giftDiscount > 0) claimedGift = giftCardCode;
   }
 
   const totalDiscount = promoDiscount + giftDiscount;
   const amountDue = Math.max(0, DEPOSIT_FCFA - totalDiscount);
 
-  const releaseClaims = () => {
-    if (claimedPromo) releasePromoCode(claimedPromo);
-    if (claimedGift) refundGiftCard(claimedGift, giftDiscount, { type: "validation_failed", id: reservationId });
+  const releaseClaims = async () => {
+    if (claimedPromo) await releasePromoCode(claimedPromo);
+    if (claimedGift) await refundGiftCard(claimedGift, giftDiscount, { type: "validation_failed", id: reservationId });
   };
 
   // ── Fully covered by discount: nothing to charge ──
   if (amountDue === 0) {
     const reference = `CCM-${Date.now().toString(36).toUpperCase()}-FREE`;
-    const info = db
+    const info = await db
       .prepare(
         `INSERT INTO payments (reservation_id, amount_fcfa, momo_phone, status, reference, type, method,
                                promo_code, gift_card_code, discount_fcfa, redeemed_at)
-         VALUES (?, 0, '', 'completed', ?, 'reservation', 'free', ?, ?, ?, datetime('now'))`
+         VALUES (?, 0, '', 'completed', ?, 'reservation', 'free', ?, ?, ?, now_text())`
       )
       .run(reservationId, reference, claimedPromo, claimedGift, totalDiscount);
 
-    db.prepare(
+    await db.prepare(
       "UPDATE reservations SET payment_status = 'paid', status = 'confirmed' WHERE id = ?"
     ).run(reservationId);
 
@@ -202,14 +202,14 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
 
   // ── Charge the balance over MoMo ──
   if (!momoConfigured()) {
-    releaseClaims();
+    await releaseClaims();
     res.status(503).json({ error: "Mobile Money payments are not available right now. Please contact us." });
     return;
   }
 
   const msisdn = toMsisdn(String(req.body?.momoPhone ?? ""));
   if (!msisdn) {
-    releaseClaims();
+    await releaseClaims();
     res.status(400).json({ error: "Enter a valid MTN number: 9 digits starting with 6." });
     return;
   }
@@ -226,7 +226,7 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
       payeeNote: `Booking ${externalId}`,
     });
   } catch (err) {
-    releaseClaims();
+    await releaseClaims();
     if (err instanceof MomoError) {
       if (err.configuration) console.error("[momo] configuration problem:", err.message);
       res.status(err.configuration ? 503 : 400).json({
@@ -241,11 +241,11 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
     return;
   }
 
-  const info = db
+  const info = await db
     .prepare(
       `INSERT INTO payments (reservation_id, amount_fcfa, momo_phone, status, reference, type, method,
                              promo_code, gift_card_code, discount_fcfa, redeemed_at)
-       VALUES (?, ?, ?, 'pending', ?, 'reservation', 'mtn_momo', ?, ?, ?, datetime('now'))`
+       VALUES (?, ?, ?, 'pending', ?, 'reservation', 'mtn_momo', ?, ?, ?, now_text())`
     )
     .run(reservationId, amountDue, `+${msisdn}`, momoReference, claimedPromo, claimedGift, totalDiscount);
 
@@ -270,14 +270,14 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
 paymentsRouter.get("/:reference/status", statusLimit, async (req, res) => {
   const reference = String(req.params.reference ?? "");
 
-  const row = db
+  const row = (await db
     .prepare(
       `SELECT p.id, p.status, p.amount_fcfa, p.reference, p.method, p.discount_fcfa,
               p.created_at, p.fail_reason, r.user_id
        FROM payments p JOIN reservations r ON p.reservation_id = r.id
        WHERE p.reference = ?`
     )
-    .get(reference) as
+    .get(reference)) as
     | (PaymentRow & { user_id: number; method: string; fail_reason: string | null })
     | undefined;
 
@@ -295,16 +295,16 @@ paymentsRouter.get("/:reference/status", statusLimit, async (req, res) => {
       const trx = await getTransaction(reference);
 
       if (trx.status === "SUCCESSFUL") {
-        settlePayment(row.id, trx.financialTransactionId);
+        await settlePayment(row.id, trx.financialTransactionId);
         status = "completed";
         message = null;
       } else if (trx.status === "FAILED") {
-        failPayment(row.id, trx.reason);
+        await failPayment(row.id, trx.reason);
         status = "failed";
         message = explainFailure(trx.reason);
       } else if (remaining === 0) {
         // Still pending with no time left: MTN will expire it their side too.
-        failPayment(row.id, "EXPIRED");
+        await failPayment(row.id, "EXPIRED");
         status = "failed";
         message = explainFailure("EXPIRED");
       }
@@ -327,10 +327,10 @@ paymentsRouter.get("/:reference/status", statusLimit, async (req, res) => {
 });
 
 /** Everything the on-screen receipt renders, in one call. */
-paymentsRouter.get("/:reference/receipt", (req, res) => {
+paymentsRouter.get("/:reference/receipt", async (req, res) => {
   const reference = String(req.params.reference ?? "");
 
-  const row = db
+  const row = (await db
     .prepare(
       `SELECT p.amount_fcfa, p.discount_fcfa, p.method, p.status AS pay_status,
               p.momo_phone, p.momo_transaction_id, p.reference, p.updated_at,
@@ -343,7 +343,7 @@ paymentsRouter.get("/:reference/receipt", (req, res) => {
        LEFT JOIN restaurant_tables t ON r.table_id = t.id
        WHERE p.reference = ?`
     )
-    .get(reference) as Record<string, unknown> | undefined;
+    .get(reference)) as Record<string, unknown> | undefined;
 
   if (!row) { res.status(404).json({ error: "Receipt not found." }); return; }
 
@@ -384,12 +384,12 @@ paymentsRouter.get("/:reference/receipt", (req, res) => {
 paymentsRouter.post("/:reference/cancel", async (req, res) => {
   const reference = String(req.params.reference ?? "");
 
-  const row = db
+  const row = (await db
     .prepare(
       `SELECT p.id, p.status, r.user_id FROM payments p
        JOIN reservations r ON p.reservation_id = r.id WHERE p.reference = ?`
     )
-    .get(reference) as { id: number; status: string; user_id: number } | undefined;
+    .get(reference)) as { id: number; status: string; user_id: number } | undefined;
 
   if (!row || row.user_id !== req.user!.id) {
     res.status(404).json({ error: "Payment not found." });
@@ -402,7 +402,7 @@ paymentsRouter.post("/:reference/cancel", async (req, res) => {
 
   // MoMo has no cancel endpoint; the prompt lapses on the handset. Releasing
   // our side immediately frees the promo use and gift card value.
-  failPayment(row.id, "ABANDONED");
+  await failPayment(row.id, "ABANDONED");
   res.json({ ok: true, status: "failed" });
 });
 

@@ -3,7 +3,7 @@ import cookieParser from "cookie-parser";
 import compression from "compression";
 import { IS_PROD, PORT } from "./config.js";
 import { attachUser } from "./auth.js";
-import { db } from "./db.js";
+import { db, pool } from "./db.js";
 import { UPLOAD_DIR } from "./lib/media.js";
 import { migrateInlineMedia } from "./lib/migrate-media.js";
 import { backfillLegacyBookingCodes } from "./lib/bookingCode.js";
@@ -32,8 +32,8 @@ import { legalRouter } from "./routes/legal.js";
 import { supportRouter } from "./routes/support.js";
 import { recoveryRouter } from "./routes/recovery.js";
 
-migrateInlineMedia();
-backfillLegacyBookingCodes();
+await migrateInlineMedia();
+await backfillLegacyBookingCodes();
 
 const app = express();
 
@@ -80,10 +80,10 @@ app.use(
 /* Touches the database, so a monitor gets told when the process is up but the
    store underneath it is not. A health check that only proves Express is
    listening will happily report green through a total outage. */
-app.get("/api/health", (_req, res) => {
+app.get("/api/health", async (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
   try {
-    db.prepare("SELECT 1").get();
+    await db.prepare("SELECT 1").get();
     res.json({ ok: true, database: "up", uptime_seconds: Math.round(process.uptime()) });
   } catch (err) {
     console.error("[health] database check failed", err);
@@ -137,10 +137,10 @@ app.use((err: unknown, req: express.Request, res: express.Response, next: expres
     const code = String((err as { code: unknown }).code);
     if (code === "ECONNABORTED" || code === "ECONNRESET" || code === "EPIPE") return;
 
-    /* Every writer is queued behind busy_timeout, so reaching here means the
-       database was locked for five full seconds. Tell the caller to retry
-       rather than presenting it as a permanent failure. */
-    if (code.startsWith("SQLITE_BUSY") || code.startsWith("SQLITE_LOCKED")) {
+    /* Postgres transient-contention codes: lock not available, serialization
+       failure, deadlock, or the pool briefly out of connections. Tell the
+       caller to retry rather than presenting it as a permanent failure. */
+    if (["55P03", "40001", "40P01", "53300"].includes(code)) {
       console.error(`[db-busy] ${req.method} ${req.originalUrl}`);
       res.setHeader("Retry-After", "2");
       res.status(503).json({ error: "We are very busy right now. Try that again in a moment." });
@@ -183,8 +183,7 @@ server.timeout = 0;                // no blanket socket timeout; the above gover
 function shutdown(signal: string) {
   console.log(`\n[${signal}] shutting down`);
   server.close(() => {
-    try { db.close(); } catch { /* already closed */ }
-    process.exit(0);
+    pool.end().finally(() => process.exit(0));
   });
   setTimeout(() => process.exit(1), 10_000).unref();
 }

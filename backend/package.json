@@ -19,6 +19,7 @@
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "pdfkit": "^0.19.1",
+    "pg": "^8.13.1",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
@@ -27,6 +28,7 @@
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^24.0.0",
     "@types/pdfkit": "^0.17.6",
+    "@types/pg": "^8.11.10",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0"
   },

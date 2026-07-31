@@ -35,8 +35,8 @@ const totpLimit = rateLimit("account-totp", {
   key: (req) => String(req.user?.id ?? "anon"),
 });
 
-function currentHash(userId: number): string | undefined {
-  const row = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(userId) as
+async function currentHash(userId: number): Promise<string | undefined> {
+  const row = (await db.prepare("SELECT password_hash FROM users WHERE id = ?").get(userId)) as
     | { password_hash: string }
     | undefined;
   return row?.password_hash;
@@ -50,8 +50,8 @@ function reissueSession(userId: number, version: number, res: import("express").
 
 // ── Receipts ─────────────────────────────────────────────
 
-accountRouter.get("/receipts", (req, res) => {
-  const receipts = db
+accountRouter.get("/receipts", async (req, res) => {
+  const receipts = await db
     .prepare(
       `SELECT r.id, r.date, r.time, r.party_size, r.status, r.payment_status,
               r.ccm_code, r.created_at, t.label as table_label,
@@ -83,20 +83,20 @@ accountRouter.patch("/email", credentialLimit, async (req, res) => {
     return;
   }
 
-  const hash = currentHash(user.id);
+  const hash = await currentHash(user.id);
   if (!hash) { res.status(404).json({ error: "User not found." }); return; }
   if (!(await bcrypt.compare(password, hash))) {
     res.status(401).json({ error: "Incorrect password." });
     return;
   }
 
-  const existing = db.prepare("SELECT id FROM users WHERE email = ? AND id != ?").get(email, user.id);
+  const existing = await db.prepare("SELECT id FROM users WHERE email = ? AND id != ?").get(email, user.id);
   if (existing) { res.status(409).json({ error: "That email is already in use." }); return; }
 
-  db.prepare("UPDATE users SET email = ? WHERE id = ?").run(email, user.id);
+  await db.prepare("UPDATE users SET email = ? WHERE id = ?").run(email, user.id);
 
   // The address a password reset would go to just changed — drop other sessions.
-  const version = revokeSessions(user.id);
+  const version = await revokeSessions(user.id);
   reissueSession(user.id, version, res);
 
   res.json({ ok: true, email });
@@ -124,7 +124,7 @@ accountRouter.patch("/password", credentialLimit, async (req, res) => {
     return;
   }
 
-  const hash = currentHash(user.id);
+  const hash = await currentHash(user.id);
   if (!hash) { res.status(404).json({ error: "User not found." }); return; }
   if (!(await bcrypt.compare(currentPassword, hash))) {
     res.status(401).json({ error: "Incorrect current password." });
@@ -132,30 +132,30 @@ accountRouter.patch("/password", credentialLimit, async (req, res) => {
   }
 
   const next = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(next, user.id);
+  await db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(next, user.id);
 
   // Any session token stolen before this point stops working now.
-  const version = revokeSessions(user.id);
+  const version = await revokeSessions(user.id);
   reissueSession(user.id, version, res);
 
   res.json({ ok: true, signed_out_other_devices: true });
 });
 
-accountRouter.patch("/name", (req, res) => {
+accountRouter.patch("/name", async (req, res) => {
   const user = req.user!;
   const name = String(req.body?.name ?? "").trim();
   if (name.length < 2 || name.length > 60) {
     res.status(400).json({ error: "Name must be between 2 and 60 characters." });
     return;
   }
-  db.prepare("UPDATE users SET name = ? WHERE id = ?").run(name, user.id);
+  await db.prepare("UPDATE users SET name = ? WHERE id = ?").run(name, user.id);
   res.json({ ok: true, name });
 });
 
 // ── 2FA ──────────────────────────────────────────────────
 
-accountRouter.get("/2fa/status", (req, res) => {
-  const row = db.prepare("SELECT totp_enabled FROM users WHERE id = ?").get(req.user!.id) as
+accountRouter.get("/2fa/status", async (req, res) => {
+  const row = (await db.prepare("SELECT totp_enabled FROM users WHERE id = ?").get(req.user!.id)) as
     | { totp_enabled: number }
     | undefined;
   res.json({ enabled: !!row?.totp_enabled });
@@ -164,7 +164,7 @@ accountRouter.get("/2fa/status", (req, res) => {
 accountRouter.post("/2fa/setup", credentialLimit, async (req, res) => {
   const user = req.user!;
 
-  const row = db.prepare("SELECT totp_enabled FROM users WHERE id = ?").get(user.id) as
+  const row = (await db.prepare("SELECT totp_enabled FROM users WHERE id = ?").get(user.id)) as
     | { totp_enabled: number }
     | undefined;
   if (row?.totp_enabled) {
@@ -177,16 +177,16 @@ accountRouter.post("/2fa/setup", credentialLimit, async (req, res) => {
   const qrDataUrl = await QRCode.toDataURL(uri, { errorCorrectionLevel: "M", margin: 1, width: 240 });
 
   // Held as pending until a valid code proves the authenticator app has it.
-  db.prepare("UPDATE users SET totp_secret = ?, totp_enabled = 0 WHERE id = ?").run(secret, user.id);
+  await db.prepare("UPDATE users SET totp_secret = ?, totp_enabled = 0 WHERE id = ?").run(secret, user.id);
   res.json({ secret, uri, qrDataUrl });
 });
 
-accountRouter.post("/2fa/enable", totpLimit, (req, res) => {
+accountRouter.post("/2fa/enable", totpLimit, async (req, res) => {
   const user = req.user!;
   const code = String(req.body?.code ?? "");
   if (!code) { res.status(400).json({ error: "Verification code required." }); return; }
 
-  const row = db.prepare("SELECT totp_secret FROM users WHERE id = ?").get(user.id) as
+  const row = (await db.prepare("SELECT totp_secret FROM users WHERE id = ?").get(user.id)) as
     | { totp_secret: string | null }
     | undefined;
   if (!row?.totp_secret) { res.status(400).json({ error: "Run 2FA setup first." }); return; }
@@ -196,9 +196,9 @@ accountRouter.post("/2fa/enable", totpLimit, (req, res) => {
     return;
   }
 
-  db.prepare("UPDATE users SET totp_enabled = 1 WHERE id = ?").run(user.id);
+  await db.prepare("UPDATE users SET totp_enabled = 1 WHERE id = ?").run(user.id);
 
-  const version = revokeSessions(user.id);
+  const version = await revokeSessions(user.id);
   reissueSession(user.id, version, res);
 
   res.json({ ok: true });
@@ -212,16 +212,16 @@ accountRouter.post("/2fa/disable", credentialLimit, async (req, res) => {
     return;
   }
 
-  const hash = currentHash(user.id);
+  const hash = await currentHash(user.id);
   if (!hash) { res.status(404).json({ error: "User not found." }); return; }
   if (!(await bcrypt.compare(password, hash))) {
     res.status(401).json({ error: "Incorrect password." });
     return;
   }
 
-  db.prepare("UPDATE users SET totp_secret = NULL, totp_enabled = 0 WHERE id = ?").run(user.id);
+  await db.prepare("UPDATE users SET totp_secret = NULL, totp_enabled = 0 WHERE id = ?").run(user.id);
 
-  const version = revokeSessions(user.id);
+  const version = await revokeSessions(user.id);
   reissueSession(user.id, version, res);
 
   res.json({ ok: true });
@@ -229,8 +229,8 @@ accountRouter.post("/2fa/disable", credentialLimit, async (req, res) => {
 
 // ── Sessions ──────────────────────────────────────────────
 
-accountRouter.get("/passkeys", (req, res) => {
-  const passkeys = db
+accountRouter.get("/passkeys", async (req, res) => {
+  const passkeys = await db
     .prepare(
       "SELECT id, display_name, created_at FROM user_passkeys WHERE user_id = ? ORDER BY created_at DESC"
     )
@@ -238,10 +238,10 @@ accountRouter.get("/passkeys", (req, res) => {
   res.json({ passkeys });
 });
 
-accountRouter.delete("/passkeys/:id", (req, res) => {
+accountRouter.delete("/passkeys/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad passkey id." }); return; }
-  db.prepare("DELETE FROM user_passkeys WHERE id = ? AND user_id = ?").run(id, req.user!.id);
+  await db.prepare("DELETE FROM user_passkeys WHERE id = ? AND user_id = ?").run(id, req.user!.id);
   res.json({ ok: true });
 });
 
@@ -262,14 +262,14 @@ accountRouter.delete("/", credentialLimit, async (req, res) => {
     res.status(400).json({ error: "Enter your password to confirm deleting your account." });
     return;
   }
-  const hash = currentHash(user.id);
+  const hash = await currentHash(user.id);
   if (!hash) { res.status(404).json({ error: "User not found." }); return; }
   if (!(await bcrypt.compare(password, hash))) {
     res.status(401).json({ error: "Incorrect password." });
     return;
   }
 
-  db.prepare("DELETE FROM users WHERE id = ?").run(user.id);
+  await db.prepare("DELETE FROM users WHERE id = ?").run(user.id);
   clearSessionCookie(res);
   res.json({ ok: true });
 });

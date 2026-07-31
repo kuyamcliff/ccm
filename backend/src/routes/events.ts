@@ -53,7 +53,7 @@ function parseEvent(body: Record<string, unknown> | undefined): EventInput | str
   return { name, email, phone, event_type, date, time, guest_count, note };
 }
 
-eventsRouter.post("/", enquiryLimit, (req, res) => {
+eventsRouter.post("/", enquiryLimit, async (req, res) => {
   const parsed = parseEvent(req.body);
   if (typeof parsed === "string") { res.status(400).json({ error: parsed }); return; }
 
@@ -63,7 +63,7 @@ eventsRouter.post("/", enquiryLimit, (req, res) => {
     return;
   }
 
-  db.prepare(
+  await db.prepare(
     `INSERT INTO event_bookings (user_id, name, email, phone, event_type, date, time, guest_count, note)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
@@ -78,14 +78,14 @@ eventsRouter.post("/", enquiryLimit, (req, res) => {
 // ── Admin ────────────────────────────────────────────────
 
 /** Lets an admin book an event directly, with the status set at creation. */
-eventsRouter.post("/admin-create", requireAdmin, (req, res) => {
+eventsRouter.post("/admin-create", requireAdmin, async (req, res) => {
   const parsed = parseEvent(req.body);
   if (typeof parsed === "string") { res.status(400).json({ error: parsed }); return; }
 
   const status = String(req.body?.status ?? "pending");
   if (!STATUSES.includes(status)) { res.status(400).json({ error: "Invalid status." }); return; }
 
-  const info = db
+  const info = await db
     .prepare(
       `INSERT INTO event_bookings (user_id, name, email, phone, event_type, date, time, guest_count, note, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -105,31 +105,31 @@ eventsRouter.post("/admin-create", requireAdmin, (req, res) => {
   res.status(201).json({ ok: true });
 });
 
-eventsRouter.get("/", requireAdmin, (_req, res) => {
+eventsRouter.get("/", requireAdmin, async (_req, res) => {
   res.json({
-    bookings: db
+    bookings: await db
       .prepare("SELECT * FROM event_bookings ORDER BY date ASC, created_at DESC LIMIT 500")
       .all(),
   });
 });
 
-eventsRouter.patch("/:id", requireAdmin, (req, res) => {
+eventsRouter.patch("/:id", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   const status = String(req.body?.status ?? "");
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad booking id." }); return; }
   if (!STATUSES.includes(status)) { res.status(400).json({ error: "Invalid status." }); return; }
 
-  const info = db.prepare("UPDATE event_bookings SET status = ? WHERE id = ?").run(status, id);
+  const info = await db.prepare("UPDATE event_bookings SET status = ? WHERE id = ?").run(status, id);
   if (info.changes === 0) { res.status(404).json({ error: "Event booking not found." }); return; }
 
   audit(req, { action: `event.${status}`, targetType: "event_booking", targetId: id });
   res.json({ ok: true });
 });
 
-eventsRouter.delete("/:id", requireAdmin, (req, res) => {
+eventsRouter.delete("/:id", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad booking id." }); return; }
-  db.prepare("DELETE FROM event_bookings WHERE id = ?").run(id);
+  await db.prepare("DELETE FROM event_bookings WHERE id = ?").run(id);
   audit(req, { action: "event.delete", targetType: "event_booking", targetId: id });
   res.json({ ok: true });
 });

@@ -69,15 +69,15 @@ export function clearSessionCookie(res: Response) {
 }
 
 /** Invalidates every session token already issued for this user. */
-export function revokeSessions(userId: number): number {
-  db.prepare("UPDATE users SET session_version = session_version + 1 WHERE id = ?").run(userId);
-  const row = db.prepare("SELECT session_version FROM users WHERE id = ?").get(userId) as
+export async function revokeSessions(userId: number): Promise<number> {
+  await db.prepare("UPDATE users SET session_version = session_version + 1 WHERE id = ?").run(userId);
+  const row = (await db.prepare("SELECT session_version FROM users WHERE id = ?").get(userId)) as
     | { session_version: number }
     | undefined;
   return row?.session_version ?? 1;
 }
 
-function loadUser(req: Request): AuthedUser | undefined {
+async function loadUser(req: Request): Promise<AuthedUser | undefined> {
   const token: string | undefined = req.cookies?.[COOKIE_NAME];
   if (!token) return undefined;
   try {
@@ -87,9 +87,9 @@ function loadUser(req: Request): AuthedUser | undefined {
     const id = Number(payload.sub);
     if (!Number.isInteger(id)) return undefined;
 
-    const row = db
+    const row = (await db
       .prepare("SELECT id, name, email, role, banned_at, session_version FROM users WHERE id = ?")
-      .get(id) as (AuthedUser & { session_version: number }) | undefined;
+      .get(id)) as (AuthedUser & { session_version: number }) | undefined;
     if (!row) return undefined;
 
     // A stale token from before a password change or forced sign-out is refused.
@@ -102,8 +102,8 @@ function loadUser(req: Request): AuthedUser | undefined {
   }
 }
 
-export function attachUser(req: Request, _res: Response, next: NextFunction) {
-  req.user = loadUser(req);
+export async function attachUser(req: Request, _res: Response, next: NextFunction) {
+  req.user = await loadUser(req);
   next();
 }
 

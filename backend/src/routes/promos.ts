@@ -32,16 +32,16 @@ const validateLimit = rateLimit("promo-validate", {
  * Both the reservation deposit flow and takeaway checkout call this, so the two
  * can never drift apart on the rules.
  */
-export function evaluatePromo(
+export async function evaluatePromo(
   code: string,
   spendFcfa: number
-): { ok: true; promo: PromoRow; discount: number } | { ok: false; status: number; error: string } {
+): Promise<{ ok: true; promo: PromoRow; discount: number } | { ok: false; status: number; error: string }> {
   const normalised = String(code ?? "").trim().toUpperCase();
   if (!normalised) return { ok: false, status: 400, error: "Enter a promo code." };
 
-  const promo = db
+  const promo = (await db
     .prepare("SELECT * FROM promo_codes WHERE code = ? AND is_active = 1")
-    .get(normalised) as PromoRow | undefined;
+    .get(normalised)) as PromoRow | undefined;
 
   if (!promo) return { ok: false, status: 404, error: "That code doesn't exist or is inactive." };
   if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
@@ -67,9 +67,9 @@ export function evaluatePromo(
   return { ok: true, promo, discount: Math.max(0, Math.min(discount, spendFcfa)) };
 }
 
-promosRouter.post("/validate", requireAuth, validateLimit, (req, res) => {
+promosRouter.post("/validate", requireAuth, validateLimit, async (req, res) => {
   const spendFcfa = Math.max(0, Number(req.body?.spend_fcfa ?? 0) || 0);
-  const result = evaluatePromo(String(req.body?.code ?? ""), spendFcfa);
+  const result = await evaluatePromo(String(req.body?.code ?? ""), spendFcfa);
 
   if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
 
@@ -85,11 +85,11 @@ promosRouter.post("/validate", requireAuth, validateLimit, (req, res) => {
 
 // ── Admin ────────────────────────────────────────────────
 
-promosRouter.get("/", requireAdmin, (_req, res) => {
-  res.json({ codes: db.prepare("SELECT * FROM promo_codes ORDER BY created_at DESC LIMIT 500").all() });
+promosRouter.get("/", requireAdmin, async (_req, res) => {
+  res.json({ codes: await db.prepare("SELECT * FROM promo_codes ORDER BY created_at DESC LIMIT 500").all() });
 });
 
-promosRouter.post("/", requireAdmin, (req, res) => {
+promosRouter.post("/", requireAdmin, async (req, res) => {
   const code = String(req.body?.code ?? "").trim().toUpperCase();
   const type = String(req.body?.type ?? "");
   const value = Number(req.body?.value);
@@ -120,7 +120,7 @@ promosRouter.post("/", requireAdmin, (req, res) => {
   }
 
   try {
-    db.prepare(
+    await db.prepare(
       "INSERT INTO promo_codes (code, type, value, description, min_spend_fcfa, max_uses, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
     ).run(code, type, value, description, minSpend, maxUses, expiresAt);
   } catch {
@@ -137,17 +137,17 @@ promosRouter.post("/", requireAdmin, (req, res) => {
   res.status(201).json({ ok: true });
 });
 
-promosRouter.patch("/:id", requireAdmin, (req, res) => {
+promosRouter.patch("/:id", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad code id." }); return; }
 
-  const existing = db.prepare("SELECT code FROM promo_codes WHERE id = ?").get(id) as
+  const existing = (await db.prepare("SELECT code FROM promo_codes WHERE id = ?").get(id)) as
     | { code: string }
     | undefined;
   if (!existing) { res.status(404).json({ error: "Promo code not found." }); return; }
 
   const active = req.body?.is_active ? 1 : 0;
-  db.prepare("UPDATE promo_codes SET is_active = ? WHERE id = ?").run(active, id);
+  await db.prepare("UPDATE promo_codes SET is_active = ? WHERE id = ?").run(active, id);
 
   audit(req, {
     action: active ? "promo.enable" : "promo.disable",
@@ -157,14 +157,14 @@ promosRouter.patch("/:id", requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-promosRouter.delete("/:id", requireAdmin, (req, res) => {
+promosRouter.delete("/:id", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad code id." }); return; }
 
-  const existing = db.prepare("SELECT code FROM promo_codes WHERE id = ?").get(id) as
+  const existing = (await db.prepare("SELECT code FROM promo_codes WHERE id = ?").get(id)) as
     | { code: string }
     | undefined;
-  db.prepare("DELETE FROM promo_codes WHERE id = ?").run(id);
+  await db.prepare("DELETE FROM promo_codes WHERE id = ?").run(id);
 
   audit(req, { action: "promo.delete", targetType: "promo_code", targetId: existing?.code ?? id });
   res.json({ ok: true });
@@ -175,9 +175,9 @@ promosRouter.delete("/:id", requireAdmin, (req, res) => {
  * Returns false when the code was already exhausted, which lets the caller
  * treat an over-subscribed code as unredeemed rather than silently overselling.
  */
-export function usePromoCode(code: string): boolean {
+export async function usePromoCode(code: string): Promise<boolean> {
   if (!code) return false;
-  const info = db
+  const info = await db
     .prepare(
       `UPDATE promo_codes SET uses_count = uses_count + 1
        WHERE code = ? AND is_active = 1
@@ -192,7 +192,7 @@ export function usePromoCode(code: string): boolean {
  * Clamped at zero so a duplicate release cannot drive the counter negative and
  * hand out extra redemptions.
  */
-export function releasePromoCode(code: string): void {
+export async function releasePromoCode(code: string): Promise<void> {
   if (!code) return;
-  db.prepare("UPDATE promo_codes SET uses_count = MAX(0, uses_count - 1) WHERE code = ?").run(code);
+  await db.prepare("UPDATE promo_codes SET uses_count = GREATEST(0, uses_count - 1) WHERE code = ?").run(code);
 }

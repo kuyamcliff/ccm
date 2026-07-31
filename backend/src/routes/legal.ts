@@ -20,11 +20,11 @@ function isSlug(value: string): value is Slug {
    click. The admin PATCH busts it by bumping updated_at, which changes the
    ETag Express derives from the body.                                       */
 
-legalRouter.get("/:slug", (req, res) => {
+legalRouter.get("/:slug", async (req, res) => {
   const slug = String(req.params.slug);
   if (!isSlug(slug)) { res.status(404).json({ error: "No such page." }); return; }
 
-  const page = db
+  const page = await db
     .prepare("SELECT slug, title, body, updated_at FROM legal_pages WHERE slug = ?")
     .get(slug);
 
@@ -36,14 +36,14 @@ legalRouter.get("/:slug", (req, res) => {
 
 /* ── Admin ───────────────────────────────────────────────────────────────── */
 
-legalRouter.get("/", requireAuth, requireAdmin, (_req, res) => {
-  const pages = db
+legalRouter.get("/", requireAuth, requireAdmin, async (_req, res) => {
+  const pages = await db
     .prepare("SELECT slug, title, body, updated_at FROM legal_pages ORDER BY slug")
     .all();
   res.json({ pages });
 });
 
-legalRouter.put("/:slug", requireAuth, requireAdmin, (req, res) => {
+legalRouter.put("/:slug", requireAuth, requireAdmin, async (req, res) => {
   const slug = String(req.params.slug);
   if (!isSlug(slug)) { res.status(404).json({ error: "No such page." }); return; }
 
@@ -63,13 +63,13 @@ legalRouter.put("/:slug", requireAuth, requireAdmin, (req, res) => {
     return;
   }
 
-  db.prepare(
-    "UPDATE legal_pages SET title = ?, body = ?, updated_at = datetime('now') WHERE slug = ?"
+  await db.prepare(
+    "UPDATE legal_pages SET title = ?, body = ?, updated_at = now_text() WHERE slug = ?"
   ).run(title, body, slug);
 
   audit(req, { action: "legal.update", targetType: "legal_page", targetId: 0, detail: slug });
 
-  const page = db
+  const page = await db
     .prepare("SELECT slug, title, body, updated_at FROM legal_pages WHERE slug = ?")
     .get(slug);
   res.json({ ok: true, page });

@@ -42,7 +42,7 @@ type BookingRow = {
   amount_fcfa: number | null;
 };
 
-function loadBooking(where: "code" | "id", value: string | number): BookingRow | undefined {
+async function loadBooking(where: "code" | "id", value: string | number): Promise<BookingRow | undefined> {
   return db
     .prepare(
       `SELECT r.id, r.ccm_code, r.date, r.time, r.party_size, r.phone, r.note,
@@ -57,7 +57,7 @@ function loadBooking(where: "code" | "id", value: string | number): BookingRow |
        LEFT JOIN payments p ON p.reservation_id = r.id AND p.status = 'completed' AND p.type = 'reservation'
        WHERE ${where === "code" ? "r.ccm_code" : "r.id"} = ?`
     )
-    .get(value) as BookingRow | undefined;
+    .get(value) as Promise<BookingRow | undefined>;
 }
 
 /** Today in the restaurant's local date, for the "is this for tonight" check. */
@@ -137,7 +137,7 @@ type OrderRow = {
   created_at: string;
 };
 
-function loadOrder(where: "code" | "id", value: string | number): OrderRow | undefined {
+async function loadOrder(where: "code" | "id", value: string | number): Promise<OrderRow | undefined> {
   return db
     .prepare(
       `SELECT o.id, o.order_no, o.name, o.phone, o.items_json, o.total_fcfa, o.discount_fcfa,
@@ -147,7 +147,7 @@ function loadOrder(where: "code" | "id", value: string | number): OrderRow | und
        LEFT JOIN users c ON o.collected_by = c.id
        WHERE ${where === "code" ? "o.order_no" : "o.id"} = ?`
     )
-    .get(value) as OrderRow | undefined;
+    .get(value) as Promise<OrderRow | undefined>;
 }
 
 function describeOrder(order: OrderRow) {
@@ -203,7 +203,7 @@ function assessOrder(order: OrderRow) {
  * on its own because it is unguessable, but the response says which route was
  * used so the UI can show that a code was keyed in rather than scanned.
  */
-verifyRouter.post("/", lookupLimit, (req, res) => {
+verifyRouter.post("/", lookupLimit, async (req, res) => {
   const token = String(req.body?.token ?? "").trim();
   const rawCode = String(req.body?.code ?? "").trim();
 
@@ -228,10 +228,10 @@ verifyRouter.post("/", lookupLimit, (req, res) => {
     }
 
     if (verdict.claims.subject === "takeaway") {
-      order = loadOrder("id", verdict.claims.reservationId);
+      order = await loadOrder("id", verdict.claims.reservationId);
       if (order && order.order_no !== verdict.claims.code) order = undefined;
     } else {
-      booking = loadBooking("id", verdict.claims.reservationId);
+      booking = await loadBooking("id", verdict.claims.reservationId);
       // The signature covers both fields, so a mismatch means the token was
       // minted for a different booking than the row it points at.
       if (booking && booking.ccm_code !== verdict.claims.code) booking = undefined;
@@ -243,8 +243,8 @@ verifyRouter.post("/", lookupLimit, (req, res) => {
     const bookingCode = normaliseBookingCode(rawCode);
     const orderCode = normaliseOrderCode(rawCode);
 
-    if (bookingCode) booking = loadBooking("code", bookingCode);
-    else if (orderCode) order = loadOrder("code", orderCode);
+    if (bookingCode) booking = await loadBooking("code", bookingCode);
+    else if (orderCode) order = await loadOrder("code", orderCode);
     else {
       res.json({ outcome: "unreadable", message: "That is not a valid reference format.", source });
       return;
@@ -270,11 +270,11 @@ verifyRouter.post("/", lookupLimit, (req, res) => {
  * Marks a party as arrived. Separate from verification so staff see the
  * booking first and check in deliberately.
  */
-verifyRouter.post("/:id/check-in", (req, res) => {
+verifyRouter.post("/:id/check-in", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad booking id." }); return; }
 
-  const booking = loadBooking("id", id);
+  const booking = await loadBooking("id", id);
   if (!booking) { res.status(404).json({ error: "Booking not found." }); return; }
   if (booking.status === "cancelled") {
     res.status(409).json({ error: "That booking was cancelled." });
@@ -282,14 +282,14 @@ verifyRouter.post("/:id/check-in", (req, res) => {
   }
 
   // Conditional so two staff scanning at once cannot both record an arrival.
-  const won = db
+  const won = await db
     .prepare(
-      "UPDATE reservations SET checked_in_at = datetime('now'), checked_in_by = ? WHERE id = ? AND checked_in_at IS NULL"
+      "UPDATE reservations SET checked_in_at = now_text(), checked_in_by = ? WHERE id = ? AND checked_in_at IS NULL"
     )
     .run(req.user!.id, id);
 
   if (won.changes !== 1) {
-    const current = loadBooking("id", id);
+    const current = await loadBooking("id", id);
     res.status(409).json({
       error: `Already checked in${current?.checked_in_by_name ? ` by ${current.checked_in_by_name}` : ""}.`,
       booking: current ? describe(current) : undefined,
@@ -298,15 +298,15 @@ verifyRouter.post("/:id/check-in", (req, res) => {
   }
 
   audit(req, { action: "booking.checkin", targetType: "reservation", targetId: booking.ccm_code });
-  res.json({ ok: true, booking: describe(loadBooking("id", id)!) });
+  res.json({ ok: true, booking: describe((await loadBooking("id", id))!) });
 });
 
 /** Records a takeaway order being handed over. */
-verifyRouter.post("/order/:id/collect", (req, res) => {
+verifyRouter.post("/order/:id/collect", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad order id." }); return; }
 
-  const order = loadOrder("id", id);
+  const order = await loadOrder("id", id);
   if (!order) { res.status(404).json({ error: "Order not found." }); return; }
   if (order.status === "cancelled") { res.status(409).json({ error: "That order was cancelled." }); return; }
   if (order.payment_status !== "paid") {
@@ -315,16 +315,16 @@ verifyRouter.post("/order/:id/collect", (req, res) => {
   }
 
   // Conditional so two staff scanning at once cannot both hand it over.
-  const won = db
+  const won = await db
     .prepare(
       `UPDATE takeaway_orders
-       SET collected_at = datetime('now'), collected_by = ?, status = 'picked_up'
+       SET collected_at = now_text(), collected_by = ?, status = 'picked_up'
        WHERE id = ? AND collected_at IS NULL`
     )
     .run(req.user!.id, id);
 
   if (won.changes !== 1) {
-    const current = loadOrder("id", id);
+    const current = await loadOrder("id", id);
     res.status(409).json({
       error: `Already collected${current?.collected_by_name ? ` by ${current.collected_by_name}` : ""}.`,
       order: current ? describeOrder(current) : undefined,
@@ -333,15 +333,15 @@ verifyRouter.post("/order/:id/collect", (req, res) => {
   }
 
   audit(req, { action: "takeaway.collect", targetType: "takeaway_order", targetId: order.order_no });
-  res.json({ ok: true, order: describeOrder(loadOrder("id", id)!) });
+  res.json({ ok: true, order: describeOrder((await loadOrder("id", id))!) });
 });
 
 /** Undoes a collection recorded by mistake. */
-verifyRouter.post("/order/:id/undo-collect", (req, res) => {
+verifyRouter.post("/order/:id/undo-collect", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad order id." }); return; }
 
-  const info = db
+  const info = await db
     .prepare("UPDATE takeaway_orders SET collected_at = NULL, collected_by = NULL, status = 'ready' WHERE id = ?")
     .run(id);
   if (info.changes === 0) { res.status(404).json({ error: "Order not found." }); return; }
@@ -351,11 +351,11 @@ verifyRouter.post("/order/:id/undo-collect", (req, res) => {
 });
 
 /** Undoes a check-in recorded by mistake. */
-verifyRouter.post("/:id/undo-check-in", (req, res) => {
+verifyRouter.post("/:id/undo-check-in", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad booking id." }); return; }
 
-  const info = db
+  const info = await db
     .prepare("UPDATE reservations SET checked_in_at = NULL, checked_in_by = NULL WHERE id = ?")
     .run(id);
   if (info.changes === 0) { res.status(404).json({ error: "Booking not found." }); return; }

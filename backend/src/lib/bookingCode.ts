@@ -64,10 +64,10 @@ function mint(): string {
  * would surface as an insert failure at the worst possible moment — during
  * checkout. Retrying here keeps that off the customer's path.
  */
-export function generateBookingCode(): string {
+export async function generateBookingCode(): Promise<string> {
   for (let attempt = 0; attempt < 8; attempt++) {
     const code = mint();
-    const taken = db.prepare("SELECT 1 FROM reservations WHERE ccm_code = ?").get(code);
+    const taken = await db.prepare("SELECT 1 FROM reservations WHERE ccm_code = ?").get(code);
     if (!taken) return code;
   }
   throw new Error("Could not allocate an unused booking reference.");
@@ -86,10 +86,10 @@ export function normaliseBookingCode(raw: string): string {
  * receipt how many orders the shop had taken and let them guess every other
  * reference, which matters now that a takeaway code is what the door scans.
  */
-export function generateOrderCode(): string {
+export async function generateOrderCode(): Promise<string> {
   for (let attempt = 0; attempt < 8; attempt++) {
     const code = mintCode("TKA");
-    const taken = db.prepare("SELECT 1 FROM takeaway_orders WHERE order_no = ?").get(code);
+    const taken = await db.prepare("SELECT 1 FROM takeaway_orders WHERE order_no = ?").get(code);
     if (!taken) return code;
   }
   throw new Error("Could not allocate an unused order reference.");
@@ -105,14 +105,14 @@ export function normaliseOrderCode(raw: string): string {
  * Run once at boot. Old printed receipts stop scanning, which is the point:
  * those references were guessable and should not stay valid.
  */
-export function backfillLegacyBookingCodes(): void {
-  const legacy = db
+export async function backfillLegacyBookingCodes(): Promise<void> {
+  const legacy = (await db
     .prepare("SELECT id FROM reservations WHERE ccm_code IS NULL OR ccm_code NOT LIKE 'CCM-____-____'")
-    .all() as { id: number }[];
+    .all()) as { id: number }[];
   if (legacy.length === 0) return;
 
   const update = db.prepare("UPDATE reservations SET ccm_code = ? WHERE id = ?");
-  for (const row of legacy) update.run(generateBookingCode(), row.id);
+  for (const row of legacy) update.run(await generateBookingCode(), row.id);
 
   console.log(`[codes] Reissued ${legacy.length} guessable booking reference(s).`);
 }

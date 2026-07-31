@@ -22,19 +22,19 @@ function likeTerm(raw: string): string {
 
 // ── Stats ───────────────────────────────────────────────
 
-adminRouter.get("/stats", (_req, res) => {
+adminRouter.get("/stats", async (_req, res) => {
   const today = new Date().toISOString().slice(0, 10);
-  const totalReservations = (db.prepare("SELECT COUNT(*) as c FROM reservations WHERE status = 'confirmed'").get() as { c: number }).c;
-  const todayReservations = (db.prepare("SELECT COUNT(*) as c FROM reservations WHERE date = ? AND status = 'confirmed'").get(today) as { c: number }).c;
-  const totalUsers = (db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'user'").get() as { c: number }).c;
-  const pendingPayments = (db.prepare("SELECT COUNT(*) as c FROM payments WHERE status = 'pending'").get() as { c: number }).c;
-  const totalRevenue = (db.prepare("SELECT COALESCE(SUM(amount_fcfa), 0) as s FROM payments WHERE status = 'completed'").get() as { s: number }).s;
+  const totalReservations = ((await db.prepare("SELECT COUNT(*) as c FROM reservations WHERE status = 'confirmed'").get()) as { c: number }).c;
+  const todayReservations = ((await db.prepare("SELECT COUNT(*) as c FROM reservations WHERE date = ? AND status = 'confirmed'").get(today)) as { c: number }).c;
+  const totalUsers = ((await db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'user'").get()) as { c: number }).c;
+  const pendingPayments = ((await db.prepare("SELECT COUNT(*) as c FROM payments WHERE status = 'pending'").get()) as { c: number }).c;
+  const totalRevenue = ((await db.prepare("SELECT COALESCE(SUM(amount_fcfa), 0) as s FROM payments WHERE status = 'completed'").get()) as { s: number }).s;
   res.json({ totalReservations, todayReservations, totalUsers, pendingPayments, totalRevenue });
 });
 
 // ── Reservations ─────────────────────────────────────────
 
-adminRouter.get("/reservations", (req, res) => {
+adminRouter.get("/reservations", async (req, res) => {
   const date = req.query.date ? String(req.query.date) : null;
   const status = req.query.status ? String(req.query.status) : null;
   const q = req.query.q ? String(req.query.q).trim() : null;
@@ -58,50 +58,50 @@ adminRouter.get("/reservations", (req, res) => {
   }
   sql += " ORDER BY r.date DESC, r.time DESC LIMIT 200";
 
-  res.json({ reservations: db.prepare(sql).all(...params) });
+  res.json({ reservations: await db.prepare(sql).all(...params) });
 });
 
 // Mark as completed (keep for backward compat)
-adminRouter.patch("/reservations/:id", (req, res) => {
+adminRouter.patch("/reservations/:id", async (req, res) => {
   const id = Number(req.params.id);
   const status = String(req.body?.status ?? "");
   if (!["confirmed", "cancelled", "completed"].includes(status)) {
     res.status(400).json({ error: "Invalid status." });
     return;
   }
-  const prev = db.prepare("SELECT status, user_id FROM reservations WHERE id = ?").get(id) as { status: string; user_id: number } | undefined;
-  db.prepare("UPDATE reservations SET status = ? WHERE id = ?").run(status, id);
+  const prev = (await db.prepare("SELECT status, user_id FROM reservations WHERE id = ?").get(id)) as { status: string; user_id: number } | undefined;
+  await db.prepare("UPDATE reservations SET status = ? WHERE id = ?").run(status, id);
 
   if (status === "completed" && prev && prev.status !== "completed") {
-    const payment = db.prepare(
+    const payment = (await db.prepare(
       "SELECT amount_fcfa FROM payments WHERE reservation_id = ? AND status = 'completed' ORDER BY created_at DESC LIMIT 1"
-    ).get(id) as { amount_fcfa: number } | undefined;
-    if (payment) awardPoints(prev.user_id, payment.amount_fcfa, "Completed reservation", "reservation", id);
+    ).get(id)) as { amount_fcfa: number } | undefined;
+    if (payment) await awardPoints(prev.user_id, payment.amount_fcfa, "Completed reservation", "reservation", id);
   }
 
   res.json({ ok: true });
 });
 
-adminRouter.post("/reservations/:id/cancel", (req, res) => {
+adminRouter.post("/reservations/:id/cancel", async (req, res) => {
   const id = Number(req.params.id);
   const reason = String(req.body?.reason ?? "").trim().slice(0, 300);
 
-  const r = db.prepare("SELECT id, status FROM reservations WHERE id = ?").get(id) as { id: number; status: string } | undefined;
+  const r = (await db.prepare("SELECT id, status FROM reservations WHERE id = ?").get(id)) as { id: number; status: string } | undefined;
   if (!r) { res.status(404).json({ error: "Reservation not found." }); return; }
   if (r.status === "cancelled") { res.status(409).json({ error: "Already cancelled." }); return; }
 
-  db.prepare(
-    "UPDATE reservations SET status = 'cancelled', cancelled_at = datetime('now'), cancel_reason = ? WHERE id = ?"
+  await db.prepare(
+    "UPDATE reservations SET status = 'cancelled', cancelled_at = now_text(), cancel_reason = ? WHERE id = ?"
   ).run(reason || null, id);
 
   audit(req, { action: "reservation.cancel", targetType: "reservation", targetId: id, detail: reason });
   res.json({ ok: true });
 });
 
-adminRouter.post("/reservations/:id/uncancel", (req, res) => {
+adminRouter.post("/reservations/:id/uncancel", async (req, res) => {
   const id = Number(req.params.id);
 
-  const r = db.prepare("SELECT id, status, cancelled_at FROM reservations WHERE id = ?").get(id) as { id: number; status: string; cancelled_at: string | null } | undefined;
+  const r = (await db.prepare("SELECT id, status, cancelled_at FROM reservations WHERE id = ?").get(id)) as { id: number; status: string; cancelled_at: string | null } | undefined;
   if (!r) { res.status(404).json({ error: "Reservation not found." }); return; }
   if (r.status !== "cancelled" || !r.cancelled_at) { res.status(409).json({ error: "This reservation is not cancelled." }); return; }
 
@@ -111,15 +111,15 @@ adminRouter.post("/reservations/:id/uncancel", (req, res) => {
     return;
   }
 
-  db.prepare("UPDATE reservations SET status = 'confirmed', cancelled_at = NULL, cancel_reason = NULL WHERE id = ?").run(id);
+  await db.prepare("UPDATE reservations SET status = 'confirmed', cancelled_at = NULL, cancel_reason = NULL WHERE id = ?").run(id);
   res.json({ ok: true });
 });
 
 // ── Tables ───────────────────────────────────────────────
 
-adminRouter.get("/tables", (_req, res) => {
+adminRouter.get("/tables", async (_req, res) => {
   const today = new Date().toISOString().slice(0, 10);
-  const tables = db.prepare(`
+  const tables = await db.prepare(`
     SELECT t.*,
       (SELECT COUNT(*) FROM reservations r WHERE r.table_id = t.id AND r.date = ? AND r.status = 'confirmed') as today_count
     FROM restaurant_tables t
@@ -128,7 +128,7 @@ adminRouter.get("/tables", (_req, res) => {
   res.json({ tables });
 });
 
-adminRouter.post("/tables", (req, res) => {
+adminRouter.post("/tables", async (req, res) => {
   const label = String(req.body?.label ?? "").trim();
   const capacity = Number(req.body?.capacity);
   const zone = String(req.body?.zone ?? "main");
@@ -140,15 +140,15 @@ adminRouter.post("/tables", (req, res) => {
     return;
   }
 
-  const info = db.prepare(
+  const info = await db.prepare(
     "INSERT INTO restaurant_tables (label, capacity, zone, pos_x, pos_y) VALUES (?, ?, ?, ?, ?)"
   ).run(label, capacity, zone, pos_x, pos_y);
 
-  const table = db.prepare("SELECT * FROM restaurant_tables WHERE id = ?").get(Number(info.lastInsertRowid));
+  const table = await db.prepare("SELECT * FROM restaurant_tables WHERE id = ?").get(Number(info.lastInsertRowid));
   res.status(201).json({ table });
 });
 
-adminRouter.patch("/tables/:id", (req, res) => {
+adminRouter.patch("/tables/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad table id." }); return; }
 
@@ -175,53 +175,53 @@ adminRouter.patch("/tables/:id", (req, res) => {
     fields[axis] = Math.round(value);
   }
 
-  if (!applyUpdate("restaurant_tables", fields, id)) {
+  if (!(await applyUpdate("restaurant_tables", fields, id))) {
     res.status(400).json({ error: "Nothing to update." });
     return;
   }
   res.json({ ok: true });
 });
 
-adminRouter.delete("/tables/:id", (req, res) => {
+adminRouter.delete("/tables/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad table id." }); return; }
-  db.prepare("UPDATE restaurant_tables SET active = 0 WHERE id = ?").run(id);
+  await db.prepare("UPDATE restaurant_tables SET active = 0 WHERE id = ?").run(id);
   audit(req, { action: "table.deactivate", targetType: "table", targetId: id });
   res.json({ ok: true });
 });
 
 // ── Users ────────────────────────────────────────────────
 
-adminRouter.get("/users", (_req, res) => {
-  const users = db.prepare("SELECT id, name, email, role, banned_at, created_at FROM users ORDER BY created_at DESC").all();
+adminRouter.get("/users", async (_req, res) => {
+  const users = await db.prepare("SELECT id, name, email, role, banned_at, created_at FROM users ORDER BY created_at DESC").all();
   res.json({ users });
 });
 
-adminRouter.patch("/users/:id/ban", (req, res) => {
+adminRouter.patch("/users/:id/ban", async (req, res) => {
   const id = Number(req.params.id);
   if (id === req.user!.id) { res.status(400).json({ error: "You cannot ban yourself." }); return; }
 
-  const target = db.prepare("SELECT role FROM users WHERE id = ?").get(id) as { role: string } | undefined;
+  const target = (await db.prepare("SELECT role FROM users WHERE id = ?").get(id)) as { role: string } | undefined;
   if (!target) { res.status(404).json({ error: "User not found." }); return; }
   if (target.role === "super_admin") { res.status(403).json({ error: "Cannot ban a super admin." }); return; }
 
-  db.prepare("UPDATE users SET banned_at = datetime('now') WHERE id = ?").run(id);
+  await db.prepare("UPDATE users SET banned_at = now_text() WHERE id = ?").run(id);
   // A ban that leaves the existing session working is not a ban.
-  revokeSessions(id);
+  await revokeSessions(id);
 
   audit(req, { action: "user.ban", targetType: "user", targetId: id });
   res.json({ ok: true });
 });
 
-adminRouter.patch("/users/:id/unban", requireSuperAdmin, (req, res) => {
+adminRouter.patch("/users/:id/unban", requireSuperAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad user id." }); return; }
-  db.prepare("UPDATE users SET banned_at = NULL WHERE id = ?").run(id);
+  await db.prepare("UPDATE users SET banned_at = NULL WHERE id = ?").run(id);
   audit(req, { action: "user.unban", targetType: "user", targetId: id });
   res.json({ ok: true });
 });
 
-adminRouter.patch("/users/:id/role", requireSuperAdmin, (req, res) => {
+adminRouter.patch("/users/:id/role", requireSuperAdmin, async (req, res) => {
   const id = Number(req.params.id);
   const role = String(req.body?.role ?? "");
   if (!["user", "admin"].includes(role)) {
@@ -230,39 +230,39 @@ adminRouter.patch("/users/:id/role", requireSuperAdmin, (req, res) => {
   }
   if (id === req.user!.id) { res.status(400).json({ error: "You cannot change your own role." }); return; }
 
-  const target = db.prepare("SELECT role FROM users WHERE id = ?").get(id) as { role: string } | undefined;
+  const target = (await db.prepare("SELECT role FROM users WHERE id = ?").get(id)) as { role: string } | undefined;
   if (!target) { res.status(404).json({ error: "User not found." }); return; }
   if (target.role === "super_admin") { res.status(403).json({ error: "Cannot change a super admin role." }); return; }
 
-  db.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, id);
+  await db.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, id);
   // Force a fresh sign-in so the new permission level is picked up everywhere.
-  revokeSessions(id);
+  await revokeSessions(id);
 
   audit(req, { action: "user.role", targetType: "user", targetId: id, detail: `${target.role} → ${role}` });
   res.json({ ok: true });
 });
 
-adminRouter.delete("/users/:id", (req, res) => {
+adminRouter.delete("/users/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (id === req.user!.id) { res.status(400).json({ error: "You cannot delete your own account." }); return; }
 
-  const target = db.prepare("SELECT role FROM users WHERE id = ?").get(id) as { role: string } | undefined;
+  const target = (await db.prepare("SELECT role FROM users WHERE id = ?").get(id)) as { role: string } | undefined;
   if (!target) { res.status(404).json({ error: "User not found." }); return; }
   if (target.role === "super_admin") { res.status(403).json({ error: "Cannot delete a super admin." }); return; }
 
-  db.prepare("DELETE FROM users WHERE id = ?").run(id);
+  await db.prepare("DELETE FROM users WHERE id = ?").run(id);
   audit(req, { action: "user.delete", targetType: "user", targetId: id });
   res.json({ ok: true });
 });
 
 // ── Menu ─────────────────────────────────────────────────
 
-adminRouter.get("/menu", (_req, res) => {
-  const items = db.prepare("SELECT * FROM menu_items ORDER BY category, position, id").all();
+adminRouter.get("/menu", async (_req, res) => {
+  const items = await db.prepare("SELECT * FROM menu_items ORDER BY category, position, id").all();
   res.json({ menu: items });
 });
 
-adminRouter.post("/menu", (req, res) => {
+adminRouter.post("/menu", async (req, res) => {
   const category = String(req.body?.category ?? "").trim().slice(0, 60);
   const name = String(req.body?.name ?? "").trim().slice(0, 120);
   const description = String(req.body?.description ?? "").trim().slice(0, 400);
@@ -287,18 +287,18 @@ adminRouter.post("/menu", (req, res) => {
     }
   }
 
-  const info = db
+  const info = await db
     .prepare(
       "INSERT INTO menu_items (category, name, description, price_fcfa, price_label, image_url, position) VALUES (?, ?, ?, ?, ?, ?, ?)"
     )
     .run(category, name, description, price, priceLabel, imageUrl, position);
 
-  const item = db.prepare("SELECT * FROM menu_items WHERE id = ?").get(Number(info.lastInsertRowid));
+  const item = await db.prepare("SELECT * FROM menu_items WHERE id = ?").get(Number(info.lastInsertRowid));
   audit(req, { action: "menu.create", targetType: "menu_item", targetId: Number(info.lastInsertRowid), detail: name });
   res.status(201).json({ item });
 });
 
-adminRouter.patch("/menu/:id", (req, res) => {
+adminRouter.patch("/menu/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad item id." }); return; }
 
@@ -328,7 +328,7 @@ adminRouter.patch("/menu/:id", (req, res) => {
     }
   }
 
-  if (!applyUpdate("menu_items", fields, id)) {
+  if (!(await applyUpdate("menu_items", fields, id))) {
     res.status(400).json({ error: "Nothing to update." });
     return;
   }
@@ -337,19 +337,19 @@ adminRouter.patch("/menu/:id", (req, res) => {
   res.json({ ok: true });
 });
 
-adminRouter.delete("/menu/:id", (req, res) => {
+adminRouter.delete("/menu/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad item id." }); return; }
-  const item = db.prepare("SELECT name FROM menu_items WHERE id = ?").get(id) as { name: string } | undefined;
-  db.prepare("DELETE FROM menu_items WHERE id = ?").run(id);
+  const item = (await db.prepare("SELECT name FROM menu_items WHERE id = ?").get(id)) as { name: string } | undefined;
+  await db.prepare("DELETE FROM menu_items WHERE id = ?").run(id);
   audit(req, { action: "menu.delete", targetType: "menu_item", targetId: id, detail: item?.name ?? "" });
   res.json({ ok: true });
 });
 
 // ── Payments ─────────────────────────────────────────────
 
-adminRouter.get("/payments", (_req, res) => {
-  const payments = db.prepare(
+adminRouter.get("/payments", async (_req, res) => {
+  const payments = await db.prepare(
     `SELECT p.*, r.date as res_date, r.time as res_time, u.name as user_name
      FROM payments p
      JOIN reservations r ON p.reservation_id = r.id
@@ -359,7 +359,7 @@ adminRouter.get("/payments", (_req, res) => {
   res.json({ payments });
 });
 
-adminRouter.patch("/payments/:id", (req, res) => {
+adminRouter.patch("/payments/:id", async (req, res) => {
   const id = Number(req.params.id);
   const status = String(req.body?.status ?? "");
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad payment id." }); return; }
@@ -368,24 +368,24 @@ adminRouter.patch("/payments/:id", (req, res) => {
     return;
   }
 
-  const p = db
+  const p = (await db
     .prepare("SELECT id, status, reference, reservation_id FROM payments WHERE id = ?")
-    .get(id) as { id: number; status: string; reference: string; reservation_id: number } | undefined;
+    .get(id)) as { id: number; status: string; reference: string; reservation_id: number } | undefined;
   if (!p) { res.status(404).json({ error: "Payment not found." }); return; }
   if (p.status === status) { res.json({ ok: true }); return; }
 
   if (status === "failed") {
     // Goes through the shared path so the promo use and gift card value the
     // payment was holding are returned, and the booking stops reading as paid.
-    failPayment(id);
-    db.prepare(
+    await failPayment(id);
+    await db.prepare(
       "UPDATE reservations SET payment_status = 'unpaid' WHERE id = ? AND payment_status = 'paid'"
     ).run(p.reservation_id);
   } else {
-    db.prepare(
-      "UPDATE payments SET status = 'completed', updated_at = datetime('now') WHERE id = ?"
+    await db.prepare(
+      "UPDATE payments SET status = 'completed', updated_at = now_text() WHERE id = ?"
     ).run(id);
-    db.prepare(
+    await db.prepare(
       "UPDATE reservations SET payment_status = 'paid', status = 'confirmed' WHERE id = ? AND status = 'pending_payment'"
     ).run(p.reservation_id);
   }
@@ -401,9 +401,9 @@ adminRouter.patch("/payments/:id", (req, res) => {
 
 // ── Audit trail ───────────────────────────────────────────
 
-adminRouter.get("/audit", requireSuperAdmin, (req, res) => {
+adminRouter.get("/audit", requireSuperAdmin, async (req, res) => {
   const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
-  const entries = db
+  const entries = await db
     .prepare(
       `SELECT id, actor_id, actor_name, action, target_type, target_id, detail, created_at
        FROM admin_audit_log ORDER BY id DESC LIMIT ?`
@@ -414,12 +414,12 @@ adminRouter.get("/audit", requireSuperAdmin, (req, res) => {
 
 // ── Reviews ──────────────────────────────────────────────
 
-adminRouter.get("/reviews", (_req, res) => {
-  const rows = db.prepare(
+adminRouter.get("/reviews", async (_req, res) => {
+  const rows = (await db.prepare(
     `SELECT rv.id, rv.rating, rv.text, rv.media_urls, rv.created_at, rv.updated_at, u.name as author
      FROM reviews rv JOIN users u ON rv.user_id = u.id
      ORDER BY rv.created_at DESC`
-  ).all() as (Record<string, unknown> & { media_urls: string | null })[];
+  ).all()) as (Record<string, unknown> & { media_urls: string | null })[];
   const reviews = rows.map((r) => ({
     ...r,
     media_urls: (() => { try { return JSON.parse(r.media_urls ?? "[]") as string[]; } catch { return []; } })(),
@@ -427,68 +427,68 @@ adminRouter.get("/reviews", (_req, res) => {
   res.json({ reviews });
 });
 
-adminRouter.delete("/reviews/:id", (req, res) => {
+adminRouter.delete("/reviews/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad review id." }); return; }
-  db.prepare("DELETE FROM reviews WHERE id = ?").run(id);
+  await db.prepare("DELETE FROM reviews WHERE id = ?").run(id);
   audit(req, { action: "review.delete", targetType: "review", targetId: id });
   res.json({ ok: true });
 });
 
 // ── Review admin reply ────────────────────────────────────
 
-adminRouter.post("/reviews/:id/reply", (req, res) => {
+adminRouter.post("/reviews/:id/reply", async (req, res) => {
   const id = Number(req.params.id);
   const text = String(req.body?.text ?? "").trim().slice(0, 800);
   if (!text) { res.status(400).json({ error: "Reply text required." }); return; }
-  const existing = db.prepare("SELECT id FROM reviews WHERE id = ?").get(id);
+  const existing = await db.prepare("SELECT id FROM reviews WHERE id = ?").get(id);
   if (!existing) { res.status(404).json({ error: "Review not found." }); return; }
-  db.prepare("UPDATE reviews SET admin_reply = ?, admin_reply_at = datetime('now') WHERE id = ?").run(text, id);
+  await db.prepare("UPDATE reviews SET admin_reply = ?, admin_reply_at = now_text() WHERE id = ?").run(text, id);
   res.json({ ok: true });
 });
 
-adminRouter.delete("/reviews/:id/reply", (req, res) => {
-  db.prepare("UPDATE reviews SET admin_reply = NULL, admin_reply_at = NULL WHERE id = ?").run(Number(req.params.id));
+adminRouter.delete("/reviews/:id/reply", async (req, res) => {
+  await db.prepare("UPDATE reviews SET admin_reply = NULL, admin_reply_at = NULL WHERE id = ?").run(Number(req.params.id));
   res.json({ ok: true });
 });
 
 // ── Analytics ─────────────────────────────────────────────
 
-adminRouter.get("/analytics", (_req, res) => {
+adminRouter.get("/analytics", async (_req, res) => {
   /* Dense series are filled to a continuous 30 days on the client, so days with
      no takings still draw. Grouping by substr keeps this on the created_at
      index rather than a per-row date() call. */
-  const revenueByDay = db.prepare(`
+  const revenueByDay = await db.prepare(`
     SELECT substr(p.created_at, 1, 10) as day,
            SUM(p.amount_fcfa) as revenue,
            COUNT(*) as payments
     FROM payments p
-    WHERE p.status = 'completed' AND p.created_at >= datetime('now', '-30 days')
+    WHERE p.status = 'completed' AND p.created_at >= now_text_offset(interval '-30 days')
     GROUP BY day ORDER BY day ASC
   `).all();
 
-  const peakHours = db.prepare(`
+  const peakHours = await db.prepare(`
     SELECT substr(r.time, 1, 2) as hour, COUNT(*) as count
     FROM reservations r WHERE r.status != 'cancelled'
     GROUP BY hour ORDER BY hour ASC
   `).all();
 
-  const newUsersByDay = db.prepare(`
+  const newUsersByDay = await db.prepare(`
     SELECT substr(created_at, 1, 10) as day, COUNT(*) as count
-    FROM users WHERE role = 'user' AND created_at >= datetime('now', '-30 days')
+    FROM users WHERE role = 'user' AND created_at >= now_text_offset(interval '-30 days')
     GROUP BY day ORDER BY day ASC
   `).all();
 
-  const reviewSummary = db.prepare(
+  const reviewSummary = (await db.prepare(
     "SELECT AVG(rating) as avg_rating, COUNT(*) as total FROM reviews"
-  ).get() as { avg_rating: number | null; total: number };
+  ).get()) as { avg_rating: number | null; total: number };
 
   /* Genuinely most-ordered, counted from takeaway line items rather than the
      old query which just returned the first five rows by display position and
      called them popular. */
-  const orderRows = db.prepare(
-    "SELECT items_json FROM takeaway_orders WHERE status != 'cancelled' AND created_at >= datetime('now', '-90 days')"
-  ).all() as { items_json: string }[];
+  const orderRows = (await db.prepare(
+    "SELECT items_json FROM takeaway_orders WHERE status != 'cancelled' AND created_at >= now_text_offset(interval '-90 days')"
+  ).all()) as { items_json: string }[];
 
   const tally = new Map<string, { name: string; qty: number; revenue: number }>();
   for (const row of orderRows) {
@@ -510,29 +510,29 @@ adminRouter.get("/analytics", (_req, res) => {
 
   /* Booking health, and the same window immediately before it so the UI can
      show direction rather than a bare number. */
-  const window30 = db.prepare(`
+  const window30 = (await db.prepare(`
     SELECT COUNT(*) as bookings,
            COALESCE(SUM(party_size), 0) as covers,
            SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
            SUM(CASE WHEN checked_in_at IS NOT NULL THEN 1 ELSE 0 END) as arrived
-    FROM reservations WHERE created_at >= datetime('now', '-30 days')
-  `).get() as { bookings: number; covers: number; cancelled: number; arrived: number };
+    FROM reservations WHERE created_at >= now_text_offset(interval '-30 days')
+  `).get()) as { bookings: number; covers: number; cancelled: number; arrived: number };
 
-  const prev30 = db.prepare(`
+  const prev30 = (await db.prepare(`
     SELECT COUNT(*) as bookings, COALESCE(SUM(party_size), 0) as covers
     FROM reservations
-    WHERE created_at >= datetime('now', '-60 days') AND created_at < datetime('now', '-30 days')
-  `).get() as { bookings: number; covers: number };
+    WHERE created_at >= now_text_offset(interval '-60 days') AND created_at < now_text_offset(interval '-30 days')
+  `).get()) as { bookings: number; covers: number };
 
-  const prevRevenue = (db.prepare(`
+  const prevRevenue = ((await db.prepare(`
     SELECT COALESCE(SUM(amount_fcfa), 0) as revenue FROM payments
     WHERE status = 'completed'
-      AND created_at >= datetime('now', '-60 days') AND created_at < datetime('now', '-30 days')
-  `).get() as { revenue: number }).revenue;
+      AND created_at >= now_text_offset(interval '-60 days') AND created_at < now_text_offset(interval '-30 days')
+  `).get()) as { revenue: number }).revenue;
 
-  const busiestDays = db.prepare(`
-    SELECT CAST(strftime('%w', date) AS INTEGER) as weekday, COUNT(*) as count
-    FROM reservations WHERE status != 'cancelled' AND date >= date('now', '-90 days')
+  const busiestDays = await db.prepare(`
+    SELECT EXTRACT(DOW FROM date::date)::integer as weekday, COUNT(*) as count
+    FROM reservations WHERE status != 'cancelled' AND date >= today_offset(interval '-90 days')
     GROUP BY weekday ORDER BY weekday ASC
   `).all();
 
@@ -550,8 +550,8 @@ adminRouter.get("/analytics", (_req, res) => {
 
 // ── Receipts ─────────────────────────────────────────────
 
-adminRouter.get("/receipts", (_req, res) => {
-  const receipts = db.prepare(
+adminRouter.get("/receipts", async (_req, res) => {
+  const receipts = await db.prepare(
     `SELECT r.id, r.date, r.time, r.party_size, r.status, r.payment_status,
             r.ccm_code, r.created_at,
             u.name as user_name, u.email as user_email,

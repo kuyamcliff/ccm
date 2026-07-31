@@ -91,14 +91,14 @@ authRouter.post("/register", registerLimit, async (req, res) => {
     return;
   }
 
-  const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
+  const existing = await db.prepare("SELECT id FROM users WHERE email = ?").get(email);
   if (existing) {
     res.status(409).json({ error: "An account with this email already exists. Sign in instead." });
     return;
   }
 
   const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-  const info = db
+  const info = await db
     .prepare("INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)")
     .run(name, email, hash);
   const id = Number(info.lastInsertRowid);
@@ -111,12 +111,12 @@ authRouter.post("/login", loginIpLimit, loginEmailLimit, async (req, res) => {
   const email = String(req.body?.email ?? "").trim().toLowerCase();
   const password = String(req.body?.password ?? "");
 
-  const row = db
+  const row = (await db
     .prepare(
       `SELECT id, name, email, password_hash, role, banned_at, session_version, totp_enabled, totp_secret
        FROM users WHERE email = ?`
     )
-    .get(email) as UserRow | undefined;
+    .get(email)) as UserRow | undefined;
 
   // Always run a comparison, even with no matching row, to keep timing flat.
   const passwordOk = await bcrypt.compare(password, row?.password_hash ?? DUMMY_HASH);
@@ -146,7 +146,7 @@ authRouter.post("/login", loginIpLimit, loginEmailLimit, async (req, res) => {
   res.json({ user: publicUser(row) });
 });
 
-authRouter.post("/login/2fa", twoFactorLimit, (req, res) => {
+authRouter.post("/login/2fa", twoFactorLimit, async (req, res) => {
   const challenge = String(req.body?.challenge ?? "");
   const code = String(req.body?.code ?? "");
 
@@ -156,12 +156,12 @@ authRouter.post("/login/2fa", twoFactorLimit, (req, res) => {
     return;
   }
 
-  const row = db
+  const row = (await db
     .prepare(
       `SELECT id, name, email, role, banned_at, session_version, totp_enabled, totp_secret
        FROM users WHERE id = ?`
     )
-    .get(userId) as UserRow | undefined;
+    .get(userId)) as UserRow | undefined;
 
   if (!row || !row.totp_enabled || !row.totp_secret) {
     res.status(401).json({ error: "That sign-in attempt is no longer valid." });
@@ -187,8 +187,8 @@ authRouter.post("/logout", (_req, res) => {
 });
 
 /** Signs the account out of every device, including this one. */
-authRouter.post("/logout-all", requireAuth, (req, res) => {
-  revokeSessions(req.user!.id);
+authRouter.post("/logout-all", requireAuth, async (req, res) => {
+  await revokeSessions(req.user!.id);
   clearSessionCookie(res);
   res.json({ ok: true });
 });

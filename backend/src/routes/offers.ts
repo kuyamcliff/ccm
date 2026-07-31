@@ -5,15 +5,15 @@ import { requireAdmin } from "../auth.js";
 
 export const offersRouter = Router();
 
-offersRouter.get("/", (_req, res) => {
-  const offers = db.prepare(
+offersRouter.get("/", async (_req, res) => {
+  const offers = await db.prepare(
     "SELECT * FROM offers WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC"
   ).all();
   res.json({ offers });
 });
 
-offersRouter.get("/all", requireAdmin, (_req, res) => {
-  res.json({ offers: db.prepare("SELECT * FROM offers ORDER BY sort_order, created_at DESC").all() });
+offersRouter.get("/all", requireAdmin, async (_req, res) => {
+  res.json({ offers: await db.prepare("SELECT * FROM offers ORDER BY sort_order, created_at DESC").all() });
 });
 
 /* The icon must name one of the front end's line icons. Anything else would
@@ -29,10 +29,10 @@ function safeIcon(raw: unknown): string {
   return (OFFER_ICONS as readonly string[]).includes(value) ? value : "flame";
 }
 
-offersRouter.post("/", requireAdmin, (req, res) => {
+offersRouter.post("/", requireAdmin, async (req, res) => {
   const { title, description, badge, icon, valid_until, sort_order } = req.body ?? {};
   if (!title) { res.status(400).json({ error: "Title required." }); return; }
-  db.prepare(
+  await db.prepare(
     "INSERT INTO offers (title, description, badge, icon, valid_until, sort_order) VALUES (?, ?, ?, ?, ?, ?)"
   ).run(
     String(title).trim().slice(0, 120),
@@ -45,7 +45,7 @@ offersRouter.post("/", requireAdmin, (req, res) => {
   res.status(201).json({ ok: true });
 });
 
-offersRouter.patch("/:id", requireAdmin, (req, res) => {
+offersRouter.patch("/:id", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad offer id." }); return; }
 
@@ -59,14 +59,14 @@ offersRouter.patch("/:id", requireAdmin, (req, res) => {
   if (b.sort_order !== undefined) fields.sort_order = Number(b.sort_order) || 0;
   if (b.is_active !== undefined) fields.is_active = b.is_active ? 1 : 0;
 
-  if (!applyUpdate("offers", fields, id)) {
+  if (!(await applyUpdate("offers", fields, id))) {
     res.status(400).json({ error: "Nothing to update." });
     return;
   }
   res.json({ ok: true });
 });
 
-offersRouter.delete("/:id", requireAdmin, (req, res) => {
-  db.prepare("DELETE FROM offers WHERE id = ?").run(Number(req.params.id));
+offersRouter.delete("/:id", requireAdmin, async (req, res) => {
+  await db.prepare("DELETE FROM offers WHERE id = ?").run(Number(req.params.id));
   res.json({ ok: true });
 });

@@ -19,8 +19,9 @@ interface AuditEntry {
 }
 
 export function audit(req: Request, entry: AuditEntry): void {
-  try {
-    insert.run(
+  // Fire-and-forget: logging must never block or break the action it is recording.
+  insert
+    .run(
       req.user?.id ?? null,
       req.user?.name ?? "",
       entry.action,
@@ -28,9 +29,6 @@ export function audit(req: Request, entry: AuditEntry): void {
       entry.targetId != null ? String(entry.targetId) : null,
       (entry.detail ?? "").slice(0, 500),
       req.ip ?? req.socket?.remoteAddress ?? ""
-    );
-  } catch (err) {
-    // Logging must never break the action it is recording.
-    console.error("[audit] failed to write entry", err);
-  }
+    )
+    .catch((err) => console.error("[audit] failed to write entry", err));
 }

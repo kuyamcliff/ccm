@@ -65,13 +65,13 @@ recoveryRouter.post("/request", requestLimit, async (req, res) => {
     message: `If that email has an account, a ${6}-digit code is on its way. It expires in ${CODE_TTL_MINUTES} minutes.`,
   };
 
-  const user = db.prepare("SELECT id, name, email FROM users WHERE email = ?").get(email) as
+  const user = (await db.prepare("SELECT id, name, email FROM users WHERE email = ?").get(email)) as
     | { id: number; name: string; email: string }
     | undefined;
 
   if (!user) { res.json(generic); return; }
 
-  const { code } = issueCode(user.id);
+  const { code } = await issueCode(user.id);
 
   const result = await sendMail({
     to: user.email,
@@ -115,7 +115,7 @@ recoveryRouter.post("/redeem", redeemLimit, async (req, res) => {
     return;
   }
 
-  const user = db.prepare("SELECT id FROM users WHERE email = ?").get(email) as
+  const user = (await db.prepare("SELECT id FROM users WHERE email = ?").get(email)) as
     | { id: number }
     | undefined;
 
@@ -124,7 +124,7 @@ recoveryRouter.post("/redeem", redeemLimit, async (req, res) => {
   const wrongCode = { error: "That code is not right, or it has expired. Ask for a new one." };
   if (!user) { res.status(400).json(wrongCode); return; }
 
-  const check = verifyCode(user.id, code);
+  const check = await verifyCode(user.id, code);
 
   if (!check.ok) {
     if (check.reason === "locked") {
@@ -144,13 +144,13 @@ recoveryRouter.post("/redeem", redeemLimit, async (req, res) => {
   }
 
   const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, user.id);
-  consumeReset(check.resetId);
+  await db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, user.id);
+  await consumeReset(check.resetId);
 
   // Anyone already signed in as this user is signed out. If the account had
   // been taken over, the attacker's session dies with the password change.
-  revokeSessions(user.id);
-  purgeExpiredResets();
+  await revokeSessions(user.id);
+  await purgeExpiredResets();
 
   console.log(`[recovery] password reset completed for user ${user.id}`);
   res.json({ ok: true, message: "Password changed. You can sign in now." });
