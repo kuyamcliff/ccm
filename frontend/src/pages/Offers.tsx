@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api, Offer } from "../api";
 import { OfferIcon } from "../components/Icons";
 import { Reveal } from "../components/Reveal";
+import { useT } from "../i18n/context";
 
 /** Long-form date for the expiry line, or the raw value if it will not parse. */
 function longDate(iso: string): string {
@@ -12,6 +13,7 @@ function longDate(iso: string): string {
 }
 
 export default function OffersPage() {
+  const t = useT("offers");
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -26,8 +28,8 @@ export default function OffersPage() {
     <div className="ofrs">
       <header className="ofrs-hero">
         <div className="ofrs-inner">
-          <h1 className="ofrs-title animate-up">Offers</h1>
-          <p className="ofrs-lede animate-up delay-1">What is running at the grill right now.</p>
+          <h1 className="ofrs-title animate-up">{t("title")}</h1>
+          <p className="ofrs-lede animate-up delay-1">{t("lede")}</p>
         </div>
       </header>
 
@@ -36,8 +38,8 @@ export default function OffersPage() {
 
         {!loading && offers.length === 0 && (
           <div className="ofrs-empty">
-            <p>Nothing running at the moment.</p>
-            <Link to="/menu" className="btn btn-outline">See the menu</Link>
+            <p>{t("empty")}</p>
+            <Link to="/menu" className="btn btn-outline">{t("seeMenu")}</Link>
           </div>
         )}
 
@@ -53,7 +55,7 @@ export default function OffersPage() {
                   {o.badge && <span className="offer-badge">{o.badge}</span>}
                   <h2 className="offer-title">{o.title}</h2>
                   {o.description && <p className="offer-desc">{o.description}</p>}
-                  {o.valid_until && <p className="offer-expires">Valid until {longDate(o.valid_until)}</p>}
+                  {o.valid_until && <p className="offer-expires">{t("validUntil")} {longDate(o.valid_until)}</p>}
                 </article>
               </Reveal>
             ))}
