@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import type { MenuItem } from "../../api";
 import { ConfirmModal } from "../../components/ConfirmModal";
+import { useLanguage } from "../../i18n/context";
 
 const CATEGORIES = ["Grills", "Sides", "Drinks", "Extras"];
 
@@ -29,6 +30,8 @@ const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
  * can always be reached.
  */
 export function AdminMenu() {
+  const { t } = useLanguage();
+  const tm = (key: string) => t("adminMenu", key);
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -63,7 +66,7 @@ export function AdminMenu() {
       const r = await api.admin.getMenu();
       setMenu(r.menu);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load the menu.");
+      setError(e instanceof Error ? e.message : tm("errLoad"));
     } finally {
       setLoading(false);
     }
@@ -78,7 +81,7 @@ export function AdminMenu() {
 
   async function save() {
     if (!editItem) return;
-    if (!editItem.name?.trim()) { setError("Give the item a name."); return; }
+    if (!editItem.name?.trim()) { setError(tm("errName")); return; }
 
     setBusy(isNew ? "new" : (editItem.id ?? null));
     setError("");
@@ -92,7 +95,7 @@ export function AdminMenu() {
       }
       closeEdit();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save that item.");
+      setError(e instanceof Error ? e.message : tm("errSave"));
     } finally {
       setBusy(null);
     }
@@ -107,7 +110,7 @@ export function AdminMenu() {
       await api.admin.deleteMenuItem(id);
       setMenu((m) => m.filter((x) => x.id !== id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not delete that item.");
+      setError(e instanceof Error ? e.message : tm("errDelete"));
     } finally {
       setBusy(null);
     }
@@ -120,7 +123,7 @@ export function AdminMenu() {
       await api.admin.updateMenuItem(item.id, { is_active: next });
       setMenu((m) => m.map((x) => (x.id === item.id ? { ...x, is_active: next } : x)));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not update that item.");
+      setError(e instanceof Error ? e.message : tm("errUpdate"));
     } finally {
       setBusy(null);
     }
@@ -128,12 +131,12 @@ export function AdminMenu() {
 
   function readImage(file: File) {
     if (file.size > MAX_IMAGE_BYTES) {
-      setError("That image is over 2 MB. Pick a smaller one.");
+      setError(tm("errImageSize"));
       return;
     }
     const reader = new FileReader();
     reader.onload = (ev) => set("image_url", ev.target?.result as string);
-    reader.onerror = () => setError("Could not read that file.");
+    reader.onerror = () => setError(tm("errRead"));
     reader.readAsDataURL(file);
   }
 
@@ -157,10 +160,10 @@ export function AdminMenu() {
     <div className="admin-page amn">
       <div className="admin-page-header">
         <div>
-          <h1 className="admin-page-title">Menu</h1>
-          <p className="admin-page-sub mono">{liveCount} live · {menu.length} total</p>
+          <h1 className="admin-page-title">{tm("title")}</h1>
+          <p className="admin-page-sub mono">{tm("tally").replace("{live}", String(liveCount)).replace("{total}", String(menu.length))}</p>
         </div>
-        <button className="btn btn-amber btn-sm" onClick={openNew}>Add item</button>
+        <button className="btn btn-amber btn-sm" onClick={openNew}>{tm("addItem")}</button>
       </div>
 
       {error && !editItem && <p className="form-error" role="alert">{error}</p>}
@@ -171,16 +174,16 @@ export function AdminMenu() {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search items"
-          aria-label="Search menu items"
+          placeholder={tm("searchPlaceholder")}
+          aria-label={tm("searchLabel")}
         />
         <div className="amn-cats">
-          {["All", ...categories].map((c) => (
+          {[tm("all"), ...categories].map((c, i) => (
             <button
               key={c}
               type="button"
-              className={`filter-chip${catFilter === c ? " active" : ""}`}
-              onClick={() => setCatFilter(c)}
+              className={`filter-chip${(i === 0 ? "All" : c) === catFilter ? " active" : ""}`}
+              onClick={() => setCatFilter(i === 0 ? "All" : c)}
             >
               {c}
             </button>
@@ -188,8 +191,8 @@ export function AdminMenu() {
         </div>
       </div>
 
-      {loading && <p className="empty-admin">Loading</p>}
-      {!loading && visible.length === 0 && <p className="empty-admin">Nothing matches that.</p>}
+      {loading && <p className="empty-admin">{tm("loading")}</p>}
+      {!loading && visible.length === 0 && <p className="empty-admin">{tm("noMatch")}</p>}
 
       <div className="amn-grid">
         {visible.map((item) => (
@@ -200,7 +203,7 @@ export function AdminMenu() {
               ) : (
                 <span className="amn-card-blank" aria-hidden="true">{item.name.charAt(0) || "?"}</span>
               )}
-              {!item.is_active && <span className="amn-card-flag">Hidden</span>}
+              {!item.is_active && <span className="amn-card-flag">{tm("hidden")}</span>}
             </div>
 
             <div className="amn-card-body">
@@ -209,7 +212,7 @@ export function AdminMenu() {
                 <span className="amn-card-price mono">
                   {item.price_fcfa
                     ? `${item.price_fcfa.toLocaleString()}`
-                    : (item.price_label || "—")}
+                    : (item.price_label || tm("askForCounter"))}
                 </span>
               </div>
               <p className="amn-card-cat mono">{item.category}</p>
@@ -217,11 +220,11 @@ export function AdminMenu() {
             </div>
 
             <div className="amn-card-actions">
-              <button className="btn btn-sm btn-outline" onClick={() => openEdit(item)} disabled={busy === item.id}>Edit</button>
+              <button className="btn btn-sm btn-outline" onClick={() => openEdit(item)} disabled={busy === item.id}>{tm("edit")}</button>
               <button className="btn btn-sm btn-ghost" onClick={() => toggleActive(item)} disabled={busy === item.id}>
-                {item.is_active ? "Hide" : "Show"}
+                {item.is_active ? tm("hide") : tm("show")}
               </button>
-              <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(item)} disabled={busy === item.id}>Delete</button>
+              <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(item)} disabled={busy === item.id}>{tm("delete")}</button>
             </div>
           </article>
         ))}
@@ -239,9 +242,9 @@ export function AdminMenu() {
           >
             <header className="amn-sheet-head">
               <h2 className="amn-sheet-title" id="amn-sheet-title">
-                {isNew ? "Add menu item" : "Edit menu item"}
+                {isNew ? tm("addMenuItem") : tm("editMenuItem")}
               </h2>
-              <button type="button" className="amn-sheet-close" onClick={closeEdit} aria-label="Close">
+              <button type="button" className="amn-sheet-close" onClick={closeEdit} aria-label={tm("close")}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                   <path d="M18 6 6 18M6 6l12 12" />
                 </svg>
@@ -250,36 +253,36 @@ export function AdminMenu() {
 
             <div className="amn-sheet-body">
               <label className="amn-field">
-                Name
+                {tm("name")}
                 <input
                   type="text"
                   value={editItem.name ?? ""}
                   maxLength={80}
                   onChange={(e) => set("name", e.target.value)}
-                  placeholder="Grilled chicken, half"
+                  placeholder={tm("namePlaceholder")}
                 />
               </label>
 
               <label className="amn-field">
-                Description
+                {tm("description")}
                 <textarea
                   rows={3}
                   value={editItem.description ?? ""}
                   maxLength={300}
                   onChange={(e) => set("description", e.target.value)}
-                  placeholder="Charcoal all the way, with onions and pepper sauce."
+                  placeholder={tm("descPlaceholder")}
                 />
               </label>
 
               <div className="amn-field-row">
                 <label className="amn-field">
-                  Category
+                  {tm("category")}
                   <select value={editItem.category ?? ""} onChange={(e) => set("category", e.target.value)}>
                     {categories.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </label>
                 <label className="amn-field">
-                  Position
+                  {tm("position")}
                   <input
                     type="number"
                     min={0}
@@ -291,42 +294,42 @@ export function AdminMenu() {
 
               <div className="amn-field-row">
                 <label className="amn-field">
-                  Price, FCFA
+                  {tm("priceFcfa")}
                   <input
                     type="number"
                     min={0}
                     value={editItem.price_fcfa ?? ""}
                     onChange={(e) => set("price_fcfa", e.target.value ? Number(e.target.value) : null)}
-                    placeholder="2500"
+                    placeholder={tm("pricePlaceholder")}
                   />
                 </label>
                 <label className="amn-field">
-                  Price label
+                  {tm("priceLabel")}
                   <input
                     type="text"
                     value={editItem.price_label ?? ""}
                     maxLength={40}
                     onChange={(e) => set("price_label", e.target.value || null)}
-                    placeholder="from 2,500 FCFA"
+                    placeholder={tm("priceLabelPlaceholder")}
                   />
                 </label>
               </div>
               <p className="amn-hint">
-                A label replaces the number on the board. Leave both empty for “Ask for counter”.
+                {tm("priceHint")}
               </p>
 
               <div className="amn-field">
-                Photo
+                {tm("photo")}
                 <div className="amn-photo">
                   {editItem.image_url ? (
                     <img className="amn-photo-preview" src={editItem.image_url} alt="" />
                   ) : (
-                    <span className="amn-photo-blank" aria-hidden="true">No photo</span>
+                    <span className="amn-photo-blank" aria-hidden="true">{tm("noPhoto")}</span>
                   )}
 
                   <div className="amn-photo-controls">
                     <label className="btn btn-outline btn-sm amn-upload">
-                      {editItem.image_url ? "Replace" : "Upload"}
+                      {editItem.image_url ? tm("replace") : tm("upload")}
                       <input
                         type="file"
                         accept="image/*"
@@ -340,7 +343,7 @@ export function AdminMenu() {
                     </label>
                     {editItem.image_url && (
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => set("image_url", null)}>
-                        Remove
+                        {tm("remove")}
                       </button>
                     )}
                   </div>
@@ -348,7 +351,7 @@ export function AdminMenu() {
               </div>
 
               <label className="amn-field">
-                Or paste an image URL
+                {tm("pasteUrl")}
                 <input
                   type="url"
                   value={editItem.image_url?.startsWith("data:") ? "" : (editItem.image_url ?? "")}
@@ -361,9 +364,9 @@ export function AdminMenu() {
             </div>
 
             <footer className="amn-sheet-foot">
-              <button className="btn btn-outline" onClick={closeEdit}>Cancel</button>
+              <button className="btn btn-outline" onClick={closeEdit}>{tm("cancel")}</button>
               <button className="btn btn-amber" disabled={busy !== null} onClick={save}>
-                {busy !== null ? "Saving" : "Save"}
+                {busy !== null ? tm("saving") : tm("save")}
               </button>
             </footer>
           </aside>
@@ -372,9 +375,9 @@ export function AdminMenu() {
 
       <ConfirmModal
         open={deleteTarget !== null}
-        title={`Delete "${deleteTarget?.name}"?`}
-        body="This removes the item from the menu permanently."
-        confirmLabel="Delete"
+        title={tm("deleteTitle").replace("{name}", deleteTarget?.name ?? "")}
+        body={tm("deleteBody")}
+        confirmLabel={tm("delete")}
         confirmClass="btn-danger"
         onConfirm={doDelete}
         onCancel={() => setDeleteTarget(null)}
