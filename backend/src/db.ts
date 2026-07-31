@@ -19,6 +19,12 @@ types.setTypeParser(1700, (val: string) => parseFloat(val));
 export const pool = new Pool({
   connectionString: DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+  // This Supabase project is shared with an unrelated app living in `public`.
+  // camchop's tables live in their own `camchop` schema (see the
+  // move_camchop_to_dedicated_schema migration) so every unqualified table
+  // name in this codebase's ~190 queries resolves there instead of colliding
+  // with the other app's tables of the same name.
+  options: "-c search_path=camchop,public",
 });
 
 /** The value types columns accept from this codebase. */
