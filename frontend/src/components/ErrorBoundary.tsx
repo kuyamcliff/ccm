@@ -1,5 +1,6 @@
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
+import { useLanguage } from "../i18n/context";
 
 interface Props {
   children: ReactNode;
@@ -7,6 +8,38 @@ interface Props {
 
 interface State {
   error: Error | null;
+}
+
+function ErrorScreen({ isStaleChunk, onReload, onReset }: {
+  isStaleChunk: boolean;
+  onReload: () => void;
+  onReset: () => void;
+}) {
+  const { t } = useLanguage();
+  const te = (key: string) => t("errorBoundary", key);
+  return (
+    <div className="section" role="alert">
+      <div className="section-inner error-screen">
+        <p className="eyebrow">{te("eyebrow")}</p>
+        <h1 className="section-title">
+          {isStaleChunk ? te("staleTitle") : te("crashTitle")}
+        </h1>
+        <p className="error-screen-body">
+          {isStaleChunk ? te("staleBody") : te("crashBody")}
+        </p>
+        <div className="error-screen-actions">
+          <button className="btn btn-amber" onClick={onReload}>
+            {te("reload")}
+          </button>
+          {!isStaleChunk && (
+            <a className="btn btn-outline" href="/" onClick={onReset}>
+              {te("backHome")}
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -27,6 +60,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   private reset = () => this.setState({ error: null });
+  private reload = () => window.location.reload();
 
   render() {
     const { error } = this.state;
@@ -35,30 +69,6 @@ export class ErrorBoundary extends Component<Props, State> {
     const isStaleChunk =
       /dynamically imported module|Importing a module script failed|Failed to fetch/i.test(error.message);
 
-    return (
-      <div className="section" role="alert">
-        <div className="section-inner error-screen">
-          <p className="eyebrow">Something went wrong</p>
-          <h1 className="section-title">
-            {isStaleChunk ? "The site was just updated" : "This page hit a problem"}
-          </h1>
-          <p className="error-screen-body">
-            {isStaleChunk
-              ? "Reload to pick up the newest version. Nothing you entered has been sent."
-              : "The rest of the site still works. Try again, or head back to the home page."}
-          </p>
-          <div className="error-screen-actions">
-            <button className="btn btn-amber" onClick={() => window.location.reload()}>
-              Reload the page
-            </button>
-            {!isStaleChunk && (
-              <a className="btn btn-outline" href="/" onClick={this.reset}>
-                Back to home
-              </a>
-            )}
-          </div>
-        </div>
-      </div>
-    );
+    return <ErrorScreen isStaleChunk={isStaleChunk} onReload={this.reload} onReset={this.reset} />;
   }
 }

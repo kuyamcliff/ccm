@@ -5,6 +5,7 @@ import type { SupportMessage, SupportThreadSummary } from "../api";
 import { useAuth } from "../auth";
 import { useSettings } from "../settings";
 import { openStream } from "../lib/stream";
+import { useLanguage } from "../i18n/context";
 
 /**
  * Routes where the floating launcher is suppressed.
@@ -41,6 +42,10 @@ export function SupportChat() {
   const { user } = useAuth();
   const { city, whatsappHref } = useSettings();
   const { pathname } = useLocation();
+  const { t } = useLanguage();
+  const ts = (key: string) => t("supportChat", key);
+  const tsRef = useRef(ts);
+  tsRef.current = ts;
 
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>("chat");
@@ -151,7 +156,7 @@ export function SupportChat() {
       setAdminTyping(r.typing?.who === "admin" ? r.typing.name : null);
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load that conversation.");
+      setError(e instanceof Error ? e.message : tsRef.current("errLoad"));
     } finally {
       setLoading(false);
     }
@@ -242,7 +247,7 @@ export function SupportChat() {
         return [r.thread, ...without];
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Message did not send.");
+      setError(err instanceof Error ? err.message : tsRef.current("errSend"));
     } finally {
       setSending(false);
     }
@@ -250,8 +255,8 @@ export function SupportChat() {
 
   if (hidden) return null;
 
-  const waHref = whatsappHref(`Hi, I have a question about Cam Chop Meat in ${city}.`);
-  const active = threads.find((t) => t.id === activeId) ?? null;
+  const waHref = whatsappHref(ts("waMessage").replace("{city}", city));
+  const active = threads.find((th) => th.id === activeId) ?? null;
 
   return (
     <>
@@ -260,7 +265,7 @@ export function SupportChat() {
           type="button"
           className="sc-fab"
           onClick={() => setOpen(true)}
-          aria-label={unread > 0 ? `Open support chat, ${unread} new` : "Open support chat"}
+          aria-label={unread > 0 ? ts("openChatUnread").replace("{n}", String(unread)) : ts("openChat")}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="24" height="24" aria-hidden="true">
             <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
@@ -270,10 +275,10 @@ export function SupportChat() {
       )}
 
       {open && (
-        <div className="sc-panel" role="dialog" aria-label="Support chat">
+        <div className="sc-panel" role="dialog" aria-label={ts("panelAriaLabel")}>
           <header className="sc-head">
             {view === "chat" && threads.length > 0 && (
-              <button type="button" className="sc-head-back" onClick={() => setView("list")} aria-label="All conversations">
+              <button type="button" className="sc-head-back" onClick={() => setView("list")} aria-label={ts("allConversations")}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                   <path d="m15 18-6-6 6-6" />
                 </svg>
@@ -282,23 +287,23 @@ export function SupportChat() {
 
             <div className="sc-head-info">
               <p className="sc-head-title">
-                {view === "list" ? "Your conversations" : active ? active.subject : "Chat with us"}
+                {view === "list" ? ts("yourConversations") : active ? active.subject : ts("chatWithUs")}
               </p>
               <p className={`sc-presence${staffed ? " on" : ""}`}>
                 <span className="sc-presence-dot" aria-hidden="true" />
-                {staffed ? "We are online" : "Away, leave a message"}
+                {staffed ? ts("weAreOnline") : ts("awayLeaveMessage")}
               </p>
             </div>
 
             <div className="sc-head-actions">
               {view === "chat" && (
-                <button type="button" className="sc-head-btn" onClick={startNewChat} aria-label="Start a new conversation" title="New conversation">
+                <button type="button" className="sc-head-btn" onClick={startNewChat} aria-label={ts("newConversation")} title={ts("newConversationTitle")}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                     <path d="M12 5v14M5 12h14" />
                   </svg>
                 </button>
               )}
-              <button type="button" className="sc-close" onClick={() => setOpen(false)} aria-label="Close chat">
+              <button type="button" className="sc-close" onClick={() => setOpen(false)} aria-label={ts("closeChat")}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                   <path d="M18 6 6 18M6 6l12 12" />
                 </svg>
@@ -306,7 +311,7 @@ export function SupportChat() {
             </div>
           </header>
 
-          {!connected && <p className="sc-offline" role="status">Reconnecting</p>}
+          {!connected && <p className="sc-offline" role="status">{ts("reconnecting")}</p>}
 
           {/* ── History ── */}
           {view === "list" && (
@@ -315,24 +320,24 @@ export function SupportChat() {
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                   <path d="M12 5v14M5 12h14" />
                 </svg>
-                Start a new conversation
+                {ts("newConversation")}
               </button>
 
               <ul className="sc-threads">
-                {threads.map((t) => (
-                  <li key={t.id}>
+                {threads.map((th) => (
+                  <li key={th.id}>
                     <button
                       type="button"
-                      className={`sc-thread${t.id === activeId ? " active" : ""}`}
-                      onClick={() => openThread(t)}
+                      className={`sc-thread${th.id === activeId ? " active" : ""}`}
+                      onClick={() => openThread(th)}
                     >
                       <span className="sc-thread-head">
-                        <span className="sc-thread-subject">{t.subject}</span>
-                        <span className="sc-thread-when mono">{formatDay(t.last_message_at)}</span>
+                        <span className="sc-thread-subject">{th.subject}</span>
+                        <span className="sc-thread-when mono">{formatDay(th.last_message_at)}</span>
                       </span>
                       <span className="sc-thread-meta">
-                        <span className={`sc-thread-state ${t.status}`}>{t.status === "open" ? "Open" : "Closed"}</span>
-                        {t.unread_for_user > 0 && <span className="sc-thread-unread">{t.unread_for_user}</span>}
+                        <span className={`sc-thread-state ${th.status}`}>{th.status === "open" ? ts("open") : ts("closed")}</span>
+                        {th.unread_for_user > 0 && <span className="sc-thread-unread">{th.unread_for_user}</span>}
                       </span>
                     </button>
                   </li>
@@ -344,12 +349,10 @@ export function SupportChat() {
           {/* ── Transcript ── */}
           {view === "chat" && (
             <div className="sc-body" ref={scrollRef}>
-              {loading && messages.length === 0 && <p className="sc-meta">Loading</p>}
+              {loading && messages.length === 0 && <p className="sc-meta">{ts("loading")}</p>}
 
               {!loading && messages.length === 0 && (
-                <p className="sc-empty">
-                  Ask us anything: opening hours, big bookings, whether the goat is on today.
-                </p>
+                <p className="sc-empty">{ts("emptyPrompt")}</p>
               )}
 
               {messages.map((m) =>
@@ -357,7 +360,7 @@ export function SupportChat() {
                   <p key={m.id} className="sc-system">{m.body}</p>
                 ) : (
                   <div key={m.id} className={`sc-msg${m.sender === "admin" ? " from-admin" : " from-user"}`}>
-                    {m.sender === "admin" && <span className="sc-msg-who">{m.author_name || "Cam Chop Meat"}</span>}
+                    {m.sender === "admin" && <span className="sc-msg-who">{m.author_name || ts("defaultBrand")}</span>}
                     <p className="sc-msg-body">{m.body}</p>
                     <span className="sc-msg-time">{formatTime(m.created_at)}</span>
                   </div>
@@ -367,7 +370,7 @@ export function SupportChat() {
               {adminTyping && (
                 <div className="sc-msg from-admin sc-typing-msg">
                   <span className="sc-msg-who">{adminTyping}</span>
-                  <span className="sc-typing" aria-label={`${adminTyping} is typing`}>
+                  <span className="sc-typing" aria-label={`${adminTyping} ${ts("typingSuffix")}`}>
                     <span /><span /><span />
                   </span>
                 </div>
@@ -383,7 +386,7 @@ export function SupportChat() {
                 <input
                   className="sc-name"
                   type="text"
-                  placeholder="Your name (optional)"
+                  placeholder={ts("namePlaceholder")}
                   value={name}
                   maxLength={60}
                   onChange={(e) => setName(e.target.value)}
@@ -393,7 +396,7 @@ export function SupportChat() {
                 <textarea
                   className="sc-input"
                   rows={1}
-                  placeholder="Type your message"
+                  placeholder={ts("messagePlaceholder")}
                   value={draft}
                   maxLength={2000}
                   onChange={(e) => { setDraft(e.target.value); signalTyping(); }}
@@ -402,7 +405,7 @@ export function SupportChat() {
                   }}
                 />
                 <button className="btn btn-amber btn-sm" disabled={sending || !draft.trim()}>
-                  {sending ? "Sending" : "Send"}
+                  {sending ? ts("sending") : ts("send")}
                 </button>
               </div>
             </form>
@@ -412,7 +415,7 @@ export function SupportChat() {
             <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15" aria-hidden="true">
               <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
             </svg>
-            Prefer WhatsApp? Continue there
+            {ts("preferWhatsapp")}
           </a>
         </div>
       )}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { RestaurantTable } from "../api";
+import { useLanguage } from "../i18n/context";
 
 interface Props {
   tables: RestaurantTable[];
@@ -53,13 +54,16 @@ function ChairDots({ cx, cy, r, capacity, status }: {
 }
 
 function FurnitureShape({ f }: { f: Furniture }) {
+  const { t } = useLanguage();
+  const tm = (key: string) => t("tableMap", key);
+
   if (f.type === "tv") return (
     <g style={{ pointerEvents: "none" }}>
       <rect x={f.x} y={f.y} width={70} height={40} rx={3} fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.18)" strokeWidth={1.5} />
       <rect x={f.x + 3} y={f.y + 3} width={64} height={28} rx={2} fill="rgba(30,60,120,0.35)" stroke="rgba(80,130,220,0.3)" strokeWidth={1} />
       <line x1={f.x + 28} y1={f.y + 40} x2={f.x + 42} y2={f.y + 40} stroke="rgba(255,255,255,0.15)" strokeWidth={3} strokeLinecap="round" />
       <line x1={f.x + 35} y1={f.y + 43} x2={f.x + 35} y2={f.y + 46} stroke="rgba(255,255,255,0.15)" strokeWidth={2} />
-      <text x={f.x + 35} y={f.y + 18} textAnchor="middle" fill="rgba(80,140,220,0.7)" style={{ fontSize: 9, fontFamily: "var(--sans)" }}>TV</text>
+      <text x={f.x + 35} y={f.y + 18} textAnchor="middle" fill="rgba(80,140,220,0.7)" style={{ fontSize: 9, fontFamily: "var(--sans)" }}>{tm("furnitureTv")}</text>
     </g>
   );
 
@@ -69,7 +73,7 @@ function FurnitureShape({ f }: { f: Furniture }) {
       {[0, 1, 2, 3].map((i) => (
         <circle key={i} cx={f.x + 9} cy={f.y + 10 + i * 20} r={4} fill="rgba(200,140,60,0.2)" stroke="rgba(200,140,60,0.35)" strokeWidth={1} />
       ))}
-      <text x={f.x + 9} y={f.y + 93} textAnchor="middle" fill="rgba(200,140,60,0.7)" style={{ fontSize: 8, fontFamily: "var(--sans)" }}>Bar</text>
+      <text x={f.x + 9} y={f.y + 93} textAnchor="middle" fill="rgba(200,140,60,0.7)" style={{ fontSize: 8, fontFamily: "var(--sans)" }}>{tm("furnitureBar")}</text>
     </g>
   );
 
@@ -88,7 +92,7 @@ function FurnitureShape({ f }: { f: Furniture }) {
       <rect x={f.x + 5} y={f.y} width={54} height={14} rx={5} fill="rgba(100,75,50,0.35)" stroke="rgba(140,100,60,0.35)" strokeWidth={1} />
       <rect x={f.x} y={f.y + 8} width={10} height={30} rx={5} fill="rgba(90,68,45,0.35)" stroke="rgba(140,100,60,0.35)" strokeWidth={1} />
       <rect x={f.x + 54} y={f.y + 8} width={10} height={30} rx={5} fill="rgba(90,68,45,0.35)" stroke="rgba(140,100,60,0.35)" strokeWidth={1} />
-      <text x={f.x + 32} y={f.y + 53} textAnchor="middle" fill="rgba(180,130,80,0.6)" style={{ fontSize: 8, fontFamily: "var(--sans)" }}>Lounge</text>
+      <text x={f.x + 32} y={f.y + 53} textAnchor="middle" fill="rgba(180,130,80,0.6)" style={{ fontSize: 8, fontFamily: "var(--sans)" }}>{tm("furnitureSofa")}</text>
     </g>
   );
 
@@ -96,19 +100,21 @@ function FurnitureShape({ f }: { f: Furniture }) {
     <g style={{ pointerEvents: "none" }}>
       <rect x={f.x} y={f.y} width={30} height={22} rx={3} fill="rgba(80,80,120,0.3)" stroke="rgba(100,100,180,0.4)" strokeWidth={1.5} />
       <rect x={f.x + 2} y={f.y + 2} width={26} height={14} rx={2} fill="rgba(40,40,80,0.4)" />
-      <text x={f.x + 15} y={f.y + 34} textAnchor="middle" fill="rgba(120,120,200,0.6)" style={{ fontSize: 8, fontFamily: "var(--sans)" }}>Host</text>
+      <text x={f.x + 15} y={f.y + 34} textAnchor="middle" fill="rgba(120,120,200,0.6)" style={{ fontSize: 8, fontFamily: "var(--sans)" }}>{tm("furnitureHost")}</text>
     </g>
   );
 
   return (
     <g style={{ pointerEvents: "none" }}>
       <rect x={f.x} y={f.y} width={120} height={35} rx={4} fill="rgba(212,37,37,0.07)" stroke="rgba(212,37,37,0.25)" strokeWidth={1.5} strokeDasharray="4,3" />
-      <text x={f.x + 60} y={f.y + 22} textAnchor="middle" fill="rgba(212,37,37,0.45)" style={{ fontSize: 10, fontFamily: "var(--sans)", letterSpacing: "0.08em" }}>STAGE</text>
+      <text x={f.x + 60} y={f.y + 22} textAnchor="middle" fill="rgba(212,37,37,0.45)" style={{ fontSize: 10, fontFamily: "var(--sans)", letterSpacing: "0.08em" }}>{tm("furnitureStageCaps")}</text>
     </g>
   );
 }
 
 export function TableMap({ tables, selected, onSelect, partySize = 1 }: Props) {
+  const { t } = useLanguage();
+  const tm = (key: string) => t("tableMap", key);
   const [furniture, setFurniture] = useState<Furniture[]>([]);
 
   useEffect(() => {
@@ -134,9 +140,9 @@ export function TableMap({ tables, selected, onSelect, partySize = 1 }: Props) {
   return (
     <div className="table-map-wrapper">
       <div className="table-map-legend">
-        <span className="legend-item available">Available</span>
-        <span className="legend-item reserved">Reserved</span>
-        <span className="legend-item selected">Your selection</span>
+        <span className="legend-item available">{tm("legendAvailable")}</span>
+        <span className="legend-item reserved">{tm("legendReserved")}</span>
+        <span className="legend-item selected">{tm("legendSelected")}</span>
       </div>
 
       <div className="table-map">
@@ -144,7 +150,7 @@ export function TableMap({ tables, selected, onSelect, partySize = 1 }: Props) {
           viewBox={`0 0 ${SVG_W} ${SVG_H}`}
           xmlns="http://www.w3.org/2000/svg"
           role="img"
-          aria-label="Restaurant floor plan"
+          aria-label={tm("ariaFloorPlan")}
           style={{ width: "100%", display: "block" }}
         >
           <defs>
@@ -176,11 +182,11 @@ export function TableMap({ tables, selected, onSelect, partySize = 1 }: Props) {
           {/* Indoor zone */}
           <rect x={6} y={6} width={SVG_W - 12} height={INDOOR_H}
             rx={8} fill="rgba(255,255,255,0.014)" stroke="rgba(255,255,255,0.1)" strokeWidth={1.5} />
-          <text x={18} y={26} className="fp-zone-label">Indoor · Main hall</text>
+          <text x={18} y={26} className="fp-zone-label">{tm("indoorMainHall")}</text>
 
           {/* Entrance */}
           <rect x={6} y={INDOOR_H / 2 - 30} width={5} height={60} rx={2.5} fill="rgba(255,255,255,0.3)" />
-          <text x={17} y={INDOOR_H / 2 - 6} className="fp-zone-sub">Entrance</text>
+          <text x={17} y={INDOOR_H / 2 - 6} className="fp-zone-sub">{tm("entrance")}</text>
           <text x={17} y={INDOOR_H / 2 + 8} className="fp-zone-sub">↑</text>
 
           {/* Grill / Kitchen */}
@@ -188,13 +194,13 @@ export function TableMap({ tables, selected, onSelect, partySize = 1 }: Props) {
             fill="rgba(212,37,37,0.07)" stroke="rgba(212,37,37,0.25)" strokeWidth={1.2} />
           <circle cx={SVG_W - 75} cy={46} r={26} fill="url(#pub-grill-glow)" />
           <text x={SVG_W - 75} y={40} textAnchor="middle" fill="rgba(212,37,37,0.6)" style={{ fontSize: 11, fontFamily: "var(--mono)", letterSpacing: 2 }}>▲▲▲</text>
-          <text x={SVG_W - 75} y={58} textAnchor="middle" fill="rgba(212,37,37,0.5)" style={{ fontSize: 9, fontFamily: "var(--sans)", letterSpacing: "0.06em" }}>Charcoal Grill</text>
+          <text x={SVG_W - 75} y={58} textAnchor="middle" fill="rgba(212,37,37,0.5)" style={{ fontSize: 9, fontFamily: "var(--sans)", letterSpacing: "0.06em" }}>{tm("charcoalGrill")}</text>
 
           {/* Outdoor terrace */}
           <rect x={6} y={OUTDOOR_Y} width={SVG_W - 12} height={SVG_H - OUTDOOR_Y - 6}
             rx={8} fill="rgba(255,255,255,0.008)"
             stroke="rgba(255,255,255,0.08)" strokeWidth={1.5} strokeDasharray="6,5" />
-          <text x={18} y={OUTDOOR_Y + 22} className="fp-zone-label">Outdoor terrace</text>
+          <text x={18} y={OUTDOOR_Y + 22} className="fp-zone-label">{tm("outdoorTerrace")}</text>
 
           {/* Zone divider */}
           <line x1={20} y1={OUTDOOR_Y - 12} x2={SVG_W - 20} y2={OUTDOOR_Y - 12}
@@ -226,7 +232,10 @@ export function TableMap({ tables, selected, onSelect, partySize = 1 }: Props) {
                 key={t.id}
                 onClick={() => handleClick(t)}
                 role="button"
-                aria-label={`Table ${t.label}, ${t.capacity} seats, ${status}`}
+                aria-label={tm("tableAriaLabel")
+                  .replace("{label}", t.label)
+                  .replace("{capacity}", String(t.capacity))
+                  .replace("{status}", status === "selected" ? tm("statusSelected") : status === "reserved" ? tm("statusReserved") : tm("statusAvailable"))}
                 aria-pressed={selected === t.id}
                 tabIndex={t.available ? 0 : -1}
                 style={{ cursor: t.available ? "pointer" : "not-allowed" }}
@@ -257,13 +266,15 @@ export function TableMap({ tables, selected, onSelect, partySize = 1 }: Props) {
       </div>
 
       {selected && (() => {
-        const t = tables.find((x) => x.id === selected);
-        return t ? (
+        const table = tables.find((x) => x.id === selected);
+        return table ? (
           <p className="table-selected-info">
-            Selected: <strong>Table {t.label}</strong> · {t.capacity} seats ·{" "}
-            {t.zone === "outdoor" ? "Outdoor terrace" : "Indoor main hall"}
-            {partySize > t.capacity && (
-              <span className="table-warning">This table seats {t.capacity}, your party is {partySize}</span>
+            {tm("selectedLabel")} <strong>{tm("tableLabel").replace("{label}", table.label)}</strong> · {tm("seatsCount").replace("{n}", String(table.capacity))} ·{" "}
+            {table.zone === "outdoor" ? tm("outdoorTerraceOption") : tm("indoorMainHallOption")}
+            {partySize > table.capacity && (
+              <span className="table-warning">
+                {tm("warningSeats").replace("{capacity}", String(table.capacity)).replace("{party}", String(partySize))}
+              </span>
             )}
           </p>
         ) : null;

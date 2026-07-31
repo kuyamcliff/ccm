@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../api";
 import type { MomoStatus } from "../api";
+import { useLanguage } from "../i18n/context";
 
 interface Props {
   /** Reference returned by initiatePayment. Null closes the modal. */
@@ -44,6 +45,11 @@ export function MomoPaymentModal({
   pollStatus = api.paymentStatus,
   cancelPayment = api.cancelPayment,
 }: Props) {
+  const { t } = useLanguage();
+  const tp = (key: string) => t("momoPayment", key);
+  const tpRef = useRef(tp);
+  tpRef.current = tp;
+
   const [phase, setPhase] = useState<"waiting" | "success" | "failed">("waiting");
   const [message, setMessage] = useState<string | null>(null);
   const [remaining, setRemaining] = useState(windowSeconds);
@@ -96,14 +102,14 @@ export function MomoPaymentModal({
         } else if (status.status === "failed") {
           settledRef.current = true;
           setPhase("failed");
-          setMessage(status.message ?? "The payment did not go through.");
+          setMessage(status.message ?? tpRef.current("errGenericFail"));
         }
       } catch (err) {
         // A dropped poll is not a failed payment; the next one will catch up.
         if (err instanceof ApiError && err.status === 404) {
           settledRef.current = true;
           setPhase("failed");
-          setMessage("We lost track of that payment. Check My Tables before trying again.");
+          setMessage(tpRef.current("errLostTrack"));
         }
       }
     }
@@ -158,44 +164,41 @@ export function MomoPaymentModal({
               </span>
             </div>
 
-            <h2 id="pay-title" className="pay-title">Check your phone</h2>
+            <h2 id="pay-title" className="pay-title">{tp("checkPhone")}</h2>
 
             <p className="pay-amount">
               {amountFcfa.toLocaleString()} <span>FCFA</span>
             </p>
-            <p className="pay-target">to be charged to {momoPhone}</p>
+            <p className="pay-target">{tp("chargedTo").replace("{phone}", momoPhone)}</p>
 
             {/* Each <li> holds exactly one child element: the list is a grid,
                 and bare text runs beside an inline tag would each become their
                 own grid item and break the row apart. */}
             <ol className="pay-steps">
-              <li><span>A Mobile Money prompt is on its way to your phone.</span></li>
-              <li><span>Enter your MoMo PIN to approve it.</span></li>
+              <li><span>{tp("step1")}</span></li>
+              <li><span>{tp("step2")}</span></li>
               <li>
                 <span>
-                  No prompt? Dial <strong className="mono">*126#</strong> and approve the pending
-                  request from the menu.
+                  {tp("step3Pre")} <strong className="mono">*126#</strong> {tp("step3Post")}
                 </span>
               </li>
             </ol>
 
             <div className={`pay-timer${remaining <= 30 ? " urgent" : ""}`} role="timer" aria-live="off">
               {expired ? (
-                <span>Time is up, checking one last time…</span>
+                <span>{tp("timeUp")}</span>
               ) : (
                 <>
                   <span className="pay-timer-clock mono">{formatClock(remaining)}</span>
-                  <span>left to approve</span>
+                  <span>{tp("left")}</span>
                 </>
               )}
             </div>
 
-            <p className="pay-reassure">
-              Nothing is taken from your account until you enter your PIN. Keep this page open.
-            </p>
+            <p className="pay-reassure">{tp("reassure")}</p>
 
             <button type="button" className="btn btn-outline pay-cancel" onClick={dismiss} disabled={cancelling}>
-              {cancelling ? "Cancelling…" : "Cancel payment"}
+              {cancelling ? tp("cancelling") : tp("cancelPayment")}
             </button>
           </>
         )}
@@ -207,9 +210,9 @@ export function MomoPaymentModal({
                 <path d="m4 12.5 5.5 5.5L20 7" />
               </svg>
             </span>
-            <h2 className="pay-title">Payment successful</h2>
+            <h2 className="pay-title">{tp("paymentSuccessful")}</h2>
             <p className="pay-result-body">
-              {amountFcfa.toLocaleString()} FCFA received. Bringing up your receipt…
+              {tp("receivedBringing").replace("{amount}", amountFcfa.toLocaleString())}
             </p>
           </div>
         )}
@@ -221,13 +224,11 @@ export function MomoPaymentModal({
                 <path d="M18 6 6 18M6 6l12 12" />
               </svg>
             </span>
-            <h2 className="pay-title">Payment not completed</h2>
+            <h2 className="pay-title">{tp("paymentNotCompleted")}</h2>
             <p className="pay-result-body">{message}</p>
-            <p className="pay-reassure">
-              Nothing was charged. Your table is still held, try again, or pay at the door.
-            </p>
+            <p className="pay-reassure">{tp("notCharged")}</p>
             <button type="button" className="btn btn-amber pay-cancel" onClick={onDismiss}>
-              Try again
+              {tp("tryAgain")}
             </button>
           </div>
         )}

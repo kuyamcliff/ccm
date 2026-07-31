@@ -54,16 +54,16 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ErrorBoundary>
-      <BrowserRouter>
-        <LanguageProvider>
+    <BrowserRouter>
+      <LanguageProvider>
+        <ErrorBoundary>
           <AuthProvider>
             <SettingsProvider>
               <App />
             </SettingsProvider>
           </AuthProvider>
-        </LanguageProvider>
-      </BrowserRouter>
-    </ErrorBoundary>
+        </ErrorBoundary>
+      </LanguageProvider>
+    </BrowserRouter>
   </StrictMode>
 );
