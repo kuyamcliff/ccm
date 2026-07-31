@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, GalleryPhoto } from "../../api";
 import { ConfirmModal } from "../../components/ConfirmModal";
+import { useLanguage } from "../../i18n/context";
 
 type FilterTab = "all" | "pending" | "approved" | "featured";
 
 export default function AdminGallery() {
+  const { t } = useLanguage();
+  const tg = (key: string) => t("adminGallery", key);
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<FilterTab>("all");
@@ -28,13 +31,13 @@ export default function AdminGallery() {
   async function approve(id: number) {
     await api.admin.updatePhoto(id, { is_approved: true });
     load();
-    showToast("Photo approved.");
+    showToast(tg("approvedToast"));
   }
 
   async function unapprove(id: number) {
     await api.admin.updatePhoto(id, { is_approved: false });
     load();
-    showToast("Photo moved back to pending.");
+    showToast(tg("unapprovedToast"));
   }
 
   async function toggleFeatured(photo: GalleryPhoto) {
@@ -47,13 +50,13 @@ export default function AdminGallery() {
     setDeleteTarget(null);
     await api.admin.deletePhoto(deleteTarget);
     load();
-    showToast("Photo deleted.");
+    showToast(tg("deletedToast"));
   }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 6 * 1024 * 1024) { showToast("Image must be under 6 MB."); return; }
+    if (file.size > 6 * 1024 * 1024) { showToast(tg("errTooBig")); return; }
     const reader = new FileReader();
     reader.onload = () => setUploadPreview(reader.result as string);
     reader.readAsDataURL(file);
@@ -71,11 +74,11 @@ export default function AdminGallery() {
     setUploading(true);
     try {
       await api.admin.uploadPhoto({ image_url: uploadPreview, caption: uploadCaption });
-      showToast("Photo uploaded and published.");
+      showToast(tg("uploadedToast"));
       closeUpload();
       load();
     } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : "Upload failed.");
+      showToast(err instanceof Error ? err.message : tg("errUpload"));
     } finally {
       setUploading(false);
     }
@@ -101,42 +104,42 @@ export default function AdminGallery() {
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
-          <h1 className="admin-page-title">Photo Gallery</h1>
-          <p className="admin-page-sub">Every photo submitted by users or uploaded by admins lands here, approved or not.</p>
+          <h1 className="admin-page-title">{tg("title")}</h1>
+          <p className="admin-page-sub">{tg("subtitle")}</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => setUploadOpen(true)}>+ Upload photo</button>
+        <button className="btn btn-primary btn-sm" onClick={() => setUploadOpen(true)}>{tg("uploadPhoto")}</button>
       </div>
 
       <div className="adash-stats">
         <div className="adash-stat">
           <p className="adash-stat-val">{counts.all}</p>
-          <p className="adash-stat-lbl">Total photos</p>
+          <p className="adash-stat-lbl">{tg("totalPhotos")}</p>
         </div>
         <div className="adash-stat adash-stat-red">
           <p className="adash-stat-val">{counts.pending}</p>
-          <p className="adash-stat-lbl">Pending review</p>
+          <p className="adash-stat-lbl">{tg("pendingReview")}</p>
         </div>
         <div className="adash-stat adash-stat-green">
           <p className="adash-stat-val">{counts.approved}</p>
-          <p className="adash-stat-lbl">Approved</p>
+          <p className="adash-stat-lbl">{tg("approved")}</p>
         </div>
         <div className="adash-stat">
           <p className="adash-stat-val">{counts.featured}</p>
-          <p className="adash-stat-lbl">Featured</p>
+          <p className="adash-stat-lbl">{tg("featured")}</p>
         </div>
       </div>
 
       <div className="filter-chips" style={{ marginBottom: "1.5rem" }}>
-        <button className={`filter-chip${tab === "all" ? " active" : ""}`} onClick={() => setTab("all")}>All</button>
+        <button className={`filter-chip${tab === "all" ? " active" : ""}`} onClick={() => setTab("all")}>{tg("all")}</button>
         <button className={`filter-chip${tab === "pending" ? " active" : ""}`} onClick={() => setTab("pending")}>
-          Pending {counts.pending > 0 && <span className="badge-red">{counts.pending}</span>}
+          {tg("pending")} {counts.pending > 0 && <span className="badge-red">{counts.pending}</span>}
         </button>
-        <button className={`filter-chip${tab === "approved" ? " active" : ""}`} onClick={() => setTab("approved")}>Approved</button>
-        <button className={`filter-chip${tab === "featured" ? " active" : ""}`} onClick={() => setTab("featured")}>★ Featured</button>
+        <button className={`filter-chip${tab === "approved" ? " active" : ""}`} onClick={() => setTab("approved")}>{tg("approved")}</button>
+        <button className={`filter-chip${tab === "featured" ? " active" : ""}`} onClick={() => setTab("featured")}>★ {tg("featured")}</button>
       </div>
 
-      {loading && <p className="muted">Loading…</p>}
-      {!loading && display.length === 0 && <p className="muted">Nothing here.</p>}
+      {loading && <p className="muted">{tg("loading")}</p>}
+      {!loading && display.length === 0 && <p className="muted">{tg("nothingHere")}</p>}
 
       <div className="admin-gallery-grid">
         {display.map((p) => (
@@ -144,25 +147,25 @@ export default function AdminGallery() {
             <div className="admin-gallery-img-wrap">
               <img src={p.image_url} alt={p.caption || "Photo"} className="admin-gallery-img" />
               <span className={`badge admin-gallery-status ${p.is_approved ? "badge-green" : "badge-amber"}`}>
-                {p.is_approved ? "Approved" : "Pending"}
+                {p.is_approved ? tg("approved") : tg("pending")}
               </span>
-              {!!p.is_featured && <span className="admin-gallery-featured-tag" title="Featured">★</span>}
+              {!!p.is_featured && <span className="admin-gallery-featured-tag" title={tg("featured")}>★</span>}
             </div>
             <div className="admin-gallery-info">
-              <p className="admin-gallery-author">{p.submitter_name || "Unknown"}</p>
+              <p className="admin-gallery-author">{p.submitter_name || tg("unknown")}</p>
               {p.caption && <p className="admin-gallery-caption">{p.caption}</p>}
               <p className="hint">{new Date(p.created_at + "Z").toLocaleDateString()}</p>
             </div>
             <div className="admin-gallery-actions">
               {!p.is_approved ? (
-                <button className="btn btn-sm btn-primary" onClick={() => approve(p.id)}>Approve</button>
+                <button className="btn btn-sm btn-primary" onClick={() => approve(p.id)}>{tg("approve")}</button>
               ) : (
-                <button className="btn btn-sm btn-outline" onClick={() => unapprove(p.id)}>Unapprove</button>
+                <button className="btn btn-sm btn-outline" onClick={() => unapprove(p.id)}>{tg("unapprove")}</button>
               )}
               <button className="btn btn-sm btn-outline" onClick={() => toggleFeatured(p)}>
-                {p.is_featured ? "Unfeature" : "Feature"}
+                {p.is_featured ? tg("unfeature") : tg("feature")}
               </button>
-              <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(p.id)}>Delete</button>
+              <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(p.id)}>{tg("delete")}</button>
             </div>
           </div>
         ))}
@@ -170,9 +173,9 @@ export default function AdminGallery() {
 
       <ConfirmModal
         open={deleteTarget !== null}
-        title="Delete this photo?"
-        body="This permanently removes the photo from the gallery, whether it was approved or not."
-        confirmLabel="Delete"
+        title={tg("deleteTitle")}
+        body={tg("deleteBody")}
+        confirmLabel={tg("delete")}
         confirmClass="btn-danger"
         onConfirm={doDelete}
         onCancel={() => setDeleteTarget(null)}
@@ -181,12 +184,12 @@ export default function AdminGallery() {
       {uploadOpen && (
         <div className="modal-backdrop" onMouseDown={closeUpload}>
           <div className="modal-box" onMouseDown={(e) => e.stopPropagation()}>
-            <h2 className="modal-title">Upload photo</h2>
+            <h2 className="modal-title">{tg("uploadTitle")}</h2>
 
             <label style={{ display: "block", marginBottom: "0.75rem" }}>
               <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleFile} />
               <span className="rv-upload-btn" style={{ display: "block", textAlign: "center" }}>
-                {uploadPreview ? "Change image" : "Choose image"}
+                {uploadPreview ? tg("changeImage") : tg("chooseImage")}
               </span>
             </label>
 
@@ -197,18 +200,18 @@ export default function AdminGallery() {
             <input
               className="form-input"
               style={{ marginBottom: "0.75rem" }}
-              placeholder="Caption (optional)"
+              placeholder={tg("captionPlaceholder")}
               value={uploadCaption}
               onChange={(e) => setUploadCaption(e.target.value)}
               maxLength={200}
             />
 
-            <p className="hint" style={{ marginBottom: "1rem" }}>Admin uploads are published immediately, skipping the approval queue.</p>
+            <p className="hint" style={{ marginBottom: "1rem" }}>{tg("adminUploadHint")}</p>
 
             <div className="modal-actions">
-              <button type="button" className="btn btn-outline" onClick={closeUpload}>Cancel</button>
+              <button type="button" className="btn btn-outline" onClick={closeUpload}>{tg("cancel")}</button>
               <button className="btn btn-primary" onClick={submitUpload} disabled={uploading || !uploadPreview}>
-                {uploading ? "Uploading…" : "Publish photo"}
+                {uploading ? tg("uploading") : tg("publishPhoto")}
               </button>
             </div>
           </div>
