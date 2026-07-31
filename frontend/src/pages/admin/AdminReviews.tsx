@@ -3,10 +3,13 @@ import { api } from "../../api";
 import type { Review } from "../../api";
 import { Stars } from "../../components/Stars";
 import { ConfirmModal } from "../../components/ConfirmModal";
+import { useLanguage } from "../../i18n/context";
 
 type AdminReview = Review & { author: string };
 
 export function AdminReviews() {
+  const { t } = useLanguage();
+  const tr = (key: string) => t("adminReviews", key);
   const [reviews, setReviews] = useState<AdminReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -24,7 +27,7 @@ export function AdminReviews() {
       const r = await api.admin.reviews();
       setReviews(r.reviews);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load reviews.");
+      setError(e instanceof Error ? e.message : tr("errLoad"));
     } finally {
       setLoading(false);
     }
@@ -39,7 +42,7 @@ export function AdminReviews() {
       await api.admin.deleteReview(id);
       setReviews((rs) => rs.filter((r) => r.id !== id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Delete failed.");
+      setError(e instanceof Error ? e.message : tr("errDelete"));
     } finally {
       setBusy(null);
     }
@@ -56,7 +59,7 @@ export function AdminReviews() {
 
   return (
     <div>
-      <h1 className="admin-page-title">Reviews</h1>
+      <h1 className="admin-page-title">{tr("title")}</h1>
 
       {error && <p className="form-error" role="alert" style={{ marginBottom: "1rem" }}>{error}</p>}
 
@@ -66,7 +69,7 @@ export function AdminReviews() {
           <div className="review-admin-avg">
             <span className="review-admin-avg-num">{avg}</span>
             <Stars value={Math.round(Number(avg))} />
-            <span className="review-admin-count">{reviews.length} review{reviews.length !== 1 ? "s" : ""}</span>
+            <span className="review-admin-count">{reviews.length} {reviews.length !== 1 ? tr("reviewPlural") : tr("reviewSingular")}</span>
           </div>
           <div className="review-admin-dist">
             {dist.map((d) => (
@@ -86,9 +89,9 @@ export function AdminReviews() {
       )}
 
       {loading ? (
-        <p className="empty-admin">Loading...</p>
+        <p className="empty-admin">{tr("loading")}</p>
       ) : reviews.length === 0 ? (
-        <p className="empty-admin">No reviews yet.</p>
+        <p className="empty-admin">{tr("noReviews")}</p>
       ) : (
         <div className="review-admin-list">
           {reviews.map((r) => (
@@ -98,7 +101,7 @@ export function AdminReviews() {
                   <Stars value={r.rating} />
                   <p className="review-admin-author">
                     {r.author}
-                    <span className="review-admin-date"> · {r.updated_at.slice(0, 10)}</span>
+                    <span className="review-admin-date"> , {r.updated_at.slice(0, 10)}</span>
                   </p>
                 </div>
                 <button
@@ -106,7 +109,7 @@ export function AdminReviews() {
                   disabled={busy === r.id}
                   onClick={() => setDeleteTarget(r)}
                 >
-                  Delete
+                  {tr("delete")}
                 </button>
               </div>
               <p className="review-admin-text">{r.text}</p>
@@ -127,9 +130,9 @@ export function AdminReviews() {
 
       <ConfirmModal
         open={deleteTarget !== null}
-        title="Delete this review?"
-        body={`This removes ${deleteTarget?.author}'s review permanently. It cannot be undone.`}
-        confirmLabel="Delete review"
+        title={tr("deleteTitle")}
+        body={tr("deleteBody").replace("{author}", deleteTarget?.author ?? "")}
+        confirmLabel={tr("deleteReview")}
         confirmClass="btn-danger"
         onConfirm={doDelete}
         onCancel={() => setDeleteTarget(null)}
