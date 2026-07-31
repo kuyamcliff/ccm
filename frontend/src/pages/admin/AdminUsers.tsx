@@ -3,14 +3,18 @@ import { api } from "../../api";
 import type { AdminUser } from "../../api";
 import { useAuth } from "../../auth";
 import { ConfirmModal } from "../../components/ConfirmModal";
+import { useLanguage } from "../../i18n/context";
 
 function RoleBadge({ role }: { role: string }) {
+  const { t } = useLanguage();
   const cls = role === "super_admin" ? "role-badge super" : role === "admin" ? "role-badge admin" : "role-badge user";
-  const label = role === "super_admin" ? "Super admin" : role === "admin" ? "Admin" : "User";
+  const label = role === "super_admin" ? t("adminUsers", "superAdmin") : role === "admin" ? t("adminUsers", "admin") : t("adminUsers", "user");
   return <span className={cls}>{label}</span>;
 }
 
 export function AdminUsers() {
+  const { t } = useLanguage();
+  const tu = (key: string) => t("adminUsers", key);
   const { user: me } = useAuth();
   const isSuperAdmin = me?.role === "super_admin";
 
@@ -26,7 +30,7 @@ export function AdminUsers() {
   useEffect(() => {
     api.admin.users()
       .then((r) => setUsers(r.users))
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load users."))
+      .catch((e) => setError(e instanceof Error ? e.message : tu("errLoad")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -37,7 +41,7 @@ export function AdminUsers() {
       await api.admin.banUser(id);
       setUsers((us) => us.map((u) => u.id === id ? { ...u, banned_at: new Date().toISOString() } : u));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ban failed.");
+      setError(e instanceof Error ? e.message : tu("errBan"));
     } finally {
       setBusy(null);
     }
@@ -50,7 +54,7 @@ export function AdminUsers() {
       await api.admin.unbanUser(id);
       setUsers((us) => us.map((u) => u.id === id ? { ...u, banned_at: null } : u));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unban failed.");
+      setError(e instanceof Error ? e.message : tu("errUnban"));
     } finally {
       setBusy(null);
     }
@@ -62,7 +66,7 @@ export function AdminUsers() {
       await api.admin.setUserRole(id, role);
       setUsers((us) => us.map((u) => u.id === id ? { ...u, role } : u));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Role update failed.");
+      setError(e instanceof Error ? e.message : tu("errRole"));
     } finally {
       setBusy(null);
     }
@@ -75,7 +79,7 @@ export function AdminUsers() {
       await api.admin.deleteUser(id);
       setUsers((us) => us.filter((u) => u.id !== id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Delete failed.");
+      setError(e instanceof Error ? e.message : tu("errDelete"));
     } finally {
       setBusy(null);
     }
@@ -83,24 +87,24 @@ export function AdminUsers() {
 
   return (
     <div>
-      <h1 className="admin-page-title">Users</h1>
+      <h1 className="admin-page-title">{tu("title")}</h1>
 
       {error &&<p className="form-error" role="alert" style={{ marginBottom: "1rem" }}>{error}</p>}
 
       {loading ? (
-        <p className="empty-admin">Loading...</p>
+        <p className="empty-admin">{tu("loading")}</p>
       ) : (
         <div className="table-scroll">
           <table className="data-table">
             <thead>
               <tr>
-                <th>#</th>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Joined</th>
-                <th>Actions</th>
+                <th>{tu("colId")}</th>
+                <th>{tu("colName")}</th>
+                <th>{tu("colEmail")}</th>
+                <th>{tu("colRole")}</th>
+                <th>{tu("colStatus")}</th>
+                <th>{tu("colJoined")}</th>
+                <th>{tu("colActions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -108,16 +112,16 @@ export function AdminUsers() {
                 const isSelf = u.id === me?.id;
                 return (
                   <tr key={u.id} className={u.banned_at ? "row-cancelled" : ""}>
-                    <td data-label="ID" className="mono" style={{ color: "var(--text-muted)" }}>{u.id}</td>
-                    <td data-label="Name">{u.name} {isSelf && <span className="role-badge user" style={{ fontSize: "0.7rem" }}>you</span>}</td>
-                    <td data-label="Email" style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{u.email}</td>
-                    <td data-label="Role"><RoleBadge role={u.role} /></td>
-                    <td data-label="Status">
+                    <td data-label={tu("colId")} className="mono" style={{ color: "var(--text-muted)" }}>{u.id}</td>
+                    <td data-label={tu("colName")}>{u.name} {isSelf && <span className="role-badge user" style={{ fontSize: "0.7rem" }}>{tu("you")}</span>}</td>
+                    <td data-label={tu("colEmail")} style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{u.email}</td>
+                    <td data-label={tu("colRole")}><RoleBadge role={u.role} /></td>
+                    <td data-label={tu("colStatus")}>
                       {u.banned_at
-                        ? <span className="badge badge-red">Banned</span>
-                        : <span className="badge badge-green">Active</span>}
+                        ? <span className="badge badge-red">{tu("banned")}</span>
+                        : <span className="badge badge-green">{tu("active")}</span>}
                     </td>
-                    <td data-label="Joined" style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{u.created_at.slice(0, 10)}</td>
+                    <td data-label={tu("colJoined")} style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{u.created_at.slice(0, 10)}</td>
                     <td>
                       {!isSelf && (
                         <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
@@ -128,7 +132,7 @@ export function AdminUsers() {
                               disabled={busy === u.id}
                               onClick={() => setBanTarget(u)}
                             >
-                              Ban
+                              {tu("ban")}
                             </button>
                           )}
                           {u.banned_at && isSuperAdmin && (
@@ -137,7 +141,7 @@ export function AdminUsers() {
                               disabled={busy === u.id}
                               onClick={() => setUnbanTarget(u)}
                             >
-                              Unban
+                              {tu("unban")}
                             </button>
                           )}
                           {/* Role (super admin only) */}
@@ -148,8 +152,8 @@ export function AdminUsers() {
                               disabled={busy === u.id}
                               onChange={(e) => setRole(u.id, e.target.value as "user" | "admin")}
                             >
-                              <option value="user">User</option>
-                              <option value="admin">Admin</option>
+                              <option value="user">{tu("user")}</option>
+                              <option value="admin">{tu("admin")}</option>
                             </select>
                           )}
                           {/* Delete */}
@@ -159,7 +163,7 @@ export function AdminUsers() {
                               disabled={busy === u.id}
                               onClick={() => setDeleteTarget(u)}
                             >
-                              Delete
+                              {tu("delete")}
                             </button>
                           )}
                         </div>
@@ -175,9 +179,9 @@ export function AdminUsers() {
 
       <ConfirmModal
         open={banTarget !== null}
-        title={`Ban ${banTarget?.name}?`}
-        body="They will no longer be able to sign in. An admin can unban them later."
-        confirmLabel="Ban user"
+        title={tu("banTitle").replace("{name}", banTarget?.name ?? "")}
+        body={tu("banBody")}
+        confirmLabel={tu("banUser")}
         confirmClass="btn-danger"
         onConfirm={() => { if (banTarget) doBan(banTarget.id); }}
         onCancel={() => setBanTarget(null)}
@@ -185,9 +189,9 @@ export function AdminUsers() {
 
       <ConfirmModal
         open={unbanTarget !== null}
-        title={`Unban ${unbanTarget?.name}?`}
-        body="They will be able to sign in again."
-        confirmLabel="Unban"
+        title={tu("unbanTitle").replace("{name}", unbanTarget?.name ?? "")}
+        body={tu("unbanBody")}
+        confirmLabel={tu("unban")}
         confirmClass="btn-amber"
         onConfirm={() => { if (unbanTarget) doUnban(unbanTarget.id); }}
         onCancel={() => setUnbanTarget(null)}
@@ -195,9 +199,9 @@ export function AdminUsers() {
 
       <ConfirmModal
         open={deleteTarget !== null}
-        title={`Delete ${deleteTarget?.name}'s account?`}
-        body="This removes their account permanently. Their booking history stays on file."
-        confirmLabel="Delete account"
+        title={tu("deleteTitle").replace("{name}", deleteTarget?.name ?? "")}
+        body={tu("deleteBody")}
+        confirmLabel={tu("deleteAccount")}
         confirmClass="btn-danger"
         onConfirm={() => { if (deleteTarget) doDelete(deleteTarget.id); }}
         onCancel={() => setDeleteTarget(null)}
