@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
 import { useSettings } from "../settings";
+import { useT } from "../i18n/context";
 
 export function Footer() {
+  const t = useT("footer");
   const year = new Date().getFullYear();
   const { address, city, region, hours, phone, tiktok, instagram: ig, facebook: fb, whatsappHref } =
     useSettings();
@@ -13,7 +15,7 @@ export function Footer() {
       <div className="footer-grid">
         <div>
           <p className="footer-brand">Cam Chop <span style={{ color: "var(--amber)" }}>Meat</span></p>
-          <p className="footer-desc">Charcoal-grilled chicken, pork and goat. {city}, {region}.</p>
+          <p className="footer-desc">{t("desc")} {city}, {region}.</p>
           <div className="footer-socials">
             {tiktok && (
               <a href={tiktok} target="_blank" rel="noopener" className="social-link">TikTok</a>
@@ -27,33 +29,33 @@ export function Footer() {
           </div>
         </div>
         <div>
-          <span className="footer-label">Find us</span>
+          <span className="footer-label">{t("findUs")}</span>
           {address.split(",").map((line, i) => <p key={i}>{line.trim()}</p>)}
           <p>{hours}</p>
         </div>
         <div>
-          <span className="footer-label">Contact</span>
+          <span className="footer-label">{t("contact")}</span>
           {phone && <p>{phone}</p>}
           {/* The floating chat button is hidden during checkout flows, so the
               WhatsApp channel lives here too and stays reachable everywhere. */}
           <a href={chatHref} target="_blank" rel="noopener noreferrer" className="social-link">
-            Chat on WhatsApp
+            {t("chatWhatsapp")}
           </a>
-          <p>Pay by MTN Mobile Money</p>
+          <p>{t("payMomo")}</p>
         </div>
         <div>
-          <span className="footer-label">Navigate</span>
-          <Link to="/reserve">Book a table</Link>
-          <Link to="/menu">Menu</Link>
-          <Link to="/about">About</Link>
-          <Link to="/reviews">Reviews</Link>
-          <Link to="/privacy" className="footer-legal">Privacy policy</Link>
-          <Link to="/terms" className="footer-legal">Terms of use</Link>
+          <span className="footer-label">{t("navigate")}</span>
+          <Link to="/reserve">{t("bookTable")}</Link>
+          <Link to="/menu">{t("menu")}</Link>
+          <Link to="/about">{t("about")}</Link>
+          <Link to="/reviews">{t("reviews")}</Link>
+          <Link to="/privacy" className="footer-legal">{t("privacyPolicy")}</Link>
+          <Link to="/terms" className="footer-legal">{t("termsOfUse")}</Link>
         </div>
       </div>
       <div className="footer-bottom">
-        <p>© {year} Cam Chop Meat, {city}. Grilled over real charcoal, daily.</p>
-        <p className="footer-bottom-right">Dine in · Collect · We take bookings</p>
+        <p>&copy; {year} Cam Chop Meat, {city}. {t("copyright")}</p>
+        <p className="footer-bottom-right">{t("bottomRight")}</p>
       </div>
     </footer>
   );
