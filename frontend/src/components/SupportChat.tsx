@@ -286,7 +286,7 @@ export function SupportChat() {
               </p>
               <p className={`sc-presence${staffed ? " on" : ""}`}>
                 <span className="sc-presence-dot" aria-hidden="true" />
-                {staffed ? "We are online" : "Away — leave a message"}
+                {staffed ? "We are online" : "Away, leave a message"}
               </p>
             </div>
 
