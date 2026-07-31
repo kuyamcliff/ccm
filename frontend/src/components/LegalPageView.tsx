@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { LegalPage } from "../api";
 import { useSettings } from "../settings";
+import { useT } from "../i18n/context";
 
 /*
  * Renders a legal page whose text lives in the database so the owner can edit
@@ -50,6 +51,7 @@ function formatUpdated(iso: string): string {
 }
 
 export function LegalPageView({ slug, fallbackTitle }: { slug: "terms" | "privacy"; fallbackTitle: string }) {
+  const t = useT("legal");
   const year = new Date().getFullYear();
   const { city, address, region } = useSettings();
 
@@ -70,21 +72,21 @@ export function LegalPageView({ slug, fallbackTitle }: { slug: "terms" | "privac
   return (
     <section className="section">
       <div className="section-inner narrow">
-        <p className="eyebrow animate-up">Legal</p>
+        <p className="eyebrow animate-up">{t("eyebrow")}</p>
         <h1 className="page-title animate-up delay-1">{page?.title || fallbackTitle}</h1>
 
         <div className="legal-body animate-up delay-2">
-          {state === "loading" && <p className="legal-updated">Loading…</p>}
+          {state === "loading" && <p className="legal-updated">{t("loading")}</p>}
 
           {state === "error" && (
             <p className="notice">
-              We could not load this page just now. Please refresh, or reach us at {address}.
+              {t("errLoad").replace("{address}", address)}
             </p>
           )}
 
           {state === "ready" && (
             <>
-              {updated && <p className="legal-updated">Last updated: {updated}</p>}
+              {updated && <p className="legal-updated">{t("lastUpdated")} {updated}</p>}
 
               {blocks.map((b, i) =>
                 b.kind === "heading" ? <h2 key={i}>{b.text}</h2> : <p key={i}>{b.text}</p>
