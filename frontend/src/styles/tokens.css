@@ -1,0 +1,151 @@
+/*
+ * Charcoal & Ember — the design language for Cam Chop Meat.
+ *
+ * The room this describes is a charcoal grill after dark: near-black warm
+ * surfaces, one hot colour, and type that behaves like painted signage. The
+ * site commits to dark. That is not a mode here, it is the brand — every
+ * surface, border and state below is drawn for it, so there is no light
+ * variant to keep in step and no half-lit second design to maintain.
+ *
+ * Nothing outside this file may invent a colour, a radius or a duration.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ── Charcoal. Warm greys, never neutral: every step carries a little red so
+     the interface reads as fire-lit rather than as a screenshot of a terminal. */
+  --coal-1000: #060605;
+  --coal-950: #0a0a09;
+  --coal-900: #100f0e;
+  --coal-850: #161513;
+  --coal-800: #1d1b19;
+  --coal-750: #252220;
+  --coal-700: #2f2b28;
+
+  /* ── Bone. The text ramp. Slightly yellow so it sits in the same light. */
+  --bone: #f4efe7;
+  --bone-2: #b9afa3;
+  --bone-3: #877d72;
+
+  /* ── Ember. One hot colour, used sparingly enough that it always means
+     "act here". Anything decorative uses coal and bone instead. */
+  --ember: #ff5b1f;
+  --ember-hi: #ff8442;
+  --ember-lo: #cf3f0e;
+  --ember-wash: rgba(255, 91, 31, 0.14);
+  --heat: linear-gradient(97deg, #ff3d00 0%, #ff7a1a 45%, #ffb43d 100%);
+
+  /* ── Signals. Each one also gets an icon or a word in the UI; colour alone
+     never carries the meaning. */
+  --palm: #5fc47a;
+  --palm-wash: rgba(95, 196, 122, 0.14);
+  --gold: #f0b429;
+  --gold-wash: rgba(240, 180, 41, 0.14);
+  --blood: #e8555a;
+  --blood-wash: rgba(232, 85, 90, 0.14);
+
+  /* ── Roles. Components reference these, not the raw ramps above. */
+  --bg: var(--coal-950);
+  --bg-sunk: var(--coal-1000);
+  --surface: var(--coal-850);
+  --surface-2: var(--coal-800);
+  --raised: var(--coal-750);
+  --text: var(--bone);
+  --text-2: var(--bone-2);
+  --text-3: var(--bone-3);
+  --accent: var(--ember);
+  --on-accent: #1a0a02;
+
+  --line: rgba(244, 239, 231, 0.09);
+  --line-2: rgba(244, 239, 231, 0.16);
+  --line-hot: rgba(255, 91, 31, 0.42);
+
+  /* ── Type. Anton paints the headlines, Karla runs the interface, DM Mono
+     holds anything a person might read out loud: codes, prices, times. */
+  --font-display: "Anton", "Haettenschweiler", "Arial Narrow", system-ui, sans-serif;
+  --font-sans: "Karla", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "DM Mono", ui-monospace, "SF Mono", "Cascadia Mono", monospace;
+
+  /* Fluid where it earns it: display type has to survive a 360px phone and a
+     desktop without a second set of rules. */
+  --t-hero: clamp(3rem, 13vw, 8.5rem);
+  --t-display: clamp(2.25rem, 7.5vw, 4.25rem);
+  --t-title: clamp(1.65rem, 4.5vw, 2.5rem);
+  --t-head: 1.3125rem;
+  --t-lead: 1.125rem;
+  --t-body: 1rem;
+  --t-small: 0.9375rem;
+  --t-fine: 0.8125rem;
+  --t-label: 0.75rem;
+
+  --lh-tight: 0.92;
+  --lh-head: 1.15;
+  --lh-body: 1.6;
+
+  /* Anton is a display face; at small sizes it needs air, at large sizes none. */
+  --track-display: -0.015em;
+  --track-label: 0.14em;
+
+  /* ── Space. 4px rhythm, named by use rather than by number so a section gap
+     never gets typed in as a card's padding. */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.5rem;
+  --s-6: 2rem;
+  --s-7: 3rem;
+  --s-8: 4rem;
+  --s-9: 6rem;
+
+  --gutter: clamp(1rem, 4vw, 2.5rem);
+  --page-max: 78rem;
+  --prose-max: 38rem;
+
+  /* ── Shape. Cards are generously rounded, controls less so, and anything
+     that behaves like a stamp or a chip goes fully round. */
+  --r-xs: 4px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --r-xl: 26px;
+  --r-full: 999px;
+
+  /* Shadows are warm and low. On a dark ground a black shadow is invisible, so
+     depth comes mostly from the surface step and a lit top edge. */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-2: 0 8px 24px -12px rgba(0, 0, 0, 0.8);
+  --shadow-3: 0 24px 60px -20px rgba(0, 0, 0, 0.9);
+  --glow: 0 0 0 1px rgba(255, 91, 31, 0.35), 0 12px 40px -16px rgba(255, 91, 31, 0.45);
+
+  /* ── Motion. One easing for everything that enters, a faster one out. */
+  --ease: cubic-bezier(0.2, 0.8, 0.24, 1);
+  --ease-out: cubic-bezier(0.3, 0, 0.6, 1);
+  --dur-1: 140ms;
+  --dur-2: 220ms;
+  --dur-3: 340ms;
+
+  /* ── Layers. Anything with a z-index takes it from here. */
+  --z-base: 1;
+  --z-sticky: 20;
+  --z-nav: 40;
+  --z-overlay: 60;
+  --z-modal: 70;
+  --z-toast: 90;
+
+  /* Height of the mobile tab bar; content padding and sticky offsets both read
+     it so they can never drift apart. */
+  --tabbar-h: 4.25rem;
+  --topbar-h: 4rem;
+}
+
+/* Anything that moves does so because it means something. When the visitor has
+   asked the system for less of that, they get none of it. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 0ms;
+    --dur-2: 0ms;
+    --dur-3: 0ms;
+  }
+}

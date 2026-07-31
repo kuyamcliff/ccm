@@ -1,4 +1,7 @@
 User-agent: *
 Allow: /
+Disallow: /desk
+Disallow: /account
+Disallow: /mine
 
 Sitemap: https://camchopmeat.com/sitemap.xml

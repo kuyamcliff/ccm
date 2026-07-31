@@ -1,44 +1,64 @@
 # Project context (living file)
 
 ## State
-v2 full-stack rebuild, 2026-07-19. v1 static site removed (lives in git history).
+v3, 2026-07-31. The frontend was deleted and rebuilt from nothing; the backend
+was not touched. v1 (static site) and v2 (butcher-paper React app) are in git
+history.
 
 ## Backend file map (backend/)
-- src/server.ts: Express app, mounts routers, error handler, port 4000.
-- src/db.ts: opens data/camchop.db via node:sqlite, creates tables users,
-  reservations, reviews.
-- src/auth.ts: JWT sign/verify, session cookie options, attachUser + requireAuth
-  middleware. JWT_SECRET env var (dev fallback baked in; set a real one in prod).
-- src/routes/auth.ts: register, login, logout, me. bcryptjs hashing.
-- src/routes/reservations.ts: list mine, create (validates date/time slot/party
-  size/phone, blocks double booking of the same slot), cancel (soft, status field).
-- src/routes/reviews.ts: public list, upsert own (one per user), delete own.
-- scripts/smoke.ts: API smoke tests, run with npm run smoke while dev server is up.
+Unchanged in this rewrite. Postgres (Supabase) through `pg`, 23 routers under
+/api. See `backend/src/server.ts` for the mount list, and MOMO-SETUP.md for the
+mobile-money credentials.
 
 ## Frontend file map (frontend/)
-- src/main.tsx: root, BrowserRouter + AuthProvider.
-- src/App.tsx: routes + ticker/header/footer shell.
-- src/api.ts: typed fetch wrapper for every endpoint.
-- src/auth.tsx: AuthContext, restores session from /api/auth/me on load.
-- src/data/menu.ts: menu content and marquee items. Edit menu prices here.
-- src/components/: Header (nav + auth-aware), Footer, Stars.
-- src/pages/: Home, MenuPage, Reserve (booking form -> ticket confirmation),
-  Reviews (list + leave/edit/delete own), Login, Register, Account (my tables,
-  cancel), NotFound.
-- src/styles.css: the entire design. Tokens at :root. Butcher-paper look:
-  Fraunces + Archivo + Space Mono, paper/ink/red/mustard palette.
-- vite.config.ts: proxies /api to http://localhost:4000 in dev.
+Vite + React 19 + TypeScript. Path alias `~/` points at `src/`.
 
-## Placeholders still in the code (search for "PLACEHOLDER" or the values)
-- Phone number +237 000 000 000 (Footer.tsx, Reserve.tsx).
-- Opening hours "midday till late" (Footer.tsx, ticker in App.tsx).
-- No real photos yet; design is typographic by choice until the owner sends photos.
+- `src/main.tsx` — mounts the app inside the four providers and registers the
+  service worker. Fonts are imported here, bundled rather than fetched from a
+  font CDN.
+- `src/app/` — `App.tsx` (routes, lazy loading), `Shell.tsx` (top bar, tab bar,
+  footer), `guards.tsx` (RequireAccount, RequireStaff), `ErrorBoundary.tsx`.
+- `src/lib/http.ts` — the only place that talks to the network. Timeouts,
+  retries on idempotent reads, `ApiError`.
+- `src/lib/api/` — the typed API surface, grouped by what a person is doing:
+  `me`, `site`, `booking`, `orders`, `support`, `desk`, `deskSupport`. Types in
+  `types.ts` mirror the server's SQL rows.
+- `src/lib/useResource.ts` — `useResource` (read), `useAction` (write),
+  `usePoll`. Nothing else fetches.
+- `src/lib/format.ts` — every date, money and phone conversion in the product.
+- `src/state/` — session, toast, venue (the restaurant's own details) and
+  basket (collection orders, kept in localStorage).
+- `src/ui/` — the primitives: Button, Field, Sheet, Icon, Bits, Feedback, Photo.
+- `src/features/` — one folder per area. `desk/` is the staff console and is
+  code-split away from the customer site.
+- `src/styles/` — `tokens.css` (the design language), `base.css`, `ui.css`,
+  `shell.css`, `pages.css`, and `desk.css` which ships with the console chunk.
+
+## Design
+"Charcoal and Ember". Dark by commitment, not as a mode: warm near-black
+surfaces, one hot colour, Anton for display type, Karla for the interface, DM
+Mono for anything a person reads aloud (codes, prices, times). Full reasoning is
+at the top of `src/styles/tokens.css`.
+
+Navigation is a bottom tab bar on phones and a top bar from 60rem up. The staff
+console has its own chrome: a rail that becomes a drawer, denser type, tables.
+
+## Placeholders still in the code
+None. Every fact on the site (phone, address, hours, socials) comes from
+site_settings and is edited in the console under Details.
 
 ## Real, sourced details
 - Location: opposite the Survey School, Clerks Quarters, Buea.
 - TikTok: https://www.tiktok.com/@cam.chop.meat
-- Price anchors: food from 2,500 FCFA, drinks from 1,000 FCFA.
+- Price anchors: food from 2,500 FCFA, drinks from 500 FCFA.
+- Table deposit: 2,500 FCFA. Late cancellation fee: 1,500 FCFA. Both are set by
+  the server (`backend/src/routes/payments.ts`, `reservations.ts`).
 
 ## How to run
-- backend: cd backend && npm install && npm run dev (port 4000)
-- frontend: cd frontend && npm install && npm run dev (port 5173)
+- backend: `cd backend && npm install && npm run dev` (port 4000, needs
+  DATABASE_URL)
+- frontend: `cd frontend && npm install && npm run dev` (port 5173, proxies
+  /api and /uploads to the backend)
+- Point the dev server at a different API with `VITE_API_TARGET`.
+- Open http://localhost:5173. Use `localhost`, not `127.0.0.1`: the server
+  rejects state-changing requests from an origin it does not recognise.

@@ -1,25 +1,28 @@
 /*
- * The previous worker answered every GET from the cache and never refreshed it,
- * so once a visitor had loaded the site they kept the same HTML forever — and
- * after a deploy that HTML pointed at script filenames no longer on the server,
- * leaving them on a blank page until they cleared storage.
+ * Service worker, fourth generation.
  *
- * Strategy now:
- *   navigation   → network first, cached copy only as an offline fallback
- *   /assets/*    → cache first (filenames carry a content hash)
- *   /uploads/*   → cache first (content-addressed on the server)
- *   /api/*       → never cached
+ * It replaces the worker the previous site installed — same URL, so every
+ * browser that still holds the old one picks this up and, because of
+ * skipWaiting + clients.claim below, hands over immediately instead of waiting
+ * for every tab to close. The activate step deletes any cache this version does
+ * not own, which is what clears the old site's cached HTML.
+ *
+ * Rules:
+ *   navigation  → network first; the cached shell answers only when offline
+ *   /assets/*   → cache first (Vite puts a content hash in the filename)
+ *   /uploads/*  → cache first (the API addresses these by content hash too)
+ *   /api/*      → never touched
  */
 
-const VERSION = "v3";
-const SHELL_CACHE = `camchop-shell-${VERSION}`;
-const ASSET_CACHE = `camchop-assets-${VERSION}`;
+const VERSION = "v4";
+const SHELL = `ccm-shell-${VERSION}`;
+const ASSETS = `ccm-assets-${VERSION}`;
 const OFFLINE_URL = "/";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
-      .open(SHELL_CACHE)
+      .open(SHELL)
       .then((cache) => cache.add(new Request(OFFLINE_URL, { cache: "reload" })))
       .catch(() => {})
       .then(() => self.skipWaiting())
@@ -27,22 +30,42 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  const keep = new Set([SHELL_CACHE, ASSET_CACHE]);
+  const keep = new Set([SHELL, ASSETS]);
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k))))
+      .then((names) => Promise.all(names.filter((n) => !keep.has(n)).map((n) => caches.delete(n))))
       .then(() => self.clients.claim())
   );
 });
 
-/** Lets a waiting worker take over immediately when the page asks it to. */
+/** Lets a freshly deployed page take over without a manual reload. */
 self.addEventListener("message", (event) => {
   if (event.data === "skip-waiting") self.skipWaiting();
 });
 
-function isImmutableAsset(url) {
-  return url.pathname.startsWith("/assets/") || url.pathname.startsWith("/uploads/");
+async function cacheFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const hit = await cache.match(request);
+  if (hit) return hit;
+  const response = await fetch(request);
+  if (response.ok) cache.put(request, response.clone());
+  return response;
+}
+
+async function networkFirstNavigation(request) {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(SHELL);
+      cache.put(OFFLINE_URL, response.clone());
+    }
+    return response;
+  } catch (err) {
+    const cached = await caches.match(OFFLINE_URL);
+    if (cached) return cached;
+    throw err;
+  }
 }
 
 self.addEventListener("fetch", (event) => {
@@ -53,38 +76,15 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
 
-  // HTML: always try the network so a new deploy is picked up on next load.
   if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(SHELL_CACHE).then((cache) => cache.put(OFFLINE_URL, copy)).catch(() => {});
-          return response;
-        })
-        .catch(() => caches.match(OFFLINE_URL).then((cached) => cached ?? Response.error()))
-    );
+    event.respondWith(networkFirstNavigation(request));
     return;
   }
-
-  // Hashed assets never change under the same URL, so the cache is authoritative.
-  if (isImmutableAsset(url)) {
-    event.respondWith(
-      caches.match(request).then(
-        (cached) =>
-          cached ??
-          fetch(request).then((response) => {
-            if (response.ok) {
-              const copy = response.clone();
-              caches.open(ASSET_CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
-            }
-            return response;
-          })
-      )
-    );
+  if (url.pathname.startsWith("/assets/")) {
+    event.respondWith(cacheFirst(request, ASSETS));
     return;
   }
-
-  // Everything else: fresh if possible, cached if the network is unavailable.
-  event.respondWith(fetch(request).catch(() => caches.match(request).then((c) => c ?? Response.error())));
+  if (url.pathname.startsWith("/uploads/")) {
+    event.respondWith(cacheFirst(request, ASSETS));
+  }
 });
