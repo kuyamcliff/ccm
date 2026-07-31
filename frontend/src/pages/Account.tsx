@@ -4,10 +4,12 @@ import { api } from "../api";
 import type { ReceiptSummary } from "../api";
 import { useAuth } from "../auth";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { useT } from "../i18n/context";
 
 type Tab = "receipts" | "profile" | "security";
 
 export function Account() {
+  const t = useT("account");
   const { user, loading, logout, refetch } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("receipts");
@@ -16,7 +18,7 @@ export function Account() {
     return (
       <section className="section">
         <div className="section-inner narrow center">
-          <p style={{ color: "var(--text-muted)" }}>One moment…</p>
+          <p style={{ color: "var(--text-muted)" }}>{t("oneMoment")}</p>
         </div>
       </section>
     );
@@ -26,8 +28,8 @@ export function Account() {
     return (
       <section className="section">
         <div className="section-inner narrow">
-          <h1 className="page-title">Account</h1>
-          <p className="notice"><Link to="/login">Sign in</Link> to access your account.</p>
+          <h1 className="page-title">{t("title")}</h1>
+          <p className="notice"><Link to="/login">{t("signInPrompt")}</Link> {t("signInSuffix")}</p>
         </div>
       </section>
     );
@@ -44,7 +46,7 @@ export function Account() {
             <p className="acct-email">{user.email}</p>
           </div>
           <Link to="/my-tables" className="btn btn-outline btn-sm acct-header-cta">
-            My tables
+            {t("myTables")}
           </Link>
         </div>
 
@@ -52,16 +54,16 @@ export function Account() {
         <div className="acct-layout">
           <div className="acct-tabs" role="tablist">
             {([
-              ["receipts", "Receipts"],
-              ["profile",  "Profile"],
-              ["security", "Security"],
-            ] as [Tab, string][]).map(([t, label]) => (
+              ["receipts", t("tabReceipts")],
+              ["profile",  t("tabProfile")],
+              ["security", t("tabSecurity")],
+            ] as [Tab, string][]).map(([tabKey, label]) => (
               <button
-                key={t}
-                className={`acct-tab${tab === t ? " active" : ""}`}
+                key={tabKey}
+                className={`acct-tab${tab === tabKey ? " active" : ""}`}
                 role="tab"
-                aria-selected={tab === t}
-                onClick={() => setTab(t)}
+                aria-selected={tab === tabKey}
+                onClick={() => setTab(tabKey)}
               >
                 {label}
               </button>
@@ -82,6 +84,7 @@ export function Account() {
 // ── Receipts ─────────────────────────────────────────────
 
 function TabReceipts() {
+  const t = useT("account");
   const [receipts, setReceipts] = useState<ReceiptSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [downloading, setDownloading] = useState<number | null>(null);
@@ -106,7 +109,7 @@ function TabReceipts() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      setError("Could not download receipt.");
+      setError(t("errDownload"));
     } finally {
       setDownloading(null);
     }
@@ -115,12 +118,12 @@ function TabReceipts() {
   return (
     <div className="acct-panel">
       <div className="acct-panel-head">
-        <h2 className="acct-section-title">Receipts</h2>
+        <h2 className="acct-section-title">{t("receiptsTitle")}</h2>
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
       {loaded && receipts.length === 0 && (
         <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
-          No paid receipts yet. After a confirmed payment your receipt appears here and is available to download as PDF.
+          {t("noReceipts")}
         </p>
       )}
       {receipts.length > 0 && (
@@ -130,10 +133,10 @@ function TabReceipts() {
               <div className="receipt-info">
                 <span className="receipt-code">{r.ccm_code ?? `REC-${String(r.id).padStart(4, "0")}`}</span>
                 <span className="receipt-meta">
-                  {r.date} at {r.time} · {r.party_size} {r.party_size === 1 ? "person" : "people"}
-                  {r.table_label ? ` · ${r.table_label}` : ""}
-                  {r.amount_fcfa ? ` · ${r.amount_fcfa.toLocaleString()} FCFA` : ""}
-                  {r.pay_method ? ` · ${r.pay_method === "orange_money" ? "Orange Money" : "MTN MoMo"}` : ""}
+                  {r.date} at {r.time}, {r.party_size} {r.party_size === 1 ? t("person") : t("people")}
+                  {r.table_label ? `, ${r.table_label}` : ""}
+                  {r.amount_fcfa ? `, ${r.amount_fcfa.toLocaleString()} FCFA` : ""}
+                  {r.pay_method ? `, ${r.pay_method === "orange_money" ? t("orangeMoney") : t("mtnMomo")}` : ""}
                 </span>
               </div>
               <button
@@ -141,7 +144,7 @@ function TabReceipts() {
                 disabled={downloading === r.id}
                 onClick={() => downloadReceipt(r)}
               >
-                {downloading === r.id ? "Downloading…" : "Download PDF"}
+                {downloading === r.id ? t("downloading") : t("downloadPdf")}
               </button>
             </div>
           ))}
@@ -162,20 +165,21 @@ function TabProfile({
   refetch?: () => Promise<void>;
   onDeleted: () => void;
 }) {
+  const t = useT("account");
   const [nameVal, setNameVal] = useState(user.name);
   const [nameBusy, setNameBusy] = useState(false);
-  const [nameMsg, setNameMsg] = useState("");
+  const [nameMsg, setNameMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [email, setEmail] = useState("");
   const [emailPass, setEmailPass] = useState("");
   const [emailBusy, setEmailBusy] = useState(false);
-  const [emailMsg, setEmailMsg] = useState("");
+  const [emailMsg, setEmailMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [curPass, setCurPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [newPass2, setNewPass2] = useState("");
   const [passBusy, setPassBusy] = useState(false);
-  const [passMsg, setPassMsg] = useState("");
+  const [passMsg, setPassMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePass, setDeletePass] = useState("");
@@ -184,13 +188,13 @@ function TabProfile({
 
   async function saveName(e: React.FormEvent) {
     e.preventDefault();
-    setNameBusy(true); setNameMsg("");
+    setNameBusy(true); setNameMsg(null);
     try {
       await api.changeName(nameVal);
       await refetch?.();
-      setNameMsg("Name updated.");
+      setNameMsg({ text: t("nameUpdated"), ok: true });
     } catch (err) {
-      setNameMsg(err instanceof Error ? err.message : "Could not update name.");
+      setNameMsg({ text: err instanceof Error ? err.message : t("errUpdateName"), ok: false });
     } finally {
       setNameBusy(false);
     }
@@ -198,14 +202,14 @@ function TabProfile({
 
   async function saveEmail(e: React.FormEvent) {
     e.preventDefault();
-    setEmailBusy(true); setEmailMsg("");
+    setEmailBusy(true); setEmailMsg(null);
     try {
       await api.changeEmail(email, emailPass);
       await refetch?.();
       setEmail(""); setEmailPass("");
-      setEmailMsg("Email updated successfully.");
+      setEmailMsg({ text: t("emailUpdated"), ok: true });
     } catch (err) {
-      setEmailMsg(err instanceof Error ? err.message : "Could not update email.");
+      setEmailMsg({ text: err instanceof Error ? err.message : t("errUpdateEmail"), ok: false });
     } finally {
       setEmailBusy(false);
     }
@@ -213,21 +217,21 @@ function TabProfile({
 
   async function savePassword(e: React.FormEvent) {
     e.preventDefault();
-    if (newPass !== newPass2) { setPassMsg("New passwords do not match."); return; }
-    setPassBusy(true); setPassMsg("");
+    if (newPass !== newPass2) { setPassMsg({ text: t("passwordMismatch"), ok: false }); return; }
+    setPassBusy(true); setPassMsg(null);
     try {
       await api.changePassword(curPass, newPass);
       setCurPass(""); setNewPass(""); setNewPass2("");
-      setPassMsg("Password changed. Any other device signed in to this account has been signed out.");
+      setPassMsg({ text: t("passwordChanged"), ok: true });
     } catch (err) {
-      setPassMsg(err instanceof Error ? err.message : "Could not change password.");
+      setPassMsg({ text: err instanceof Error ? err.message : t("errChangePassword"), ok: false });
     } finally {
       setPassBusy(false);
     }
   }
 
   async function doDelete() {
-    if (!deletePass) { setDeleteMsg("Enter your password to confirm."); return; }
+    if (!deletePass) { setDeleteMsg(t("enterPasswordConfirm")); return; }
     setDeleteBusy(true);
     setDeleteMsg("");
     try {
@@ -235,9 +239,9 @@ function TabProfile({
       setDeleteOpen(false);
       onDeleted();
     } catch (err) {
-      // Kept open with the reason visible — closing on failure would look like
+      // Kept open with the reason visible, closing on failure would look like
       // the account had been deleted when it had not.
-      setDeleteMsg(err instanceof Error ? err.message : "Could not delete your account.");
+      setDeleteMsg(err instanceof Error ? err.message : t("errDeleteAccount"));
     } finally {
       setDeleteBusy(false);
     }
@@ -253,76 +257,76 @@ function TabProfile({
     <div className="acct-panel">
       {/* Display name */}
       <div className="acct-profile-card">
-        <h3 className="acct-card-title">Display name</h3>
+        <h3 className="acct-card-title">{t("displayName")}</h3>
         <form className="form" style={{ gap: "0.75rem" }} onSubmit={saveName}>
           <label>
-            Name
+            {t("name")}
             <input type="text" value={nameVal} onChange={(e) => setNameVal(e.target.value)} required minLength={2} />
           </label>
-          {nameMsg && <p className={nameMsg.includes("updated") ? "form-success" : "form-error"} role="status">{nameMsg}</p>}
+          {nameMsg && <p className={nameMsg.ok ? "form-success" : "form-error"} role="status">{nameMsg.text}</p>}
           <div className="form-footer">
-            <button className="btn btn-amber btn-sm" disabled={nameBusy}>{nameBusy ? "Saving…" : "Save name"}</button>
+            <button className="btn btn-amber btn-sm" disabled={nameBusy}>{nameBusy ? t("saving") : t("saveName")}</button>
           </div>
         </form>
       </div>
 
       {/* Change email */}
       <div className="acct-profile-card">
-        <h3 className="acct-card-title">Change email</h3>
-        <p className="acct-card-sub">Current: <strong>{user.email}</strong></p>
+        <h3 className="acct-card-title">{t("changeEmail")}</h3>
+        <p className="acct-card-sub">{t("current")} <strong>{user.email}</strong></p>
         <form className="form" style={{ gap: "0.75rem" }} onSubmit={saveEmail}>
-          <label>New email address
+          <label>{t("newEmail")}
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </label>
-          <label>Current password (to confirm)
+          <label>{t("currentPasswordConfirm")}
             <input type="password" value={emailPass} onChange={(e) => setEmailPass(e.target.value)} required autoComplete="current-password" />
           </label>
-          {emailMsg && <p className={emailMsg.includes("success") ? "form-success" : "form-error"} role="status">{emailMsg}</p>}
+          {emailMsg && <p className={emailMsg.ok ? "form-success" : "form-error"} role="status">{emailMsg.text}</p>}
           <div className="form-footer">
-            <button className="btn btn-amber btn-sm" disabled={emailBusy}>{emailBusy ? "Saving…" : "Update email"}</button>
+            <button className="btn btn-amber btn-sm" disabled={emailBusy}>{emailBusy ? t("saving") : t("updateEmail")}</button>
           </div>
         </form>
       </div>
 
       {/* Change password */}
       <div className="acct-profile-card">
-        <h3 className="acct-card-title">Change password</h3>
+        <h3 className="acct-card-title">{t("changePassword")}</h3>
         <form className="form" style={{ gap: "0.75rem" }} onSubmit={savePassword}>
-          <label>Current password
+          <label>{t("currentPassword")}
             <input type="password" value={curPass} onChange={(e) => setCurPass(e.target.value)} required autoComplete="current-password" />
           </label>
-          <label>New password
+          <label>{t("newPassword")}
             <input type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} required minLength={8} autoComplete="new-password" />
           </label>
-          <label>Confirm new password
+          <label>{t("confirmNewPassword")}
             <input type="password" value={newPass2} onChange={(e) => setNewPass2(e.target.value)} required autoComplete="new-password" />
           </label>
-          {passMsg && <p className={passMsg.includes("changed") ? "form-success" : "form-error"} role="status">{passMsg}</p>}
+          {passMsg && <p className={passMsg.ok ? "form-success" : "form-error"} role="status">{passMsg.text}</p>}
           <div className="form-footer">
-            <button className="btn btn-amber btn-sm" disabled={passBusy}>{passBusy ? "Saving…" : "Change password"}</button>
+            <button className="btn btn-amber btn-sm" disabled={passBusy}>{passBusy ? t("saving") : t("changePassword")}</button>
           </div>
         </form>
       </div>
 
       {/* Danger zone */}
       <div className="acct-profile-card danger-zone">
-        <h3 className="acct-card-title" style={{ color: "var(--amber)" }}>Delete account</h3>
-        <p className="acct-card-sub">Removes your account and all personal data. Booking history stays on file for restaurant operations. This cannot be undone.</p>
-        <button className="btn btn-danger btn-sm" onClick={() => setDeleteOpen(true)}>Delete my account</button>
+        <h3 className="acct-card-title" style={{ color: "var(--amber)" }}>{t("deleteAccount")}</h3>
+        <p className="acct-card-sub">{t("deleteAccountBody")}</p>
+        <button className="btn btn-danger btn-sm" onClick={() => setDeleteOpen(true)}>{t("deleteMyAccount")}</button>
       </div>
 
       <ConfirmModal
         open={deleteOpen}
-        title="Delete your account?"
-        body="This cannot be undone. Your profile, reviews and saved details are removed permanently."
-        confirmLabel={deleteBusy ? "Deleting…" : "Delete my account"}
+        title={t("deleteTitle")}
+        body={t("deleteBody")}
+        confirmLabel={deleteBusy ? t("deleting") : t("deleteMyAccount")}
         confirmClass="btn-danger"
         confirmDisabled={deleteBusy || !deletePass}
         onConfirm={doDelete}
         onCancel={closeDelete}
       >
         <label className="modal-field">
-          Confirm with your password
+          {t("confirmWithPassword")}
           <input
             type="password"
             value={deletePass}
@@ -340,6 +344,7 @@ function TabProfile({
 // ── Security ──────────────────────────────────────────────
 
 function TabSecurity() {
+  const t = useT("account");
   const [tfaEnabled, setTfaEnabled] = useState<boolean | null>(null);
   const [tfaLoading, setTfaLoading] = useState(true);
 
@@ -378,7 +383,7 @@ function TabSecurity() {
       const r = await api.setup2fa();
       setSetupData({ secret: r.secret, qrDataUrl: r.qrDataUrl });
     } catch (e) {
-      setSetupMsg(e instanceof Error ? e.message : "Setup failed.");
+      setSetupMsg(e instanceof Error ? e.message : t("errSetupFailed"));
       setSetting(false);
     }
   }
@@ -394,7 +399,7 @@ function TabSecurity() {
       setVerifyCode("");
       setSetupMsg("");
     } catch (err) {
-      setSetupMsg(err instanceof Error ? err.message : "Could not verify code.");
+      setSetupMsg(err instanceof Error ? err.message : t("errVerifyCode"));
     } finally {
       setVerifyBusy(false);
     }
@@ -409,7 +414,7 @@ function TabSecurity() {
       setDisabling(false);
       setDisablePass("");
     } catch (err) {
-      setDisableMsg(err instanceof Error ? err.message : "Could not disable 2FA.");
+      setDisableMsg(err instanceof Error ? err.message : t("errDisable2fa"));
     } finally {
       setDisableBusy(false);
     }
@@ -429,38 +434,38 @@ function TabSecurity() {
       {/* 2FA section */}
       <div className="acct-profile-card">
         <div className="acct-card-head-row">
-          <h3 className="acct-card-title">Two-factor authentication</h3>
+          <h3 className="acct-card-title">{t("twoFactor")}</h3>
           {tfaEnabled !== null && (
             <span className={`badge ${tfaEnabled ? "badge-green" : "badge-muted"}`}>
-              {tfaEnabled ? "Enabled" : "Disabled"}
+              {tfaEnabled ? t("enabled") : t("disabled")}
             </span>
           )}
         </div>
         <p className="acct-card-sub">
-          Use an authenticator app (Google Authenticator, Authy, 1Password) to generate one-time codes when signing in.
+          {t("twoFactorBody")}
         </p>
 
-        {tfaLoading && <p style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>Loading…</p>}
+        {tfaLoading && <p style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>{t("loading")}</p>}
 
         {/* Setup flow */}
         {!tfaLoading && !tfaEnabled && !setting && (
-          <button className="btn btn-amber btn-sm" onClick={startSetup}>Enable 2FA</button>
+          <button className="btn btn-amber btn-sm" onClick={startSetup}>{t("enable2fa")}</button>
         )}
 
         {setting && setupData && (
           <div className="tfa-setup">
-            <p className="tfa-step">Step 1: Scan the QR code with your authenticator app</p>
+            <p className="tfa-step">{t("step1Scan")}</p>
             <div className="tfa-qr-wrap">
               <img src={setupData.qrDataUrl} alt="2FA QR code" className="tfa-qr" />
             </div>
-            <p className="tfa-step">Or enter this code manually:</p>
+            <p className="tfa-step">{t("orEnterManually")}</p>
             <div className="tfa-secret-row">
               <span ref={codeRef} className="tfa-secret">{setupData.secret}</span>
               <button className="btn btn-outline btn-sm" onClick={copySecret}>
-                {copied ? "Copied!" : "Copy"}
+                {copied ? t("copied") : t("copy")}
               </button>
             </div>
-            <p className="tfa-step" style={{ marginTop: "1.25rem" }}>Step 2: Enter the 6-digit code from your app</p>
+            <p className="tfa-step" style={{ marginTop: "1.25rem" }}>{t("step2Enter")}</p>
             <form className="form" style={{ gap: "0.75rem" }} onSubmit={doEnable}>
               <input
                 type="text"
@@ -476,8 +481,8 @@ function TabSecurity() {
               />
               {setupMsg && <p className="form-error" role="alert">{setupMsg}</p>}
               <div className="form-footer">
-                <button type="button" className="btn btn-outline btn-sm" onClick={() => { setSetting(false); setSetupData(null); }}>Cancel</button>
-                <button className="btn btn-amber btn-sm" disabled={verifyBusy}>{verifyBusy ? "Verifying…" : "Activate 2FA"}</button>
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => { setSetting(false); setSetupData(null); }}>{t("cancel")}</button>
+                <button className="btn btn-amber btn-sm" disabled={verifyBusy}>{verifyBusy ? t("verifying") : t("activate2fa")}</button>
               </div>
             </form>
           </div>
@@ -485,20 +490,20 @@ function TabSecurity() {
 
         {/* Disable flow */}
         {!tfaLoading && tfaEnabled && !disabling && (
-          <button className="btn btn-danger btn-sm" onClick={() => setDisabling(true)}>Disable 2FA</button>
+          <button className="btn btn-danger btn-sm" onClick={() => setDisabling(true)}>{t("disable2fa")}</button>
         )}
 
         {disabling && (
           <form className="form" style={{ gap: "0.75rem", marginTop: "1rem" }} onSubmit={doDisable}>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>Enter your password to confirm disabling 2FA.</p>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>{t("enterPasswordDisable")}</p>
             <label>
-              Current password
+              {t("currentPassword")}
               <input type="password" value={disablePass} onChange={(e) => setDisablePass(e.target.value)} required autoComplete="current-password" />
             </label>
             {disableMsg && <p className="form-error" role="alert">{disableMsg}</p>}
             <div className="form-footer">
-              <button type="button" className="btn btn-outline btn-sm" onClick={() => { setDisabling(false); setDisablePass(""); }}>Cancel</button>
-              <button className="btn btn-danger btn-sm" disabled={disableBusy}>{disableBusy ? "Disabling…" : "Disable 2FA"}</button>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => { setDisabling(false); setDisablePass(""); }}>{t("cancel")}</button>
+              <button className="btn btn-danger btn-sm" disabled={disableBusy}>{disableBusy ? t("disabling") : t("disable2fa")}</button>
             </div>
           </form>
         )}
@@ -507,11 +512,11 @@ function TabSecurity() {
       {/* Passkeys section */}
       <div className="acct-profile-card">
         <div className="acct-card-head-row">
-          <h3 className="acct-card-title">Passkeys</h3>
-          <span className="badge badge-muted">Coming soon</span>
+          <h3 className="acct-card-title">{t("passkeys")}</h3>
+          <span className="badge badge-muted">{t("comingSoon")}</span>
         </div>
         <p className="acct-card-sub">
-          Sign in without a password using Face ID, fingerprint, or a hardware security key. Passkey support is coming in a future update.
+          {t("passkeysBody")}
         </p>
       </div>
     </div>
