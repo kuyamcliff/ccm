@@ -2,29 +2,31 @@ import { useEffect, useState } from "react";
 import { api } from "../../api";
 import type { SiteSettings } from "../../api";
 import { useSettings } from "../../settings";
-
-const FIELDS: { key: keyof SiteSettings; label: string; placeholder: string; type?: string; hint?: string }[] = [
-  { key: "phone", label: "Phone number", placeholder: "+237 6XX XXX XXX", hint: "Also used for the WhatsApp chat links." },
-  {
-    key: "address",
-    label: "Address",
-    placeholder: "562V+C7V, Clerks Quarters, Buea",
-    hint: "Shown in the footer, About page, receipts and map links across the site.",
-  },
-  {
-    key: "city",
-    label: "Town",
-    placeholder: "Buea",
-    hint: "Leave blank to use the last part of the address automatically.",
-  },
-  { key: "region", label: "Region", placeholder: "South West Region, Cameroon" },
-  { key: "hours", label: "Opening hours", placeholder: "Open daily · 9am till late" },
-  { key: "tiktok_url", label: "TikTok URL", placeholder: "https://www.tiktok.com/@...", type: "url" },
-  { key: "ig_url", label: "Instagram URL", placeholder: "https://www.instagram.com/...", type: "url" },
-  { key: "fb_url", label: "Facebook URL", placeholder: "https://www.facebook.com/...", type: "url" },
-];
+import { useLanguage } from "../../i18n/context";
 
 export function AdminSettings() {
+  const { t } = useLanguage();
+  const ts = (key: string) => t("adminSettings", key);
+  const FIELDS: { key: keyof SiteSettings; label: string; placeholder: string; type?: string; hint?: string }[] = [
+    { key: "phone", label: ts("phoneLabel"), placeholder: "+237 6XX XXX XXX", hint: ts("phoneHint") },
+    {
+      key: "address",
+      label: ts("addressLabel"),
+      placeholder: "562V+C7V, Clerks Quarters, Buea",
+      hint: ts("addressHint"),
+    },
+    {
+      key: "city",
+      label: ts("cityLabel"),
+      placeholder: "Buea",
+      hint: ts("cityHint"),
+    },
+    { key: "region", label: ts("regionLabel"), placeholder: "South West Region, Cameroon" },
+    { key: "hours", label: ts("hoursLabel"), placeholder: ts("hoursPlaceholder") },
+    { key: "tiktok_url", label: ts("tiktokLabel"), placeholder: "https://www.tiktok.com/@...", type: "url" },
+    { key: "ig_url", label: ts("igLabel"), placeholder: "https://www.instagram.com/...", type: "url" },
+    { key: "fb_url", label: ts("fbLabel"), placeholder: "https://www.facebook.com/...", type: "url" },
+  ];
   const { refresh } = useSettings();
   const [values, setValues] = useState<Record<string, string>>({});
   const [emailReady, setEmailReady] = useState<boolean | null>(null);
@@ -39,7 +41,7 @@ export function AdminSettings() {
   useEffect(() => {
     api.siteSettings()
       .then((r) => setValues(r.settings as Record<string, string>))
-      .catch((e) => setError(e instanceof Error ? e.message : "Could not load settings."))
+      .catch((e) => setError(e instanceof Error ? e.message : ts("errLoad")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -54,9 +56,9 @@ export function AdminSettings() {
     setTestResult(null);
     try {
       const r = await api.admin.sendTestEmail(testTo.trim() || undefined);
-      setTestResult({ ok: true, msg: `Sent to ${r.to}. Check the inbox, and the spam folder.` });
+      setTestResult({ ok: true, msg: ts("testSent").replace("{to}", r.to) });
     } catch (e) {
-      setTestResult({ ok: false, msg: e instanceof Error ? e.message : "Could not send." });
+      setTestResult({ ok: false, msg: e instanceof Error ? e.message : ts("errSend") });
     } finally {
       setTesting(false);
     }
@@ -75,7 +77,7 @@ export function AdminSettings() {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed.");
+      setError(e instanceof Error ? e.message : ts("errSave"));
     } finally {
       setSaving(false);
     }
@@ -83,13 +85,13 @@ export function AdminSettings() {
 
   return (
     <div>
-      <h1 className="admin-page-title">Site settings</h1>
+      <h1 className="admin-page-title">{ts("title")}</h1>
       <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", marginBottom: "1.5rem" }}>
-        Changes here appear on the public website immediately after saving.
+        {ts("subtitle")}
       </p>
 
       {loading ? (
-        <p className="empty-admin">Loading...</p>
+        <p className="empty-admin">{ts("loading")}</p>
       ) : (
         <form className="settings-form" onSubmit={handleSave}>
           {FIELDS.map((f) => (
@@ -106,10 +108,10 @@ export function AdminSettings() {
           ))}
 
           {error && <p className="form-error" role="alert">{error}</p>}
-          {saved && <p style={{ color: "var(--green)", fontSize: "0.9rem" }}>Settings saved. The website now reflects your changes.</p>}
+          {saved && <p style={{ color: "var(--green)", fontSize: "0.9rem" }}>{ts("saved")}</p>}
 
           <button type="submit" className="btn btn-amber" disabled={saving}>
-            {saving ? "Saving..." : "Save settings"}
+            {saving ? ts("saving") : ts("saveSettings")}
           </button>
         </form>
       )}
@@ -118,31 +120,30 @@ export function AdminSettings() {
           not belong in a database the app can read back. This just reports
           whether it is working and lets you prove it. */}
       <section className="email-status">
-        <h2 className="admin-section-title">Email</h2>
+        <h2 className="admin-section-title">{ts("emailSection")}</h2>
 
-        {emailReady === null && <p className="muted">Checking…</p>}
+        {emailReady === null && <p className="muted">{ts("checking")}</p>}
 
         {emailReady === false && (
           <>
             <p className="settings-hint">
-              Outgoing email is <strong>off</strong>. Set <code>RESEND_API_KEY</code> on the
-              server and restart to enable it.
+              {ts("emailOffPrefix")} <strong>{ts("emailOff")}</strong>. {ts("emailOffSuffixPre")} <code>RESEND_API_KEY</code> {ts("emailOffSuffixPost")}
             </p>
           </>
         )}
 
         {emailReady === true && (
           <>
-            <p className="settings-hint">Outgoing email is on. Send a test to confirm your domain.</p>
+            <p className="settings-hint">{ts("emailOn")}</p>
             <div className="email-test-row">
               <input
                 type="email"
-                placeholder="Leave blank to send to your own address"
+                placeholder={ts("testEmailPlaceholder")}
                 value={testTo}
                 onChange={(e) => setTestTo(e.target.value)}
               />
               <button type="button" className="btn btn-outline btn-sm" onClick={sendTest} disabled={testing}>
-                {testing ? "Sending…" : "Send test email"}
+                {testing ? ts("sending") : ts("sendTestEmail")}
               </button>
             </div>
           </>
