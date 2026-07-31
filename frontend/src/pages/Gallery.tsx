@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { GalleryPhoto } from "../api";
 import { useAuth } from "../auth";
+import { useT } from "../i18n/context";
 
 const MAX_UPLOAD_BYTES = 6 * 1024 * 1024;
 
 export default function GalleryPage() {
+  const t = useT("gallery");
   const { user } = useAuth();
 
   const [photos, setPhotos] = useState<GalleryPhoto[]>([]);
@@ -104,13 +106,13 @@ export default function GalleryPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > MAX_UPLOAD_BYTES) {
-      showToast("That image is over 6 MB. Pick a smaller one.", "err");
+      showToast(t("errTooBig"), "err");
       e.target.value = "";
       return;
     }
     const reader = new FileReader();
     reader.onload = () => setPreview(reader.result as string);
-    reader.onerror = () => showToast("Could not read that file.", "err");
+    reader.onerror = () => showToast(t("errReadFail"), "err");
     reader.readAsDataURL(file);
   }
 
@@ -129,7 +131,7 @@ export default function GalleryPage() {
       showToast(result.message, "ok");
       closeUpload();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Upload failed.", "err");
+      showToast(err instanceof Error ? err.message : t("errUploadFail"), "err");
     } finally {
       setUploading(false);
     }
@@ -143,37 +145,37 @@ export default function GalleryPage() {
         <div className="gal-inner">
           <div className="gal-header-top">
             <div>
-              <p className="eyebrow animate-up">Straight from the grill</p>
-              <h1 className="gal-title animate-up delay-1">Gallery</h1>
+              <p className="eyebrow animate-up">{t("eyebrow")}</p>
+              <h1 className="gal-title animate-up delay-1">{t("title")}</h1>
             </div>
             {user && (
               <button type="button" className="gal-add animate-up delay-1" onClick={() => setAddOpen(true)}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
                   <path d="M12 5v14M5 12h14" />
                 </svg>
-                <span>Add yours</span>
+                <span>{t("addYours")}</span>
               </button>
             )}
           </div>
 
           <p className="gal-lede animate-up delay-2">
-            The plates, the smoke, the people who came back for seconds. Shared by us and by you.
+            {t("lede")}
           </p>
 
           {!loading && photos.length > 0 && (
             <div className="gal-meta-row animate-up delay-3">
               <div className="filter-chips gal-filters">
                 <button className={`filter-chip${filter === "all" ? " active" : ""}`} onClick={() => { setFilter("all"); setLightboxIdx(null); }}>
-                  All <span className="gal-filter-count">{photos.length}</span>
+                  {t("all")} <span className="gal-filter-count">{photos.length}</span>
                 </button>
                 {featuredCount > 0 && (
                   <button className={`filter-chip${filter === "featured" ? " active" : ""}`} onClick={() => { setFilter("featured"); setLightboxIdx(null); }}>
-                    ★ Featured <span className="gal-filter-count">{featuredCount}</span>
+                    ★ {t("featured")} <span className="gal-filter-count">{featuredCount}</span>
                   </button>
                 )}
               </div>
               <p className="gal-count mono">
-                {visible.length} photo{visible.length === 1 ? "" : "s"}
+                {visible.length} {visible.length === 1 ? t("photoSingular") : t("photoPlural")}
               </p>
             </div>
           )}
@@ -188,12 +190,12 @@ export default function GalleryPage() {
 
           {!loading && photos.length === 0 && (
             <p className="gal-empty">
-              No photos up yet. {user ? "Be the first to add one." : "Sign in and be the first."}
+              {t("emptyGallery")} {user ? t("beFirst") : t("signInFirst")}
             </p>
           )}
 
           {!loading && photos.length > 0 && visible.length === 0 && (
-            <p className="gal-empty">No featured photos yet.</p>
+            <p className="gal-empty">{t("noFeatured")}</p>
           )}
 
           {visible.length > 0 && (
@@ -209,7 +211,7 @@ export default function GalleryPage() {
                     type="button"
                     className={`gal-tile${span}`}
                     onClick={(e) => openLightbox(i, e)}
-                    aria-label={p.caption ? `View photo: ${p.caption}` : `View photo ${i + 1}`}
+                    aria-label={p.caption ? `${t("viewPhoto")}: ${p.caption}` : t("viewPhotoNum").replace("{n}", String(i + 1))}
                   >
                     <img
                       src={p.image_url}
@@ -217,7 +219,7 @@ export default function GalleryPage() {
                       loading="lazy"
                       decoding="async"
                     />
-                    {p.is_featured && <span className="gal-tile-star">Featured</span>}
+                    {p.is_featured && <span className="gal-tile-star">{t("featuredBadge")}</span>}
                     {(p.caption || p.submitter_name) && (
                       <span className="gal-tile-meta">
                         {p.caption && <span className="gal-tile-caption">{p.caption}</span>}
@@ -238,14 +240,14 @@ export default function GalleryPage() {
           className="gal-lightbox"
           role="dialog"
           aria-modal="true"
-          aria-label="Photo viewer"
+          aria-label={t("photoViewer")}
           tabIndex={-1}
           ref={lightboxRef}
           onClick={closeLightbox}
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
         >
-          <button type="button" className="gal-lb-close" onClick={closeLightbox} aria-label="Close viewer">
+          <button type="button" className="gal-lb-close" onClick={closeLightbox} aria-label={t("closeViewer")}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <path d="M18 6 6 18M6 6l12 12" />
             </svg>
@@ -256,7 +258,7 @@ export default function GalleryPage() {
               type="button"
               className="gal-lb-nav prev"
               onClick={(e) => { e.stopPropagation(); step(-1); }}
-              aria-label="Previous photo"
+              aria-label={t("previousPhoto")}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                 <path d="m15 18-6-6 6-6" />
@@ -268,7 +270,7 @@ export default function GalleryPage() {
             <img
               key={current.id}
               src={current.image_url}
-              alt={current.caption || "Gallery photo"}
+              alt={current.caption || t("galleryPhoto")}
               className="gal-lb-img"
             />
             <figcaption className="gal-lb-caption">
@@ -285,7 +287,7 @@ export default function GalleryPage() {
               type="button"
               className="gal-lb-nav next"
               onClick={(e) => { e.stopPropagation(); step(1); }}
-              aria-label="Next photo"
+              aria-label={t("nextPhoto")}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                 <path d="m9 18 6-6-6-6" />
@@ -302,7 +304,7 @@ export default function GalleryPage() {
                   ref={i === lightboxIdx ? activeThumbRef : undefined}
                   className={`gal-lb-thumb${i === lightboxIdx ? " active" : ""}`}
                   onClick={() => setLightboxIdx(i)}
-                  aria-label={`Go to photo ${i + 1}`}
+                  aria-label={t("goToPhoto").replace("{n}", String(i + 1))}
                   aria-current={i === lightboxIdx}
                 >
                   <img src={p.image_url} alt="" loading="lazy" decoding="async" />
@@ -324,8 +326,8 @@ export default function GalleryPage() {
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="gal-sheet-head">
-              <h2 id="gal-upload-title" className="gal-sheet-title">Add your photo</h2>
-              <button type="button" className="gal-sheet-close" onClick={closeUpload} aria-label="Close">
+              <h2 id="gal-upload-title" className="gal-sheet-title">{t("addPhoto")}</h2>
+              <button type="button" className="gal-sheet-close" onClick={closeUpload} aria-label={t("close")}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                   <path d="M18 6 6 18M6 6l12 12" />
                 </svg>
@@ -335,7 +337,7 @@ export default function GalleryPage() {
             <label className="gal-drop">
               <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleFile} />
               {preview ? (
-                <img src={preview} alt="Your photo, ready to send" className="gal-drop-preview" />
+                <img src={preview} alt={t("readyToSend")} className="gal-drop-preview" />
               ) : (
                 <span className="gal-drop-empty">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -343,26 +345,26 @@ export default function GalleryPage() {
                     <circle cx="8.5" cy="8.5" r="1.5" />
                     <path d="m21 15-5-5L5 21" />
                   </svg>
-                  <span className="gal-drop-label">Choose a photo</span>
-                  <span className="gal-drop-hint">JPG, PNG or WebP · up to 6 MB</span>
+                  <span className="gal-drop-label">{t("chooseAPhoto")}</span>
+                  <span className="gal-drop-hint">{t("formatHint")}</span>
                 </span>
               )}
             </label>
 
             {preview && (
               <button type="button" className="link-btn gal-drop-change" onClick={() => fileRef.current?.click()}>
-                Choose a different photo
+                {t("chooseDifferent")}
               </button>
             )}
 
             <label className="gal-field">
-              Caption <span className="optional">optional</span>
+              {t("caption")} <span className="optional">{t("optional")}</span>
               <input
                 type="text"
                 value={caption}
                 onChange={(e) => setCaption(e.target.value)}
                 maxLength={200}
-                placeholder="Saturday night, mixed grill"
+                placeholder={t("captionPlaceholder")}
               />
             </label>
 
@@ -372,9 +374,9 @@ export default function GalleryPage() {
               onClick={submit}
               disabled={uploading || !preview}
             >
-              {uploading ? "Sending…" : "Submit photo"}
+              {uploading ? t("sending") : t("submitPhoto")}
             </button>
-            <p className="gal-sheet-fine">Photos appear once we have had a look at them.</p>
+            <p className="gal-sheet-fine">{t("fine")}</p>
           </div>
         </div>
       )}
