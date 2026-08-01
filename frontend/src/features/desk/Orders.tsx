@@ -10,7 +10,7 @@ import { useToast } from "~/state/toast";
 import { DeskPage, Loaded, Nothing, State, Toolbar } from "./parts";
 
 /**
- * The kitchen board for collection orders.
+ * The kitchen board for takeaway orders.
  *
  * Cards rather than a table: this screen gets read across a room, and the next
  * action on an order is a single button rather than a menu of them. An order
@@ -53,7 +53,7 @@ export function Orders() {
   }
 
   return (
-    <DeskPage title="Collection" lead="New orders appear here on their own.">
+    <DeskPage title="Takeaway" lead="New orders appear here on their own.">
       {confirmElement}
 
       <Toolbar>

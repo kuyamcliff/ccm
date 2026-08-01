@@ -7,12 +7,18 @@ import { Photo } from "~/ui/Photo";
 import { LinkButton } from "~/ui/Button";
 import { Money, Stars } from "~/ui/Bits";
 import { Skeleton } from "~/ui/Feedback";
+import { useSession } from "~/state/session";
 import { useVenue } from "~/state/venue";
+import { YourStuff } from "./YourStuff";
 
 /**
- * The home page has one job: get a hungry person to a table or to a collection
- * order in as few taps as possible. Everything else on it is evidence that the
- * place is real — the food, what people said, where it is.
+ * The home page, which is two pages wearing one route.
+ *
+ * A stranger needs to know what this place is and be given the two ways in.
+ * Somebody with an account has already decided all that and came back to check
+ * one thing, so they get their next table and their live order first, and none
+ * of the pitch. The parts that are useful to both — what people order, what
+ * people said, where we are — are shared underneath.
  */
 
 function Hero({ images }: { images: string[] }) {
@@ -35,16 +41,14 @@ function Hero({ images }: { images: string[] }) {
         </p>
 
         <h1 className="display display--hero hero__title">
-          Chicken,
+          The best meat
           <br />
-          pork and goat
-          <br />
-          <span className="hero__hot">over charcoal</span>
+          <span className="hero__hot">in Buea</span>
         </h1>
 
         <p className="hero__blurb">
-          The grill goes on in the afternoon and runs until the meat is finished. Book a table, or send your order ahead
-          and collect it hot.
+          Beef, chicken and more, cooked fresh every day at Cam Chop Meat. Order a takeaway meal or book a table, both
+          from your phone.
         </p>
 
         <div className="hero__actions">
@@ -52,7 +56,7 @@ function Hero({ images }: { images: string[] }) {
             Book a table
           </LinkButton>
           <LinkButton to="/order" tone="ghost" size="lg" icon="bag">
-            Order for collection
+            Order takeaway
           </LinkButton>
         </div>
 
@@ -75,7 +79,7 @@ function Hero({ images }: { images: string[] }) {
   );
 }
 
-function Signatures() {
+function Favourites() {
   const { data, loading } = useResource(() => api.site.highlights(), []);
   const items = data?.topItems ?? [];
 
@@ -83,9 +87,9 @@ function Signatures() {
     <section className="section page">
       <div className="section-head">
         <hr className="heat-rule" />
-        <h2 className="display display--xl">On the coals</h2>
+        <h2 className="display display--xl">What people order</h2>
         <p className="lead">
-          Everything is grilled to order, so give it a little time. Prices are what you pay at the table.
+          Everything is cooked fresh when you order it, so give it a little time. The price here is the price you pay.
         </p>
       </div>
 
@@ -123,8 +127,8 @@ function Signatures() {
   );
 }
 
-/** Three ways in, because the answer to "can I just show up" is genuinely
-    different depending on the night. */
+/** Three ways in, because the answer to "can I just show up" genuinely
+    depends on the night. */
 function Ways() {
   return (
     <section className="section page">
@@ -147,9 +151,9 @@ function Ways() {
           <span className="way__icon">
             <Icon name="bag" size={22} />
           </span>
-          <h3 className="card__title">Collect it</h3>
+          <h3 className="card__title">Takeaway</h3>
           <p className="fine muted">
-            Order and pay ahead, choose a pickup time, then show your code at the counter. Nothing to queue for.
+            Order and pay ahead, choose your pickup time, then show your code at the counter. Nothing to queue for.
           </p>
           <span className="way__go">
             Order <Icon name="arrow-right" size={16} />
@@ -168,6 +172,36 @@ function Ways() {
             Join the queue <Icon name="arrow-right" size={16} />
           </span>
         </Link>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The reason to make an account, shown only to somebody who has not.
+ *
+ * It says what the account is for rather than asking them to join a club:
+ * without one they cannot book a table or find an order later.
+ */
+function WhyAnAccount() {
+  return (
+    <section className="section page">
+      <div className="join-strip">
+        <div className="stack stack--tight">
+          <h2 className="display display--lg">Eating with us often?</h2>
+          <p className="muted">
+            An account is what lets you book a table, keep your codes and receipts in one place, and change or cancel
+            without calling anybody. It takes a minute.
+          </p>
+        </div>
+        <div className="row row--wrap">
+          <LinkButton to="/join" tone="primary">
+            Create an account
+          </LinkButton>
+          <LinkButton to="/signin" tone="ghost">
+            I already have one
+          </LinkButton>
+        </div>
       </div>
     </section>
   );
@@ -246,14 +280,21 @@ function FindUs() {
 }
 
 export function Home() {
+  const { user, ready } = useSession();
   const { data } = useResource(() => api.site.highlights(), []);
   const images = (data?.topItems ?? []).flatMap((item) => (item.image_url ? [item.image_url] : []));
 
+  /* Until the session has been read, show the hero. It is the honest default:
+     a returning customer sees it for a moment, where the reverse would flash
+     somebody else's name at a stranger. */
+  const signedIn = ready && user !== null;
+
   return (
     <>
-      <Hero images={images} />
-      <Signatures />
+      {signedIn ? <YourStuff name={user.name} /> : <Hero images={images} />}
+      <Favourites />
       <Ways />
+      {signedIn ? null : <WhyAnAccount />}
       <WordOfMouth />
       <FindUs />
     </>

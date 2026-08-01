@@ -29,7 +29,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
       { to: "/desk", label: "Overview", icon: "chart" },
       { to: "/desk/door", label: "Door", icon: "scan" },
       { to: "/desk/bookings", label: "Bookings", icon: "calendar" },
-      { to: "/desk/orders", label: "Collection", icon: "bag" },
+      { to: "/desk/orders", label: "Takeaway", icon: "bag" },
       { to: "/desk/queue", label: "Queue", icon: "users" },
       { to: "/desk/floor", label: "Floor", icon: "grid" },
     ],

@@ -45,7 +45,7 @@ export function GalleryPage() {
       <div className="section-head">
         <hr className="heat-rule" />
         <h1 className="display display--xl">The gallery</h1>
-        <p className="lead">Nights at the grill, sent in by people who were there.</p>
+        <p className="lead">Nights at Cam Chop Meat, sent in by people who were there.</p>
         <div className="row">
           <Button icon="camera" onClick={() => setSending(true)}>
             Send a photo

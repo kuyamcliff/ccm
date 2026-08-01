@@ -93,7 +93,7 @@ export function Overview() {
 
       <section className="desk-section">
         <div className="row row--between">
-          <h2 className="card__title">Collection orders</h2>
+          <h2 className="card__title">Takeaway orders</h2>
           <Link to="/desk/orders" className="btn btn--quiet btn--sm">
             All orders
           </Link>

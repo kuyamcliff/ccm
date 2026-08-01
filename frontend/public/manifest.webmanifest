@@ -1,7 +1,7 @@
 {
   "name": "Cam Chop Meat",
   "short_name": "Cam Chop",
-  "description": "Charcoal grill in Clerks Quarters, Buea. Book a table or order for collection.",
+  "description": "The best meat in Buea. Order a takeaway meal or book a table at Cam Chop Meat.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -12,7 +12,7 @@
   "icons": [{ "src": "/mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }],
   "shortcuts": [
     { "name": "Book a table", "url": "/book" },
-    { "name": "Order for collection", "url": "/order" },
+    { "name": "Order takeaway", "url": "/order" },
     { "name": "My bookings", "url": "/mine" }
   ]
 }
