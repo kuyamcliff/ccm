@@ -230,7 +230,7 @@ function Orders() {
 
             {unpaid ? (
               <Notice tone="warn">
-                This order is not paid yet, so the grill has not started on it.
+                This order is not paid yet, so the kitchen has not started on it.
               </Notice>
             ) : null}
 
@@ -304,7 +304,7 @@ export function MinePage() {
           Tables
         </button>
         <button type="button" role="tab" className="tab" aria-selected={tab === "orders"} onClick={() => setTab("orders")}>
-          Collection orders
+          Takeaway orders
         </button>
       </div>
 

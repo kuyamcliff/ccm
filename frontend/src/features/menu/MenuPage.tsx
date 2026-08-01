@@ -81,7 +81,7 @@ export function MenuPage() {
       else map.set(item.category, [item]);
     }
 
-    /* The API sorts by category name, which puts Drinks above the grill. Order
+    /* The API sorts by category name, which puts Drinks above the food. Order
        the sections by the oldest dish in each instead: that is the order the
        owner built the menu in, and the food they opened with comes first. */
     return [...map.entries()].sort(
@@ -98,7 +98,7 @@ export function MenuPage() {
         <hr className="heat-rule" />
         <h1 className="display display--xl">The menu</h1>
         <p className="lead">
-          Grilled to order over charcoal. Anything priced by weight is settled at the counter when it is weighed.
+          Everything is cooked fresh when you order it. Anything priced by weight is settled at the counter when it is weighed.
         </p>
       </div>
 

@@ -6,7 +6,24 @@ import { useSession } from "~/state/session";
 import { useVenue } from "~/state/venue";
 import { SupportLauncher } from "~/features/support/SupportLauncher";
 
-const NAV: { to: string; label: string; icon: IconName }[] = [
+type NavItem = { to: string; label: string; icon: IconName };
+
+/*
+ * Five destinations, and the last two depend on who is looking.
+ *
+ * "Mine" is an empty room for somebody with no account, and "You" is a sign-in
+ * page wearing the wrong name. A signed-out visitor gets the two things they
+ * can actually act on instead: takeaway, and a way in.
+ */
+const NAV_SIGNED_OUT: NavItem[] = [
+  { to: "/", label: "Home", icon: "flame" },
+  { to: "/menu", label: "Menu", icon: "list" },
+  { to: "/book", label: "Book", icon: "calendar" },
+  { to: "/order", label: "Takeaway", icon: "bag" },
+  { to: "/signin", label: "Sign in", icon: "user" },
+];
+
+const NAV_SIGNED_IN: NavItem[] = [
   { to: "/", label: "Home", icon: "flame" },
   { to: "/menu", label: "Menu", icon: "list" },
   { to: "/book", label: "Book", icon: "calendar" },
@@ -29,6 +46,7 @@ function TopBar() {
   const [scrolled, setScrolled] = useState(false);
   const { count } = useBasket();
   const { user, isStaff } = useSession();
+  const nav = user ? NAV_SIGNED_IN : NAV_SIGNED_OUT;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -42,7 +60,7 @@ function TopBar() {
       <Wordmark />
 
       <nav className="topnav" aria-label="Main">
-        {NAV.slice(0, 4).map((item) => (
+        {nav.slice(0, 4).map((item) => (
           <NavLink key={item.to} to={item.to} end={item.to === "/"} className="topnav__link">
             {item.label}
           </NavLink>
@@ -72,13 +90,17 @@ function TopBar() {
           ) : null}
         </Link>
 
-        <Link
-          to={user ? "/account" : "/signin"}
-          className="btn btn--quiet btn--icon"
-          aria-label={user ? "Your account" : "Sign in"}
-        >
-          <Icon name="user" size={20} />
-        </Link>
+        {/* Signed out, this is a labelled invitation rather than a mystery
+            icon: it is the one thing a new visitor may need to find. */}
+        {user ? (
+          <Link to="/account" className="btn btn--quiet btn--icon" aria-label="Your account">
+            <Icon name="user" size={20} />
+          </Link>
+        ) : (
+          <Link to="/signin" className="btn btn--ghost btn--sm">
+            Sign in
+          </Link>
+        )}
       </div>
     </header>
   );
@@ -86,14 +108,18 @@ function TopBar() {
 
 function TabBar() {
   const { count } = useBasket();
+  const { user } = useSession();
+  const nav = user ? NAV_SIGNED_IN : NAV_SIGNED_OUT;
 
   return (
     <nav className="tabbar" aria-label="Main">
-      {NAV.map((item) => (
+      {nav.map((item) => (
         <NavLink key={item.to} to={item.to} end={item.to === "/"} className="tabbar__item">
           <span className="tabbar__icon">
             <Icon name={item.icon} size={22} />
-            {item.to === "/mine" && count > 0 ? (
+            {/* The count belongs on the basket. Signed in there is no takeaway
+                tab, and the basket icon in the top bar carries it instead. */}
+            {item.to === "/order" && count > 0 ? (
               <span className="tally__count" aria-hidden="true" style={{ top: "-0.35rem", right: "-0.6rem" }}>
                 {count}
               </span>
@@ -117,7 +143,7 @@ function Footer() {
           <div>
             <Wordmark />
             <p className="fine muted" style={{ marginTop: "var(--s-3)", maxWidth: "24rem" }}>
-              Chicken, pork and goat over charcoal. {address}.
+              The best meat in Buea. Beef, chicken and more, cooked fresh every day. {address}.
             </p>
             <p className="fine faint" style={{ marginTop: "var(--s-2)" }}>
               {hours}
@@ -129,7 +155,7 @@ function Footer() {
             <div className="footer__links">
               <Link to="/menu">Menu and prices</Link>
               <Link to="/book">Book a table</Link>
-              <Link to="/order">Order for collection</Link>
+              <Link to="/order">Order takeaway</Link>
               <Link to="/waitlist">Join the queue</Link>
               <Link to="/events">Private events</Link>
             </div>

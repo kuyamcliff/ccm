@@ -1360,3 +1360,44 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ── Home, signed in ─────────────────────────────────────────────────────
+   Replaces the hero for somebody who already has an account. It is shorter
+   and flatter on purpose: the hero sells the place, and they have bought. */
+
+.mine-strip {
+  padding-block: var(--s-6) var(--s-4);
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--ember-wash), transparent 70%);
+}
+
+.mine-strip__grid {
+  display: grid;
+  gap: var(--s-3);
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+}
+
+.mine-strip__headline {
+  font-size: var(--t-head);
+  font-weight: 700;
+}
+
+.mine-strip__code {
+  font-size: var(--t-small);
+  letter-spacing: 0.08em;
+  color: var(--ember-hi);
+}
+
+/* The one place the site asks for an account, shown only to visitors who
+   have not got one. */
+.join-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-5);
+  padding: var(--s-6);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  background: linear-gradient(120deg, var(--surface), var(--coal-900));
+}

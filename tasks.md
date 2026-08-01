@@ -16,12 +16,20 @@
       pay, reply to a review, check a code at the door. No console errors on
       any of the 38 routes, signed out or as the owner.
 
+## Done (2026-08-01)
+- [x] Copy rewritten site-wide: no charcoal, no grill, no "collection". The
+      site now leads with "the best meat in Buea" and "beef, chicken and more".
+- [x] The home page, both navigations and the account prompt are state aware
+
 ## Waiting on the owner
-- [ ] Real photographs of the grill and the plates, uploaded in Desk > Menu.
+- [ ] Real photographs of the food, uploaded in Desk > Menu.
       Everything else on the site is now real; the pictures are the last thing
       standing in for something.
 - [ ] Confirm the phone number and hours in Desk > Details.
 - [ ] Confirm menu prices in Desk > Menu.
+- [ ] The menu data itself still says "From the grill", "Grilled chicken" and
+      "Charcoal all the way". That is content in the database, not code, and it
+      is edited in Desk > Menu. There is also no beef on the menu yet.
 
 ## Known gaps, deliberately left
 - `/api/admin/reviews` returns a thinner row than `/api/reviews` (no

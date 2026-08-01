@@ -16,7 +16,7 @@ import { useToast } from "~/state/toast";
 import { MomoDialog } from "~/features/pay/MomoDialog";
 
 /**
- * The basket and checkout for collection orders.
+ * The basket and checkout for takeaway orders.
  *
  * Prices shown here are only ever a preview: the server prices the order again
  * from the menu when it is placed, which is what stops a stale basket or an
@@ -68,7 +68,7 @@ export function OrderPage() {
           <span className="label">Show this at the counter</span>
           <p className="pass__code mono">{placed.order_no}</p>
           <p className="muted">
-            Collect from {timeLabel(pickup)}. We start grilling closer to the time so it is hot when you arrive.
+            Collect from {timeLabel(pickup)}. We start cooking closer to the time so it is hot when you arrive.
           </p>
         </div>
         <div className="row row--wrap">
@@ -210,8 +210,8 @@ export function OrderPage() {
             />
             <PhoneField label="Phone number" value={phone} onChange={setPhone} required />
             <SelectField
-              label="Collection time"
-              hint="Give us at least half an hour. Everything is grilled to order."
+              label="Pickup time"
+              hint="Give us at least half an hour. Everything is cooked fresh when you order it."
               value={pickup}
               onChange={(e) => setPickup(e.target.value)}
             >
@@ -266,7 +266,7 @@ export function OrderPage() {
               <Money value={subtotal} />
             </div>
             <div className="row row--between">
-              <span className="muted">Collection</span>
+              <span className="muted">Takeaway</span>
               <span className="fine">Free</span>
             </div>
             <hr />
@@ -307,7 +307,7 @@ export function OrderPage() {
           }}
           onClose={() => {
             setPaying(false);
-            toast.say(`Order ${placed.order_no} is saved. Pay for it in Mine to start the grill.`);
+            toast.say(`Order ${placed.order_no} is saved. Pay for it in Mine so the kitchen can start.`);
             setCollected(true);
           }}
           onPaid={() => {

@@ -36,7 +36,7 @@ body {
 }
 
 /*
- * Grain. Charcoal cooking is dusty and this keeps large flat panels from
+ * Grain. It keeps large flat panels from
  * looking like plastic. It is one repeating SVG, painted once over the whole
  * document at very low opacity, and it never intercepts a click.
  */

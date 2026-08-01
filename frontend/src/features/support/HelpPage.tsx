@@ -31,11 +31,11 @@ const ANSWERS = [
   },
   {
     q: "How long does an order take?",
-    a: "Everything is grilled from raw, so give it half an hour from the time you pick. On a busy Friday, longer.",
+    a: "Everything is cooked fresh when you order it, so give it half an hour from the time you pick. On a busy Friday, longer.",
   },
   {
     q: "Do you deliver?",
-    a: "Not ourselves. Order for collection and send someone, or use a bike rider you trust.",
+    a: "Not ourselves. Order takeaway and send someone, or use a bike rider you trust.",
   },
 ];
 

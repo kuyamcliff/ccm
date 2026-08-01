@@ -128,7 +128,7 @@ export function BookPage() {
             </LinkButton>
           </div>
           <p className="fine faint">
-            In a hurry? <Link to="/order">Order for collection</Link> instead, or{" "}
+            In a hurry? <Link to="/order">Order takeaway</Link> instead, or{" "}
             <Link to="/waitlist">join the queue</Link> if you are already outside.
           </p>
         </div>
