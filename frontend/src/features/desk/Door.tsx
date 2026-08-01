@@ -43,6 +43,10 @@ export function Door() {
   const canvas = useRef<HTMLCanvasElement>(null);
   const stream = useRef<MediaStream | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** The decoder, once it has been fetched. Held so the scan loop can use it. */
+  const decoder = useRef<typeof import("jsqr").default | null>(null);
+  /** The last code decoded, so one pass held to the lens is checked once. */
+  const lastSeen = useRef<string | null>(null);
 
   const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -81,46 +85,97 @@ export function Door() {
   async function start() {
     setCameraProblem(null);
     setResult(null);
+    lastSeen.current = null;
+
+    /* getUserMedia only exists in a secure context. Served over plain http it
+       is simply absent, and without saying so the camera button looks broken
+       for a reason nobody could guess. */
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraProblem(
+        "This browser will not hand a web page the camera. That usually means the site was opened over http rather than https. Type the code instead."
+      );
+      return;
+    }
+
     try {
       /* The QR decoder is a fifth of the console's weight and only this screen
          has any use for it, so it is fetched when the camera is opened rather
          than by everyone who signs in to the desk. */
       const { default: jsQR } = await import("jsqr");
+      decoder.current = jsQR;
 
-      const media = await navigator.mediaDevices.getUserMedia({
+      stream.current = await navigator.mediaDevices.getUserMedia({
         // The back camera is the one pointing at the guest's phone.
         video: { facingMode: "environment" },
         audio: false,
       });
-      stream.current = media;
+
+      // Everything that needs the <video> happens in the effect below, once
+      // this has actually put it on the screen.
       setScanning(true);
-
-      if (video.current) {
-        video.current.srcObject = media;
-        await video.current.play();
-      }
-
-      timer.current = setInterval(() => {
-        const element = video.current;
-        const surface = canvas.current;
-        if (!element || !surface || element.readyState !== element.HAVE_ENOUGH_DATA) return;
-
-        surface.width = element.videoWidth;
-        surface.height = element.videoHeight;
-        const context = surface.getContext("2d", { willReadFrequently: true });
-        if (!context) return;
-
-        context.drawImage(element, 0, 0, surface.width, surface.height);
-        const frame = context.getImageData(0, 0, surface.width, surface.height);
-        const found = jsQR(frame.data, frame.width, frame.height, { inversionAttempts: "dontInvert" });
-        if (found?.data) void check({ token: found.data });
-      }, SCAN_INTERVAL_MS);
-    } catch {
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : "";
       setCameraProblem(
-        "This device would not give us the camera. Allow camera access in the browser, or type the code instead."
+        name === "NotAllowedError"
+          ? "The camera was blocked. Allow it for this site in your browser settings, then try again."
+          : name === "NotFoundError"
+            ? "No camera was found on this device. Type the code instead."
+            : "The camera could not be opened. Type the code instead."
       );
     }
   }
+
+  /*
+   * Attach the stream and run the scan loop.
+   *
+   * This cannot happen inside `start`: the <video> is only rendered while
+   * `scanning` is true, so at the moment the stream arrives the element does
+   * not exist yet and the ref is still null. Doing it here means the element is
+   * on the page by the time we reach for it.
+   */
+  useEffect(() => {
+    if (!scanning) return;
+
+    const element = video.current;
+    const surface = canvas.current;
+    const media = stream.current;
+    const decode = decoder.current;
+    if (!element || !surface || !media || !decode) return;
+
+    element.srcObject = media;
+    void element.play().catch(() => {
+      setCameraProblem("The camera opened but the preview would not start. Type the code instead.");
+    });
+
+    const id = setInterval(() => {
+      // A frame before the first one has decoded has no pixels to read.
+      if (element.readyState !== element.HAVE_ENOUGH_DATA) return;
+
+      surface.width = element.videoWidth;
+      surface.height = element.videoHeight;
+      const context = surface.getContext("2d", { willReadFrequently: true });
+      if (!context) return;
+
+      context.drawImage(element, 0, 0, surface.width, surface.height);
+      const frame = context.getImageData(0, 0, surface.width, surface.height);
+
+      /* Receipts print black on white, but a phone screen at an angle can
+         invert what the camera sees, so both polarities are tried. */
+      const found = decode(frame.data, frame.width, frame.height, { inversionAttempts: "attemptBoth" });
+      if (!found?.data) return;
+
+      /* The camera keeps seeing the same code four times a second. Without
+         this, a pass that comes back anything other than valid — unpaid, too
+         early — would be posted again every frame for as long as it is held
+         up, which is a request storm the server would start rate-limiting. */
+      if (found.data === lastSeen.current) return;
+      lastSeen.current = found.data;
+      void check({ token: found.data });
+    }, SCAN_INTERVAL_MS);
+
+    timer.current = id;
+    return () => clearInterval(id);
+  }, [scanning, check]);
 
   const verdict = result ? VERDICTS[result.outcome] : null;
 
@@ -303,6 +358,9 @@ export function Door() {
                   onClick={() => {
                     setResult(null);
                     setCode("");
+                    // Clearing this lets the same pass be scanned again, which
+                    // is what happens when a guest pays and comes back.
+                    lastSeen.current = null;
                   }}
                 >
                   Next guest
