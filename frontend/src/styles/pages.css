@@ -328,15 +328,15 @@
 .row-item {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: var(--s-4);
+  gap: var(--s-3);
   align-items: center;
-  padding-block: var(--s-4);
+  padding-block: var(--s-3);
   border-bottom: 1px solid var(--line);
 }
 
 .row-item__photo {
-  width: 4.5rem;
-  height: 4.5rem;
+  width: 3.5rem;
+  height: 3.5rem;
   border-radius: var(--r-md);
   object-fit: cover;
   flex: none;
@@ -350,7 +350,7 @@
 }
 
 .row-item__name {
-  font-size: var(--t-body);
+  font-size: var(--t-small);
   font-weight: 700;
 }
 
@@ -369,7 +369,7 @@
 }
 
 .row-item__price {
-  font-size: var(--t-lead);
+  font-size: var(--t-body);
   font-weight: 700;
 }
 
@@ -623,8 +623,8 @@
 
 .pass {
   position: relative;
-  max-width: 30rem;
-  padding: var(--s-5);
+  max-width: 28rem;
+  padding: var(--s-4);
   border: 1px solid var(--line-2);
   border-radius: var(--r-lg);
   background:
@@ -662,20 +662,23 @@
   color: var(--text-2);
 }
 
+/* Overrides the display size the markup asks for: at full display scale a
+   single booking filled a phone screen on its own. */
 .pass__when {
-  margin-bottom: var(--s-4);
+  font-size: clamp(1.25rem, 4.5vw, 1.75rem);
+  margin-bottom: var(--s-3);
 }
 
 .pass__facts {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--s-6);
+  gap: var(--s-5);
 }
 
 .pass__big {
-  font-size: var(--t-lead);
+  font-size: var(--t-body);
   font-weight: 700;
-  margin-top: 0.2rem;
+  margin-top: 0.15rem;
 }
 
 .pass__note {
@@ -694,7 +697,7 @@
 /* The perforation. The notches are punched out of the card's own edges. */
 .pass__tear {
   position: relative;
-  margin: var(--s-5) calc(var(--s-5) * -1);
+  margin: var(--s-4) calc(var(--s-4) * -1);
   border-top: 2px dashed var(--line-2);
 }
 
@@ -724,8 +727,8 @@
 }
 
 .pass__code {
-  font-size: clamp(1.5rem, 6vw, 2rem);
-  letter-spacing: 0.12em;
+  font-size: clamp(1.15rem, 4.5vw, 1.5rem);
+  letter-spacing: 0.1em;
   font-weight: 500;
   margin-top: 0.25rem;
 }
@@ -734,8 +737,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--s-2);
-  margin-top: var(--s-5);
-  padding-top: var(--s-4);
+  margin-top: var(--s-4);
+  padding-top: var(--s-3);
   border-top: 1px solid var(--line);
 }
 
