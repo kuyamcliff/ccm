@@ -688,3 +688,49 @@
     min-height: var(--tap);
   }
 }
+
+/* ── Adding to the room ──────────────────────────────────────────────────
+   A grid of choices, not a form. A fixture has nothing worth typing before it
+   exists — picking the kind is the whole decision, and where it goes is
+   answered by dragging it rather than by entering coordinates. */
+
+.fixture-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  gap: var(--s-2);
+}
+
+.fixture-choice {
+  min-height: var(--tap);
+  padding: var(--s-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--coal-900);
+  color: var(--text);
+  font-size: var(--t-small);
+  font-weight: 700;
+  transition:
+    border-color var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease);
+}
+
+.fixture-choice:hover {
+  border-color: var(--line-hot);
+  background: var(--surface-2);
+}
+
+/* A fixture in the console is something you can grab; on the guest plan it is
+   scenery and takes no pointer at all. */
+.plan__fixture--edit {
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+}
+
+.plan__fixture--edit[data-picked="true"] {
+  border-style: solid;
+  border-color: var(--ember);
+  color: var(--text);
+  box-shadow: var(--glow);
+  z-index: 2;
+}

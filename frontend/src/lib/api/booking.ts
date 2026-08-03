@@ -1,5 +1,5 @@
 import { http } from "../http";
-import type { Booking, DiningTable, MomoPrompt, MomoStatus } from "./types";
+import type { Booking, DiningTable, FloorFixture, MomoPrompt, MomoStatus } from "./types";
 
 /**
  * What the deposit was before the owner could set it.
@@ -27,10 +27,24 @@ export const bookingApi = {
   tables: (date?: string, time?: string) =>
     http.get<{ tables: DiningTable[] }>(`/api/tables${http.query({ date, time })}`).then((r) => r.tables),
 
+  /** The room in full — bookable tables plus the fixtures drawn around them. */
+  floor: (date?: string, time?: string) =>
+    http
+      .get<{ tables: DiningTable[]; fixtures?: FloorFixture[] }>(`/api/tables${http.query({ date, time })}`)
+      .then((r) => ({ tables: r.tables, fixtures: r.fixtures ?? [] })),
+
   mine: () => http.get<{ reservations: Booking[] }>("/api/reservations").then((r) => r.reservations),
 
-  create: (input: { date: string; time: string; partySize: number; phone: string; note: string; tableId: number | null }) =>
-    http.post<{ reservation: Booking }>("/api/reservations", input).then((r) => r.reservation),
+  create: (input: {
+    date: string;
+    time: string;
+    partySize: number;
+    phone: string;
+    note: string;
+    tableId: number | null;
+    /** Food and drink to have ready. Priced by the server, never from here. */
+    items?: { id: number; qty: number }[];
+  }) => http.post<{ reservation: Booking }>("/api/reservations", input).then((r) => r.reservation),
 
   /**
    * Cancels a booking. Close to the sitting the restaurant keeps a fee, and the

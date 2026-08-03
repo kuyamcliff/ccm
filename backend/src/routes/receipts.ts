@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import { db } from "../db.js";
 import { requireAuth } from "../auth.js";
 import { createQrToken } from "../lib/qrToken.js";
+import { parseOrderLines } from "../lib/orderItems.js";
 
 const _require = createRequire(import.meta.url);
 // pdfkit ships CommonJS with loose types; the drawing API is used untyped.
@@ -23,6 +24,29 @@ const GREEN = "#2f7d5b";
 
 const PAGE_MARGIN = 52;
 const CONTENT_WIDTH = 595.28 - PAGE_MARGIN * 2;
+
+/* Where the footer sits, and therefore the line content must not cross. */
+const FOOT_TOP = 760;
+
+/**
+ * Holds a receipt to one sheet.
+ *
+ * A receipt is a thing somebody prints at a counter or shows at a door, and a
+ * second page is either wasted paper or the half that gets left behind. PDFKit
+ * adds a page the moment the cursor runs past the bottom margin, so the way to
+ * be sure is to take that ability away rather than to hope the content fits.
+ *
+ * Callers still cap what they draw — this is the guarantee, not the plan. Once
+ * it is in force, anything that would have overflowed is clipped instead, so
+ * the parts that matter are laid out first: the code, then the booking, then
+ * the money.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function holdToOnePage(doc: any): void {
+  doc.addPage = function noSecondPage() {
+    return doc;
+  };
+}
 
 function methodLabel(method: string | null): string {
   if (method === "mtn_momo") return "MTN Mobile Money";
@@ -87,6 +111,7 @@ receiptsRouter.get("/takeaway/:orderNo", requireAuth, async (req, res) => {
 
   const chunks: Buffer[] = [];
   const doc = new PDFDocument({ size: "A4", margin: PAGE_MARGIN, info: { Title: `${code} receipt` } });
+  holdToOnePage(doc);
   doc.on("data", (c: Buffer) => chunks.push(c));
   doc.on("end", () => {
     const pdf = Buffer.concat(chunks);
@@ -167,7 +192,12 @@ receiptsRouter.get("/takeaway/:orderNo", requireAuth, async (req, res) => {
 
   // ── Items ──
   sectionTitle("Items");
-  for (const line of items) {
+  /* Capped for the same reason as the booking receipt: past this many lines the
+     footer is pushed off the sheet, and the remainder is summed instead. */
+  const MAX_ITEM_LINES = 14;
+  const shownItems = items.slice(0, MAX_ITEM_LINES);
+  const hiddenItems = items.slice(MAX_ITEM_LINES);
+  for (const line of shownItems) {
     const y = doc.y;
     doc.fontSize(9.5).font("Helvetica").fillColor(INK)
       .text(`${line.qty} × ${line.name}`, L, y, { width: CONTENT_WIDTH - 120 });
@@ -175,6 +205,18 @@ receiptsRouter.get("/takeaway/:orderNo", requireAuth, async (req, res) => {
       .text(`${(line.price * line.qty).toLocaleString()} FCFA`, L + CONTENT_WIDTH - 120, y, {
         width: 120, align: "right",
       });
+    doc.y = Math.max(doc.y, y + 15);
+  }
+
+  if (hiddenItems.length > 0) {
+    const rest = hiddenItems.reduce((sum, l) => sum + l.price * l.qty, 0);
+    const y = doc.y;
+    doc.fontSize(9.5).font("Helvetica").fillColor(MUTED)
+      .text(`and ${hiddenItems.length} more ${hiddenItems.length === 1 ? "item" : "items"}`, L, y, {
+        width: CONTENT_WIDTH - 120,
+      });
+    doc.font("Helvetica-Bold").fillColor(INK)
+      .text(`${rest.toLocaleString()} FCFA`, L + CONTENT_WIDTH - 120, y, { width: 120, align: "right" });
     doc.y = Math.max(doc.y, y + 15);
   }
 
@@ -207,7 +249,7 @@ receiptsRouter.get("/takeaway/:orderNo", requireAuth, async (req, res) => {
   if (row.collected_at) detail("Collected", `${String(row.collected_at).replace(" ", " · ")} UTC`);
 
   // ── Footer ──
-  const footTop = 760;
+  const footTop = FOOT_TOP;
   rule(footTop);
   doc.fontSize(8.5).font("Helvetica").fillColor(MUTED)
     .text(
@@ -233,7 +275,7 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
   const row = (await db
     .prepare(
       `SELECT r.id, r.date, r.time, r.party_size, r.phone, r.note, r.status, r.payment_status,
-              r.ccm_code, r.created_at, r.user_id,
+              r.ccm_code, r.created_at, r.user_id, r.items_json, r.items_total_fcfa, r.deposit_fcfa,
               u.name AS guest_name, u.email AS guest_email,
               t.label AS table_label, t.zone AS table_zone,
               p.amount_fcfa, p.discount_fcfa, p.momo_phone, p.method AS pay_method,
@@ -263,6 +305,13 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
   const subtotal = paid + discount;
   const isPaid = row.payment_status === "paid";
 
+  /* Food and drink ordered with the table. `deposit_fcfa` is what was frozen
+     onto the booking when it was paid; older rows predate that column, so the
+     deposit is inferred by taking the food back off the total. */
+  const preordered = parseOrderLines(row.items_json as string | null);
+  const itemsTotal = Number(row.items_total_fcfa) || 0;
+  const depositPart = Number(row.deposit_fcfa) || Math.max(0, subtotal - itemsTotal);
+
   /* The QR carries an HMAC-signed token, not a link. A plain reference would
      prove nothing — anyone can encode text into a QR — whereas this cannot be
      produced without the server's signing secret. Error correction is high so
@@ -280,6 +329,7 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
 
   const chunks: Buffer[] = [];
   const doc = new PDFDocument({ size: "A4", margin: PAGE_MARGIN, info: { Title: `${code} receipt` } });
+  holdToOnePage(doc);
   doc.on("data", (c: Buffer) => chunks.push(c));
   doc.on("end", () => {
     const pdf = Buffer.concat(chunks);
@@ -384,7 +434,29 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
     doc.y = Math.max(doc.y, y + 15);
   };
 
-  money("Table deposit", `${subtotal.toLocaleString()} FCFA`);
+  money("Table deposit", `${depositPart.toLocaleString()} FCFA`);
+
+  /* What they ordered ahead, itemised. Capped so a large party's order cannot
+     push the footer onto a second page — the rest is summed into one line,
+     which is the honest way to stay on one sheet. */
+  if (preordered.length > 0) {
+    const MAX_LINES = 8;
+    const shown = preordered.slice(0, MAX_LINES);
+    const hidden = preordered.slice(MAX_LINES);
+
+    for (const line of shown) {
+      money(`${line.qty} × ${line.name}`, `${(line.price * line.qty).toLocaleString()} FCFA`);
+    }
+    if (hidden.length > 0) {
+      const rest = hidden.reduce((sum, l) => sum + l.price * l.qty, 0);
+      money(
+        `and ${hidden.length} more ${hidden.length === 1 ? "item" : "items"}`,
+        `${rest.toLocaleString()} FCFA`
+      );
+    }
+    money("Food and drinks", `${itemsTotal.toLocaleString()} FCFA`, { bold: true });
+  }
+
   if (discount > 0) money("Discount applied", `- ${discount.toLocaleString()} FCFA`, { color: GREEN });
 
   doc.moveDown(0.35);
@@ -407,7 +479,7 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
   }
 
   // ── Footer, pinned to the bottom of the page ──
-  const footTop = 760;
+  const footTop = FOOT_TOP;
   rule(footTop);
   doc.fontSize(8.5).font("Helvetica").fillColor(MUTED)
     .text(

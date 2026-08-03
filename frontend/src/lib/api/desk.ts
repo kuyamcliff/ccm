@@ -12,6 +12,8 @@ import type {
   DiningTable,
   EventEnquiry,
   EventType,
+  FixtureKind,
+  FloorFixture,
   GalleryPhoto,
   GiftCard,
   LegalPage,
@@ -55,6 +57,19 @@ export const deskApi = {
     update: (id: number, input: Partial<{ label: string; capacity: number; zone: string; pos_x: number; pos_y: number; active: boolean }>) =>
       http.patch<{ ok: true }>(`/api/admin/tables/${id}`, input),
     remove: (id: number) => http.del<{ ok: true }>(`/api/admin/tables/${id}`),
+  },
+
+  /** The room around the tables — grill, screen, bar. Never bookable. */
+  fixtures: {
+    list: () =>
+      http.get<{ fixtures: FloorFixture[]; kinds: FixtureKind[] }>("/api/admin/fixtures"),
+    create: (input: { kind: FixtureKind; label?: string; pos_x?: number; pos_y?: number; width?: number; height?: number }) =>
+      http.post<{ id: number }>("/api/admin/fixtures", input),
+    update: (
+      id: number,
+      input: Partial<{ kind: FixtureKind; label: string; pos_x: number; pos_y: number; width: number; height: number }>
+    ) => http.patch<{ ok: true }>(`/api/admin/fixtures/${id}`, input),
+    remove: (id: number) => http.del<{ ok: true }>(`/api/admin/fixtures/${id}`),
   },
 
   menu: {

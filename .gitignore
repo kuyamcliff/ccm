@@ -12,3 +12,6 @@ backend/data/
 # Python bytecode caches, which the bundled skill scripts regenerate on every run.
 __pycache__/
 *.pyc
+
+# TypeScript incremental build state, rewritten on every typecheck.
+*.tsbuildinfo
