@@ -3,10 +3,11 @@ import { api, DEPOSIT_FCFA } from "~/lib/api";
 import type { Booking, TakeawayOrder } from "~/lib/api";
 import { ApiError } from "~/lib/http";
 import { dayLabel, parseLines, stampLabel, timeLabel } from "~/lib/format";
-import { useResource } from "~/lib/useResource";
+import { type Resource, useResource } from "~/lib/useResource";
 import { Button, LinkButton } from "~/ui/Button";
 import { Badge, Money } from "~/ui/Bits";
 import { EmptyState, ErrorState, Notice, SkeletonCards } from "~/ui/Feedback";
+import { Icon } from "~/ui/Icon";
 import { useConfirm } from "~/ui/Sheet";
 import { useToast } from "~/state/toast";
 import { BookingPass } from "./BookingPass";
@@ -35,8 +36,7 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-function Bookings() {
-  const bookings = useResource(() => api.booking.mine(), []);
+function Bookings({ bookings }: { bookings: Resource<Booking[]> }) {
   const toast = useToast();
   const { confirm, confirmElement } = useConfirm();
   const [payFor, setPayFor] = useState<Booking | null>(null);
@@ -169,8 +169,7 @@ function Bookings() {
   );
 }
 
-function Orders() {
-  const orders = useResource(() => api.orders.mine(), []);
+function Orders({ orders }: { orders: Resource<TakeawayOrder[]> }) {
   const toast = useToast();
   const [payFor, setPayFor] = useState<TakeawayOrder | null>(null);
 
@@ -289,8 +288,22 @@ function Orders() {
   );
 }
 
+/** Held tables and orders still worth the guest's attention — what a tab
+    count should draw the eye to, not everything that has ever happened. */
+function activeBookingCount(rows: Booking[] | null): number {
+  return (rows ?? []).filter((b) => b.status === "confirmed" || b.status === "pending_payment").length;
+}
+function activeOrderCount(rows: TakeawayOrder[] | null): number {
+  return (rows ?? []).filter((o) => o.status !== "cancelled" && o.status !== "picked_up").length;
+}
+
 export function MinePage() {
   const [tab, setTab] = useState<"tables" | "orders">("tables");
+  const bookings = useResource(() => api.booking.mine(), []);
+  const orders = useResource(() => api.orders.mine(), []);
+
+  const tableCount = activeBookingCount(bookings.data);
+  const orderCount = activeOrderCount(orders.data);
 
   return (
     <div className="page section">
@@ -301,14 +314,20 @@ export function MinePage() {
 
       <div className="tabs" role="tablist" aria-label="What you have with us">
         <button type="button" role="tab" className="tab" aria-selected={tab === "tables"} onClick={() => setTab("tables")}>
+          <Icon name="calendar" size={16} />
           Tables
+          {tableCount > 0 ? <span className="tab__count">{tableCount}</span> : null}
         </button>
         <button type="button" role="tab" className="tab" aria-selected={tab === "orders"} onClick={() => setTab("orders")}>
+          <Icon name="bag" size={16} />
           Takeaway orders
+          {orderCount > 0 ? <span className="tab__count">{orderCount}</span> : null}
         </button>
       </div>
 
-      <div style={{ marginTop: "var(--s-5)" }}>{tab === "tables" ? <Bookings /> : <Orders />}</div>
+      <div style={{ marginTop: "var(--s-5)" }}>
+        {tab === "tables" ? <Bookings bookings={bookings} /> : <Orders orders={orders} />}
+      </div>
     </div>
   );
 }

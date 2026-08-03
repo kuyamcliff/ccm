@@ -124,6 +124,7 @@
   border-radius: 50%;
   background: var(--ember);
   box-shadow: 0 0 10px 2px rgba(255, 91, 31, 0.6);
+  animation: pulse 2.4s var(--ease) infinite;
 }
 
 .hero__title {
@@ -165,6 +166,43 @@
   margin: 0.35rem 0 0;
   font-size: var(--t-small);
   color: var(--text-2);
+}
+
+/* A quiet arrival, once, in reading order. Each piece holds its "from" state
+   through its delay via the `both` fill mode, so nothing flashes at full
+   opacity before its turn. */
+.hero__eyebrow,
+.hero__title,
+.hero__blurb,
+.hero__actions,
+.hero__facts {
+  animation: rise-in var(--dur-3) var(--ease) both;
+}
+
+.hero__title {
+  animation-delay: 60ms;
+}
+.hero__blurb {
+  animation-delay: 120ms;
+}
+.hero__actions {
+  animation-delay: 180ms;
+}
+.hero__facts {
+  animation-delay: 240ms;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero__coal {
+    animation: none;
+  }
 }
 
 /* ── Home: dishes, ways in, quote, address ─────────────────────────────── */
@@ -243,6 +281,14 @@
   color: var(--ember-hi);
 }
 
+.way__go svg {
+  transition: transform var(--dur-1) var(--ease);
+}
+
+.way:hover .way__go svg {
+  transform: translateX(3px);
+}
+
 .quote {
   margin: 0;
   padding: var(--s-6);
@@ -276,6 +322,14 @@
   gap: 0.35rem;
   color: var(--ember-hi);
   font-weight: 700;
+}
+
+.quote__more svg {
+  transition: transform var(--dur-1) var(--ease);
+}
+
+.quote__more:hover svg {
+  transform: translateX(3px);
 }
 
 .find {
@@ -530,9 +584,11 @@
   border-color: var(--ember);
   color: var(--on-accent);
   box-shadow: var(--glow);
+  animation: pulse 1.6s var(--ease) 1;
 }
 
-.plan__table[data-state="blocked"] {
+/* Occupied: gone for the night, not worth a second look. */
+.plan__table[data-state="taken"] {
   opacity: 0.4;
   cursor: not-allowed;
   background: repeating-linear-gradient(
@@ -542,10 +598,32 @@
   );
 }
 
+/* Free, but not for this party — a different reason gets a different look,
+   so a guest can tell "come back later" from "never going to fit". */
+.plan__table[data-state="small"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  border-style: dashed;
+  background: var(--coal-850);
+}
+
+.plan__mark {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  opacity: 0.85;
+}
+
 .plan__seats {
   font-size: 0.625rem;
   font-weight: 400;
   opacity: 0.75;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan__table[data-state="picked"] {
+    animation: none;
+  }
 }
 
 /* Sits above the room, not in it: at the bottom it landed on the outdoor
@@ -581,8 +659,13 @@
   border-color: var(--ember);
 }
 
-.plan-legend span[data-state="blocked"] {
+.plan-legend span[data-state="taken"] {
   opacity: 0.4;
+}
+
+.plan-legend span[data-state="small"] {
+  opacity: 0.55;
+  border-style: dashed;
 }
 
 .summary {
