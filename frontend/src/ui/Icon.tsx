@@ -20,6 +20,8 @@ export type IconName =
   | "info"
   | "arrow-right"
   | "arrow-left"
+  | "arrow-up"
+  | "arrow-down"
   | "chevron-right"
   | "chevron-down"
   | "plus"
@@ -83,6 +85,10 @@ const PATHS: Record<IconName, string> = {
   info: "M12 11v6M12 7.5v.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
   "arrow-right": "M4 12h15M13 6l6 6-6 6",
   "arrow-left": "M20 12H5M11 18l-6-6 6-6",
+  /* Same shaft length and the same head as the horizontal pair, turned a
+     quarter, so the four read as one compass on the plan's nudge pad. */
+  "arrow-up": "M12 20V5M6 11l6-6 6 6",
+  "arrow-down": "M12 4v15M6 13l6 6 6-6",
   "chevron-right": "M9 5l7 7-7 7",
   "chevron-down": "M5 9l7 7 7-7",
   plus: "M12 5v14M5 12h14",

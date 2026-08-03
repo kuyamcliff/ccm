@@ -29,7 +29,13 @@ body {
   font-size: var(--t-body);
   line-height: var(--lh-body);
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+  -moz-osx-font-smoothing: grayscale;
+  /* Karla ships proper kerning and ligatures; ask for them by name rather than
+     through `text-rendering: optimizeLegibility`, which turns the same features
+     on but is known to stall first paint on long pages and to mis-measure
+     Anton at hero sizes. */
+  font-kerning: normal;
+  font-feature-settings: "kern" 1, "liga" 1;
   /* Stops a horizontal wobble on phones when a wide element overshoots by a
      pixel; genuinely wide content scrolls inside its own container instead. */
   overflow-x: hidden;
@@ -77,6 +83,22 @@ button {
   background: none;
   border: none;
   padding: 0;
+}
+
+/* Every tappable thing, not just buttons. Without this a phone waits 300ms
+   after a tap to see whether a second one is coming — which is most of the
+   reason an interface feels slow on a phone while feeling fine on a desk. The
+   highlight box that Safari paints on top is redundant once we have our own
+   pressed states. */
+a,
+button,
+label,
+select,
+summary,
+[role="button"],
+[role="tab"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 a {

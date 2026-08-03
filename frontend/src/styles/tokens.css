@@ -26,7 +26,7 @@
   /* ── Bone. The text ramp. Slightly yellow so it sits in the same light. */
   --bone: #f4efe7;
   --bone-2: #b9afa3;
-  --bone-3: #877d72;
+  --bone-3: #93887c;
 
   /* ── Ember. One hot colour, used sparingly enough that it always means
      "act here". Anything decorative uses coal and bone instead. */
@@ -72,12 +72,18 @@
   --t-hero: clamp(3rem, 13vw, 8.5rem);
   --t-display: clamp(2.25rem, 7.5vw, 4.25rem);
   --t-title: clamp(1.65rem, 4.5vw, 2.5rem);
-  --t-head: 1.3125rem;
-  --t-lead: 1.125rem;
+  --t-head: clamp(1.1875rem, 1.05rem + 0.7vw, 1.3125rem);
+  --t-lead: clamp(1.0625rem, 1rem + 0.35vw, 1.125rem);
   --t-body: 1rem;
   --t-small: 0.9375rem;
-  --t-fine: 0.8125rem;
+  /* 14px, not 13px. This size carries the dish descriptions and every helper
+     line in the product; at 13px it was the one thing on a phone people had to
+     squint at. */
+  --t-fine: 0.875rem;
   --t-label: 0.75rem;
+  /* The floor below which nothing may be set: seat counts on the plan, tab bar
+     labels, badge digits. Anything smaller is unreadable at arm's length. */
+  --t-micro: 0.6875rem;
 
   --lh-tight: 0.92;
   --lh-head: 1.15;
@@ -102,6 +108,12 @@
   --gutter: clamp(1rem, 4vw, 2.5rem);
   --page-max: 78rem;
   --prose-max: 38rem;
+
+  /* The smallest a thing may be and still be tapped: 44px, the figure both
+     Apple and Material land on. Controls read this rather than each picking
+     their own height, so nothing drifts under it. */
+  --tap: 2.75rem;
+  --safe-b: env(safe-area-inset-bottom, 0px);
 
   /* ── Shape. Cards are generously rounded, controls less so, and anything
      that behaves like a stamp or a chip goes fully round. */

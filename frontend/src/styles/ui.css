@@ -530,7 +530,8 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: 0;
+  /* Never let a tall sheet run up under the notch or the status bar. */
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--s-4));
   background: rgba(6, 6, 5, 0.72);
   backdrop-filter: blur(3px);
   animation: scrim-in var(--dur-2) var(--ease);
@@ -542,19 +543,32 @@
   }
 }
 
+/*
+ * The sheet is a column, not a scrolling box.
+ *
+ * It used to be one scroll container holding the title, the form and the
+ * buttons together. On a phone that put the actions below the fold of a sheet
+ * that was itself below the fold: open a form, and Save sat somewhere off the
+ * bottom of the screen with nothing to say it was there. Worse with a keyboard
+ * up, because `dvh` counts the browser chrome but not the keyboard.
+ *
+ * So: the panel never scrolls. The head and the foot are fixed rows, always on
+ * screen, and the body between them takes whatever height is left and scrolls
+ * inside itself.
+ */
 .sheet {
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 34rem;
-  max-height: 92dvh;
-  overflow-y: auto;
+  max-height: 100%;
+  overflow: hidden;
   overscroll-behavior: contain;
   background: var(--surface);
   border: 1px solid var(--line-2);
   border-bottom: 0;
   border-radius: var(--r-xl) var(--r-xl) 0 0;
-  padding: var(--s-5);
-  padding-bottom: calc(var(--s-5) + env(safe-area-inset-bottom));
   box-shadow: var(--shadow-3);
   animation: sheet-up var(--dur-3) var(--ease);
 }
@@ -568,35 +582,57 @@
 
 /* The grab handle is decoration on desktop, an affordance on a phone. */
 .sheet__grip {
+  flex: none;
   width: 2.5rem;
   height: 0.25rem;
   border-radius: var(--r-full);
   background: var(--coal-700);
-  margin: 0 auto var(--s-4);
+  margin: var(--s-3) auto 0;
 }
 
 .sheet__head {
+  flex: none;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--s-4);
-  margin-bottom: var(--s-4);
+  padding: var(--s-4) var(--s-5) var(--s-4);
 }
 
+/* The only part that scrolls. `min-height: 0` is what actually lets it — a
+   flex child defaults to its content's height and would otherwise push the
+   footer out of the panel instead of scrolling. */
 .sheet__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: var(--s-4);
+  padding: 0 var(--s-5) var(--s-5);
 }
 
+/* Pinned to the bottom of the panel, above the home indicator, with a rule so
+   it reads as a floor rather than as the last item in the form. */
 .sheet__foot {
+  flex: none;
   display: flex;
   gap: var(--s-3);
-  margin-top: var(--s-5);
+  padding: var(--s-4) var(--s-5);
+  padding-bottom: calc(var(--s-4) + var(--safe-b));
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
 }
 
 .sheet__foot > .btn {
   flex: 1;
+  min-height: var(--tap);
+}
+
+/* A sheet with no footer still has to clear the home indicator. */
+.sheet:not(:has(.sheet__foot)) .sheet__body {
+  padding-bottom: calc(var(--s-5) + var(--safe-b));
 }
 
 @media (min-width: 42rem) {
@@ -608,12 +644,20 @@
   .sheet {
     border: 1px solid var(--line-2);
     border-radius: var(--r-xl);
-    padding-bottom: var(--s-5);
     animation-name: sheet-in;
   }
 
   .sheet__grip {
     display: none;
+  }
+
+  .sheet__head {
+    padding-top: var(--s-5);
+  }
+
+  .sheet__foot {
+    padding-bottom: var(--s-4);
+    border-radius: 0 0 var(--r-xl) var(--r-xl);
   }
 
   @keyframes sheet-in {
@@ -1036,4 +1080,24 @@
   border-radius: var(--r-full);
   background: var(--heat);
   transition: width var(--dur-3) var(--ease);
+}
+
+/* ── Touch ───────────────────────────────────────────────────────────────
+   The compact sizes in this file are a density choice made for a mouse. On a
+   touchscreen the same numbers stop being density and start being missed taps,
+   so every control a finger can reach is brought back up to 44px there. A
+   pointer that can hover keeps the tighter interface. */
+
+@media (pointer: coarse) {
+  .btn--sm {
+    min-height: var(--tap);
+  }
+
+  .btn--icon.btn--sm {
+    min-width: var(--tap);
+  }
+
+  .chip {
+    min-height: var(--tap);
+  }
 }

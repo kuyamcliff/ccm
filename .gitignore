@@ -8,3 +8,7 @@ backend/data/
 .env
 .env.*
 !.env.example
+
+# Python bytecode caches, which the bundled skill scripts regenerate on every run.
+__pycache__/
+*.pyc

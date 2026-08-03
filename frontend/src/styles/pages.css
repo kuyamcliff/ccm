@@ -207,10 +207,26 @@
 
 /* ── Home: dishes, ways in, quote, address ─────────────────────────────── */
 
+/*
+ * Two to a row on a phone, not one.
+ *
+ * At a 15rem minimum each card took the full width of a phone and carried a
+ * 4:3 photograph, so a single dish ran most of the screen and "what people
+ * order" became a column you scrolled rather than a group you could take in.
+ * Narrower cards and a shallower crop put three dishes on screen at once,
+ * which is the actual job of this section.
+ */
 .dish-grid {
   display: grid;
-  gap: var(--s-4);
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--s-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(9.5rem, 100%), 1fr));
+}
+
+@media (min-width: 48rem) {
+  .dish-grid {
+    gap: var(--s-4);
+    grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+  }
 }
 
 .dish {
@@ -223,7 +239,7 @@
 }
 
 .dish__photo {
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 3 / 2;
   background: var(--coal-900);
 }
 
@@ -236,15 +252,38 @@
 .dish__body {
   display: flex;
   flex-direction: column;
-  gap: var(--s-2);
-  padding: var(--s-4);
+  gap: var(--s-1);
+  padding: var(--s-3);
   flex: 1;
+}
+
+@media (min-width: 48rem) {
+  .dish__body {
+    gap: var(--s-2);
+    padding: var(--s-4);
+  }
+}
+
+.dish__name {
+  font-size: var(--t-small);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+/* Two lines of description, then stop. In a card this narrow a long one used
+   to set the height of every card in the row. */
+.dish__note {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .dish__price {
   margin-top: auto;
   padding-top: var(--s-2);
-  font-size: var(--t-lead);
+  font-size: var(--t-body);
   font-weight: 700;
 }
 
@@ -540,9 +579,31 @@
 
 /* The floor plan. Positioned as percentages of a measured extent, so the room
    scales with the screen instead of scrolling. */
+/*
+ * The plan is a picture of a real room, so it is the one thing on the site
+ * that must not reflow: sliding a table somewhere else to make it fit a phone
+ * would be a lie about where that table actually is.
+ *
+ * It holds a minimum legible width and scrolls sideways inside its own frame
+ * instead — the same move this codebase already makes for a wide table of
+ * takings. 36rem is not arbitrary: the smallest table is drawn at 8% of the
+ * plan, and 8% of 36rem is 46px, which clears the 44px a fingertip needs.
+ * Under that width the tables either overlap each other or become untappable,
+ * and on a 360px phone the old plan did both.
+ */
+.plan-frame {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  /* The frame scrolls, so the rounded corner has to live here or the plan's
+     own corners clip flat against it. */
+  border-radius: var(--r-lg);
+}
+
 .plan {
   position: relative;
   width: 100%;
+  min-width: 36rem;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background:
@@ -552,12 +613,30 @@
     var(--coal-900);
 }
 
+/* A hint that there is more room to the right, shown only while the frame can
+   actually scroll. It sits outside the scrolling area so it does not travel
+   with the content. */
+.plan-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+  color: var(--text-3);
+  font-size: var(--t-fine);
+}
+
+@media (min-width: 40rem) {
+  .plan-hint {
+    display: none;
+  }
+}
+
 .plan__table {
   position: absolute;
   transform: translate(-50%, -50%);
   aspect-ratio: 1;
-  min-width: 2.75rem;
-  min-height: 2.75rem;
+  min-width: var(--tap);
+  min-height: var(--tap);
   display: grid;
   place-content: center;
   gap: 0.1rem;
@@ -567,7 +646,15 @@
   color: var(--text-2);
   font-size: var(--t-fine);
   font-weight: 700;
-  transition: all var(--dur-1) var(--ease);
+  line-height: 1.1;
+  /* Named properties, not `all`. `all` included `left`, `top` and `width`, so
+     every drag frame in the console animated the table towards the pointer
+     instead of tracking it — the lag people read as the plan feeling loose. */
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease),
+    box-shadow var(--dur-1) var(--ease);
 }
 
 .plan__table[data-zone="outdoor"] {
@@ -615,9 +702,9 @@
 }
 
 .plan__seats {
-  font-size: 0.625rem;
+  font-size: var(--t-micro);
   font-weight: 400;
-  opacity: 0.75;
+  opacity: 0.8;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -626,14 +713,8 @@
   }
 }
 
-/* Sits above the room, not in it: at the bottom it landed on the outdoor
-   tables, which are the ones furthest from the kitchen and lowest on the plan. */
-.plan__key {
-  position: absolute;
-  top: var(--s-2);
-  right: var(--s-3);
-  display: flex;
-  gap: var(--s-3);
+.plan-hint__zones {
+  margin-inline-start: auto;
   text-transform: capitalize;
 }
 
@@ -666,6 +747,81 @@
 .plan-legend span[data-state="small"] {
   opacity: 0.55;
   border-style: dashed;
+}
+
+/* ── The plan, as the owner arranges it ──────────────────────────────────
+   Dragging was the only way to move a table, and dragging is the one gesture
+   a touchscreen cannot lend us: without `touch-action: none` the browser
+   claims the drag for scrolling, so on a phone the plan simply slid about
+   underneath the finger and nothing moved. Editing was on double-click, which
+   a touchscreen does not reliably have either.
+
+   So a table is now something you select, and a selected table can be moved by
+   dragging it, by nudging it, or with the arrow keys. */
+
+.plan--edit .plan__table {
+  /* Claim the gesture from the browser's scroller. */
+  touch-action: none;
+  cursor: grab;
+}
+
+.plan--edit .plan__table[data-picked="true"] {
+  border-color: var(--ember);
+  color: var(--text);
+  box-shadow: var(--glow);
+  z-index: 2;
+}
+
+.plan--edit .plan__table[data-dragging="true"] {
+  cursor: grabbing;
+  /* Lifted while it is in the hand, so it is never lost under a neighbour. */
+  z-index: 3;
+  box-shadow: var(--shadow-3), var(--glow);
+}
+
+/* The controls for whichever table is selected. On a phone this is the whole
+   interaction; on a desk it is the keyboard-reachable half of it. */
+.plan-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.plan-tools__who {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  margin-inline-end: auto;
+}
+
+/* A compass, not four loose buttons: up over the middle, the other three in the
+   row beneath it. All four are placed by hand — naming only the first leaves
+   auto-placement to carry on from that cell, which puts left up on the top row
+   beside it. */
+.plan-tools__pad {
+  display: grid;
+  grid-template-columns: repeat(3, var(--tap));
+  grid-template-rows: repeat(2, var(--tap));
+  gap: var(--s-1);
+}
+
+.plan-tools__pad > :nth-child(1) {
+  grid-area: 1 / 2;
+}
+.plan-tools__pad > :nth-child(2) {
+  grid-area: 2 / 1;
+}
+.plan-tools__pad > :nth-child(3) {
+  grid-area: 2 / 2;
+}
+.plan-tools__pad > :nth-child(4) {
+  grid-area: 2 / 3;
 }
 
 .summary {
@@ -1486,4 +1642,18 @@
   border: 1px solid var(--line-2);
   border-radius: var(--r-lg);
   background: linear-gradient(120deg, var(--surface), var(--coal-900));
+}
+
+/* ── Touch ───────────────────────────────────────────────────────────────
+   "Open in Maps" and the phone number are the two things somebody standing in
+   the street actually presses, and both were being drawn at the height of
+   their own text — 16px and 26px. They get a real target on a touchscreen. */
+
+@media (pointer: coarse) {
+  .find__row a,
+  .quote__more {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap);
+  }
 }

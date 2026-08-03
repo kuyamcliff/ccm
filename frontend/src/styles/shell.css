@@ -361,3 +361,22 @@
   gap: var(--s-3);
   font-size: var(--t-fine);
 }
+
+/* ── Touch ───────────────────────────────────────────────────────────────
+   Standalone links in the chrome are actions, not prose, and on a phone they
+   were being drawn at the height of their own text — the footer nav at 35px,
+   the brand at 32px. A pointer that can hover keeps the tighter spacing. */
+
+@media (pointer: coarse) {
+  .footer__links a,
+  .footer__bottom a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap);
+    padding-block: 0;
+  }
+
+  .brand {
+    min-height: var(--tap);
+  }
+}
