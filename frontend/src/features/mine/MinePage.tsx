@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, DEPOSIT_FCFA } from "~/lib/api";
+import { api } from "~/lib/api";
 import type { Booking, TakeawayOrder } from "~/lib/api";
 import { ApiError } from "~/lib/http";
 import { dayLabel, parseLines, stampLabel, timeLabel } from "~/lib/format";
@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, Notice, SkeletonCards } from "~/ui/Feedback";
 import { Icon } from "~/ui/Icon";
 import { useConfirm } from "~/ui/Sheet";
 import { useToast } from "~/state/toast";
+import { useVenue } from "~/state/venue";
 import { BookingPass } from "./BookingPass";
 import { MomoDialog } from "~/features/pay/MomoDialog";
 
@@ -37,6 +38,7 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 function Bookings({ bookings }: { bookings: Resource<Booking[]> }) {
+  const { depositFcfa } = useVenue();
   const toast = useToast();
   const { confirm, confirmElement } = useConfirm();
   const [payFor, setPayFor] = useState<Booking | null>(null);
@@ -135,7 +137,7 @@ function Bookings({ bookings }: { bookings: Resource<Booking[]> }) {
       {payFor ? (
         <MomoDialog
           open
-          amountFcfa={DEPOSIT_FCFA}
+          amountFcfa={depositFcfa}
           title="Pay the deposit"
           what={`${dayLabel(payFor.date)} at ${timeLabel(payFor.time)}`}
           driver={{

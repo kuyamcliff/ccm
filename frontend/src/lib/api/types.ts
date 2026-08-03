@@ -31,6 +31,11 @@ export interface SiteSettings {
   tiktok_url?: string;
   ig_url?: string;
   fb_url?: string;
+  /* Money, but delivered as strings like every other setting — site_settings is
+     a key/value table. Read them through `useVenue`, which parses and falls
+     back, rather than pulling them out here. */
+  booking_deposit_fcfa?: string;
+  late_cancel_fee_fcfa?: string;
 }
 
 export interface MenuItem {

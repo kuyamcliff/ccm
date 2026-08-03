@@ -24,4 +24,4 @@ export const api = {
 };
 
 export * from "./types";
-export { DEPOSIT_FCFA, SLOTS, MAX_PARTY } from "./booking";
+export { DEFAULT_DEPOSIT_FCFA, DEFAULT_LATE_CANCEL_FCFA, SLOTS, MAX_PARTY } from "./booking";

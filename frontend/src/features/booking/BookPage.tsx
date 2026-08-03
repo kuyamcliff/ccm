@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, DEPOSIT_FCFA, MAX_PARTY, SLOTS } from "~/lib/api";
+import { api, MAX_PARTY, SLOTS } from "~/lib/api";
 import type { Booking } from "~/lib/api";
 import { ApiError } from "~/lib/http";
 import { addDays, dayLabel, longDate, normalisePhone, todayISO, toISODate } from "~/lib/format";
@@ -11,6 +11,7 @@ import { Money } from "~/ui/Bits";
 import { Notice, Skeleton } from "~/ui/Feedback";
 import { useSession } from "~/state/session";
 import { useToast } from "~/state/toast";
+import { useVenue } from "~/state/venue";
 import { FloorPlan } from "./FloorPlan";
 import { MomoDialog } from "~/features/pay/MomoDialog";
 import { BookingPass } from "~/features/mine/BookingPass";
@@ -34,6 +35,7 @@ const DAYS_AHEAD = 14;
 
 export function BookPage() {
   const { user, ready } = useSession();
+  const { depositFcfa } = useVenue();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -323,7 +325,7 @@ export function BookPage() {
           <div className="deposit card card--flat">
             <div className="row row--between">
               <span>Deposit to hold the table</span>
-              <Money value={DEPOSIT_FCFA} />
+              <Money value={depositFcfa} />
             </div>
             <p className="fine faint">
               Paid by MTN Mobile Money and taken off your bill on the night. Cancel more than an hour ahead and it comes
@@ -347,7 +349,7 @@ export function BookPage() {
       {booking ? (
         <MomoDialog
           open={paying}
-          amountFcfa={DEPOSIT_FCFA}
+          amountFcfa={depositFcfa}
           title="Pay the deposit"
           what={`${longDate(booking.date)} at ${booking.time}, ${booking.party_size} people`}
           driver={{
