@@ -69,25 +69,44 @@ takeawayRouter.post("/", orderLimit, async (req, res) => {
     lines.push({ id: m.id, name: m.name, price: m.price_fcfa, qty });
   }
 
-  let discount = 0;
   let appliedPromo: string | null = null;
   let appliedGift: string | null = null;
 
+  // Promo eligibility is checked (but not yet consumed) before the gift card
+  // is touched, so a gift card failure below cannot leave a promo use spent
+  // on an order that was never actually created.
+  let promoDiscount = 0;
   if (promoCode) {
     const verdict = await evaluatePromo(promoCode, subtotal);
-    if (verdict.ok && (await usePromoCode(promoCode))) {
-      discount += verdict.discount;
-      appliedPromo = promoCode;
-    }
+    if (!verdict.ok) { res.status(verdict.status).json({ error: verdict.error }); return; }
+    promoDiscount = verdict.discount;
   }
 
+  let giftTaken = 0;
   if (giftCode) {
-    const remaining = Math.max(0, subtotal - discount);
-    if (remaining > 0) {
-      const taken = await redeemGiftCard(giftCode, remaining, { type: "takeaway", id: "pending" });
-      if (taken > 0) { discount += taken; appliedGift = giftCode; }
+    const remaining = Math.max(0, subtotal - promoDiscount);
+    if (remaining <= 0) {
+      res.status(400).json({ error: "There is nothing left to pay once the promo code is applied, so the gift card was not used." });
+      return;
     }
+    giftTaken = await redeemGiftCard(giftCode, remaining, { type: "takeaway", id: "pending" });
+    if (giftTaken <= 0) {
+      res.status(400).json({ error: "That gift card could not be used. Check the code and that it still has a balance." });
+      return;
+    }
+    appliedGift = giftCode;
   }
+
+  if (promoCode) {
+    if (!(await usePromoCode(promoCode))) {
+      if (giftTaken > 0) await refundGiftCard(giftCode!, giftTaken, { type: "takeaway_promo_conflict", id: "pending" });
+      res.status(410).json({ error: "This code has reached its usage limit." });
+      return;
+    }
+    appliedPromo = promoCode;
+  }
+
+  const discount = promoDiscount + giftTaken;
 
   const total = Math.max(0, subtotal - discount);
 

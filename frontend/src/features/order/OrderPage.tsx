@@ -133,10 +133,15 @@ export function OrderPage() {
       return;
     }
 
-    basket.clear();
     setPlaced(result);
-    if (result.payment_required) setPaying(true);
-    else setCollected(true);
+    if (result.payment_required) {
+      setPaying(true);
+    } else {
+      // Nothing left to charge: a promo or gift card covered it, so the order
+      // is already settled and the items are genuinely spoken for.
+      basket.clear();
+      setCollected(true);
+    }
   }
 
   return (
@@ -307,11 +312,18 @@ export function OrderPage() {
           }}
           onClose={() => {
             setPaying(false);
+            // The order already exists on the server whether or not this
+            // payment attempt succeeded, so the basket items are spoken for
+            // either way — clearing here (not before the dialog opened) is
+            // what stops a failed or abandoned Momo payment from silently
+            // emptying the basket with nothing to show for it.
+            basket.clear();
             toast.say(`Order ${placed.order_no} is saved. Pay for it in Mine so the kitchen can start.`);
             setCollected(true);
           }}
           onPaid={() => {
             setPaying(false);
+            basket.clear();
             setCollected(true);
           }}
         />
