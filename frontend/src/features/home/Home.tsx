@@ -95,8 +95,8 @@ function Favourites() {
 
       {loading ? (
         <div className="dish-grid">
-          {[0, 1, 2].map((n) => (
-            <Skeleton key={n} height="16rem" radius="var(--r-lg)" />
+          {[0, 1, 2, 3].map((n) => (
+            <Skeleton key={n} height="12rem" radius="var(--r-lg)" />
           ))}
         </div>
       ) : (
@@ -107,8 +107,8 @@ function Favourites() {
                 <Photo src={item.image_url} alt={item.name} />
               </div>
               <div className="dish__body">
-                <h3 className="card__title">{item.name}</h3>
-                <p className="fine muted">{item.description}</p>
+                <h3 className="dish__name">{item.name}</h3>
+                <p className="fine muted dish__note">{item.description}</p>
                 <p className="dish__price">
                   {item.price_fcfa !== null ? <Money value={item.price_fcfa} /> : <span>{item.price_label}</span>}
                 </p>

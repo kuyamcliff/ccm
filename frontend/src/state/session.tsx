@@ -28,7 +28,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     api.me
       .current()
       .then((value) => {
-        if (!cancelled) setUser(value);
+        /* `?? null` rather than the value as typed. A 200 whose body is not the
+           shape we expect resolves to undefined, and undefined is not null —
+           so every `user !== null` check downstream would pass and then read a
+           property off nothing, taking the whole page down with it. */
+        if (!cancelled) setUser(value ?? null);
       })
       .catch(() => {
         // A 401 here is the normal state of a visitor who has not signed in.
