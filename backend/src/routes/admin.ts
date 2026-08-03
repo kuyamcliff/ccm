@@ -6,6 +6,7 @@ import { audit } from "../lib/audit.js";
 import { MediaError, storeOrValidateUrl } from "../lib/media.js";
 import { awardPoints } from "./loyalty.js";
 import { failPayment } from "./payments.js";
+import { messagingAvailable } from "../lib/notify.js";
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireAdmin);
@@ -357,6 +358,25 @@ adminRouter.get("/payments", async (_req, res) => {
      ORDER BY p.created_at DESC LIMIT 100`
   ).all();
   res.json({ payments });
+});
+
+/**
+ * Every message the site tried to send.
+ *
+ * Worth a screen of its own because "did the guest actually get told?" is a
+ * question staff will be asked at the door, and because until a provider is
+ * configured every row here says 'logged' — which is how the owner can see the
+ * wiring works before paying for it.
+ */
+adminRouter.get("/notifications", async (_req, res) => {
+  const notifications = await db.prepare(
+    `SELECT n.id, n.channel, n.recipient, n.template, n.body, n.status, n.error,
+            n.created_at, n.sent_at, u.name as user_name
+     FROM notifications n
+     LEFT JOIN users u ON u.id = n.user_id
+     ORDER BY n.created_at DESC LIMIT 100`
+  ).all();
+  res.json({ notifications, delivery_enabled: messagingAvailable() });
 });
 
 adminRouter.patch("/payments/:id", async (req, res) => {

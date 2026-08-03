@@ -6,6 +6,7 @@ import { attachUser } from "./auth.js";
 import { db, pool } from "./db.js";
 import { UPLOAD_DIR } from "./lib/media.js";
 import { migrateInlineMedia } from "./lib/migrate-media.js";
+import { migrateSchema } from "./lib/migrate-schema.js";
 import { backfillLegacyBookingCodes } from "./lib/bookingCode.js";
 import { rateLimit, sameOriginOnly, securityHeaders } from "./middleware/security.js";
 import { authRouter } from "./routes/auth.js";
@@ -32,6 +33,9 @@ import { legalRouter } from "./routes/legal.js";
 import { supportRouter } from "./routes/support.js";
 import { recoveryRouter } from "./routes/recovery.js";
 
+/* Columns and tables first: the two migrations below write to rows this one
+   may have just added. */
+await migrateSchema();
 await migrateInlineMedia();
 await backfillLegacyBookingCodes();
 

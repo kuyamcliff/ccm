@@ -3,6 +3,8 @@ import { db } from "../db.js";
 import { requireAdmin } from "../auth.js";
 import { audit } from "../lib/audit.js";
 import { rateLimit } from "../middleware/security.js";
+import { notify } from "../lib/notify.js";
+import { takeawayReady } from "../lib/messages.js";
 import {
   APPROVAL_WINDOW_SECONDS,
   MomoError,
@@ -350,14 +352,28 @@ takeawayRouter.patch("/:id/status", requireAdmin, async (req, res) => {
   }
 
   const order = (await db
-    .prepare("SELECT id, order_no, status, promo_code, gift_card_code, discount_fcfa FROM takeaway_orders WHERE id = ?")
+    .prepare("SELECT id, order_no, status, phone, user_id, promo_code, gift_card_code, discount_fcfa FROM takeaway_orders WHERE id = ?")
     .get(id)) as
-    | { id: number; order_no: string; status: string; promo_code: string | null; gift_card_code: string | null; discount_fcfa: number }
+    | {
+        id: number; order_no: string; status: string; phone: string | null; user_id: number | null;
+        promo_code: string | null; gift_card_code: string | null; discount_fcfa: number;
+      }
     | undefined;
   if (!order) { res.status(404).json({ error: "Order not found." }); return; }
   if (order.status === status) { res.json({ ok: true }); return; }
 
   await db.prepare("UPDATE takeaway_orders SET status = ? WHERE id = ?").run(status, id);
+
+  /* The kitchen marking an order ready is the moment somebody should be told to
+     come and get it — until now that was a shout across the room. */
+  if (status === "ready" && order.phone) {
+    await notify({
+      to: order.phone,
+      template: "takeaway_ready",
+      userId: order.user_id,
+      body: takeawayReady(order.order_no),
+    });
+  }
 
   // Cancelling gives the customer their promo use and gift card value back.
   if (status === "cancelled" && order.status !== "cancelled") {

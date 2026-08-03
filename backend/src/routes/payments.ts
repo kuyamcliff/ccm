@@ -13,10 +13,11 @@ import {
 import { redeemGiftCard, refundGiftCard } from "./giftcards.js";
 import { evaluatePromo, releasePromoCode, usePromoCode } from "./promos.js";
 import { rateLimit } from "../middleware/security.js";
+import { getDepositFcfa } from "../lib/pricing.js";
+import { notify } from "../lib/notify.js";
+import { bookingConfirmed } from "../lib/messages.js";
 
 export const paymentsRouter = Router();
-
-const DEPOSIT_FCFA = 2500;
 
 type PaymentRow = {
   id: number;
@@ -52,11 +53,68 @@ async function settlePayment(paymentId: number, financialTransactionId?: string 
     | { reservation_id: number }
     | undefined;
   if (row?.reservation_id) {
-    await db.prepare(
+    const confirmed = await db.prepare(
       "UPDATE reservations SET payment_status = 'paid', status = 'confirmed' WHERE id = ? AND status = 'pending_payment'"
     ).run(row.reservation_id);
+
+    /* Tell the guest, but only on the transition — this function is reached
+       from both the callback and the polling status check, and a booking
+       should not be announced twice because the modal asked twice. */
+    if (confirmed.changes === 1) await announceBooking(row.reservation_id);
   }
   return true;
+}
+
+/**
+ * Texts the guest that their table is held.
+ *
+ * Awaited rather than left floating so a failure is recorded before the request
+ * ends, and wrapped because `notify` is the last thing that should be able to
+ * take down a payment that has already succeeded.
+ */
+async function announceBooking(reservationId: number): Promise<void> {
+  try {
+    const booking = (await db
+      .prepare(
+        `SELECT r.id, r.date, r.time, r.party_size, r.phone, r.ccm_code, r.user_id,
+                r.items_total_fcfa, r.deposit_fcfa,
+                t.label AS table_label, u.name AS user_name,
+                p.amount_fcfa
+         FROM reservations r
+         LEFT JOIN restaurant_tables t ON r.table_id = t.id
+         LEFT JOIN users u ON u.id = r.user_id
+         LEFT JOIN payments p ON p.reservation_id = r.id AND p.status = 'completed' AND p.type = 'reservation'
+         WHERE r.id = ?`
+      )
+      .get(reservationId)) as
+      | {
+          date: string; time: string; party_size: number; phone: string; ccm_code: string | null;
+          user_id: number; items_total_fcfa: number | null; deposit_fcfa: number | null;
+          table_label: string | null; user_name: string | null; amount_fcfa: number | null;
+        }
+      | undefined;
+
+    if (!booking?.phone || !booking.ccm_code) return;
+
+    await notify({
+      to: booking.phone,
+      template: "booking_confirmed",
+      userId: booking.user_id,
+      reservationId,
+      body: bookingConfirmed({
+        name: booking.user_name ?? "",
+        date: booking.date,
+        time: booking.time,
+        partySize: booking.party_size,
+        tableLabel: booking.table_label,
+        code: booking.ccm_code,
+        paid: booking.amount_fcfa ?? 0,
+        itemsTotal: booking.items_total_fcfa ?? 0,
+      }),
+    });
+  } catch (err) {
+    console.error("[payments] could not announce booking:", err instanceof Error ? err.message : err);
+  }
 }
 
 /** Marks a payment failed and hands back any discount it was holding. */
@@ -119,11 +177,14 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
 
   const reservation = (await db
     .prepare(
-      `SELECT r.id, r.user_id, r.payment_status, r.status, r.date, r.time, r.ccm_code
+      `SELECT r.id, r.user_id, r.payment_status, r.status, r.date, r.time, r.ccm_code, r.items_total_fcfa
        FROM reservations r WHERE r.id = ?`
     )
     .get(reservationId)) as
-    | { id: number; user_id: number; payment_status: string; status: string; date: string; time: string; ccm_code: string | null }
+    | {
+        id: number; user_id: number; payment_status: string; status: string;
+        date: string; time: string; ccm_code: string | null; items_total_fcfa: number | null;
+      }
     | undefined;
 
   if (!reservation || reservation.user_id !== req.user!.id) {
@@ -139,6 +200,15 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
     return;
   }
 
+  /* What this charge is for: the deposit that holds the table, plus whatever
+     food and drink was ordered ahead with it. The deposit is read from settings
+     at this moment and then frozen onto the reservation, so a price the owner
+     changes next week never rewrites what this guest was actually asked for. */
+  const depositFcfa = await getDepositFcfa();
+  const itemsTotalFcfa = Math.max(0, reservation.items_total_fcfa ?? 0);
+  const chargeable = depositFcfa + itemsTotalFcfa;
+  await db.prepare("UPDATE reservations SET deposit_fcfa = ? WHERE id = ?").run(depositFcfa, reservationId);
+
   // Release any earlier attempt still holding discount value, so retrying
   // checkout cannot stack discounts.
   const stale = (await db
@@ -150,7 +220,7 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
   let promoDiscount = 0;
   let claimedPromo: string | null = null;
   if (promoCode) {
-    const verdict = await evaluatePromo(promoCode, DEPOSIT_FCFA);
+    const verdict = await evaluatePromo(promoCode, chargeable);
     if (verdict.ok && (await usePromoCode(promoCode))) {
       promoDiscount = verdict.discount;
       claimedPromo = promoCode;
@@ -159,14 +229,14 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
 
   let giftDiscount = 0;
   let claimedGift: string | null = null;
-  const giftTarget = Math.max(0, DEPOSIT_FCFA - promoDiscount);
+  const giftTarget = Math.max(0, chargeable - promoDiscount);
   if (giftCardCode && giftTarget > 0) {
     giftDiscount = await redeemGiftCard(giftCardCode, giftTarget, { type: "reservation", id: reservationId });
     if (giftDiscount > 0) claimedGift = giftCardCode;
   }
 
   const totalDiscount = promoDiscount + giftDiscount;
-  const amountDue = Math.max(0, DEPOSIT_FCFA - totalDiscount);
+  const amountDue = Math.max(0, chargeable - totalDiscount);
 
   const releaseClaims = async () => {
     if (claimedPromo) await releasePromoCode(claimedPromo);

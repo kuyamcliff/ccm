@@ -3,6 +3,8 @@ import { db } from "../db.js";
 import { requireAdmin } from "../auth.js";
 import { audit } from "../lib/audit.js";
 import { rateLimit } from "../middleware/security.js";
+import { notify } from "../lib/notify.js";
+import { waitlistReady } from "../lib/messages.js";
 
 export const waitlistRouter = Router();
 
@@ -83,9 +85,9 @@ waitlistRouter.patch("/:id", requireAdmin, async (req, res) => {
     return;
   }
 
-  const entry = (await db.prepare("SELECT id, status FROM waitlist_entries WHERE id = ?").get(id)) as
-    | { id: number; status: string }
-    | undefined;
+  const entry = (await db
+    .prepare("SELECT id, status, name, phone FROM waitlist_entries WHERE id = ?")
+    .get(id)) as { id: number; status: string; name: string; phone: string } | undefined;
   if (!entry) { res.status(404).json({ error: "Waitlist entry not found." }); return; }
 
   // "Notify" previously stamped notified_at but left the status untouched, so
@@ -94,6 +96,17 @@ waitlistRouter.patch("/:id", requireAdmin, async (req, res) => {
     await db.prepare(
       "UPDATE waitlist_entries SET status = 'notified', notified_at = now_text() WHERE id = ?"
     ).run(id);
+
+    /* And now it actually notifies. Until this, "notified" meant a member of
+       staff had to go and find the person in the room — which is what the
+       duplicate-join error meant when it told people to ask the host. */
+    const outcome = await notify({
+      to: entry.phone,
+      template: "waitlist_ready",
+      body: waitlistReady(entry.name),
+    });
+    res.json({ ok: true, notification: outcome });
+    return;
   } else if (status === "seated") {
     await db.prepare(
       "UPDATE waitlist_entries SET status = 'seated', seated_at = now_text() WHERE id = ?"

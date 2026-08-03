@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, transaction } from "../db.js";
 import { requireAuth, requireAdmin } from "../auth.js";
+import { DEPOSIT_KEY, LATE_CANCEL_KEY, MAX_PRICE_FCFA } from "../lib/pricing.js";
 
 export const settingsRouter = Router();
 
@@ -22,7 +23,14 @@ const EDITABLE_KEYS = [
   "tiktok_url",
   "ig_url",
   "fb_url",
+  DEPOSIT_KEY,
+  LATE_CANCEL_KEY,
 ] as const;
+
+/* Settings that are money. They arrive as strings like every other setting, but
+   a typo in one of these is a wrong figure charged to a guest, so they are
+   parsed and bounded here rather than trusted. */
+const MONEY_KEYS = new Set<string>([DEPOSIT_KEY, LATE_CANCEL_KEY]);
 
 const MAX_VALUE_LENGTH = 400;
 
@@ -43,6 +51,19 @@ settingsRouter.patch("/", requireAuth, requireAdmin, async (req, res) => {
       res.status(400).json({ error: `"${key}" is too long. Keep it under ${MAX_VALUE_LENGTH} characters.` });
       return;
     }
+
+    if (MONEY_KEYS.has(key)) {
+      // Tolerate "2,500" and "2500 FCFA", since that is how a price gets typed.
+      const amount = Number(value.replace(/[^\d.-]/g, ""));
+      if (!Number.isFinite(amount) || amount < 0 || amount > MAX_PRICE_FCFA) {
+        res.status(400).json({ error: `"${key}" must be an amount between 0 and ${MAX_PRICE_FCFA.toLocaleString("en-US")} FCFA.` });
+        return;
+      }
+      entries.push([key, String(Math.round(amount))]);
+      written.push(key);
+      continue;
+    }
+
     entries.push([key, value.trim()]);
     written.push(key);
   }
