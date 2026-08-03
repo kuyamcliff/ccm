@@ -263,7 +263,8 @@ export function BookPage() {
               <p className="plan-legend fine">
                 <span data-state="free" /> Free
                 <span data-state="picked" /> Yours
-                <span data-state="blocked" /> Taken or too small
+                <span data-state="taken" /> Taken
+                <span data-state="small" /> Too small for your party
               </p>
             </>
           ) : null}

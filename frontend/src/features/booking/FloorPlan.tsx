@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { DiningTable } from "~/lib/api";
+import { Icon } from "~/ui/Icon";
 
 /**
  * The room, laid out the way it actually is.
@@ -48,12 +49,17 @@ export function FloorPlan({ tables, selectedId, onSelect, partySize }: Props) {
         const pickable = free && fits;
         const selected = table.id === selectedId;
 
+        // "Blocked" was one look for two different reasons — occupied, or
+        // just too small for this party — which left a guest unable to tell
+        // whether a greyed-out table might free up or was never an option.
+        const state = selected ? "picked" : pickable ? "free" : !free ? "taken" : "small";
+
         return (
           <button
             key={table.id}
             type="button"
             className="plan__table"
-            data-state={selected ? "picked" : pickable ? "free" : "blocked"}
+            data-state={state}
             data-zone={table.zone}
             disabled={!pickable}
             aria-pressed={selected}
@@ -68,6 +74,7 @@ export function FloorPlan({ tables, selectedId, onSelect, partySize }: Props) {
             }}
             onClick={() => onSelect(selected ? null : table.id)}
           >
+            {state === "taken" ? <Icon name="lock" size={13} className="plan__mark" /> : null}
             <span className="plan__label">{table.label}</span>
             <span className="plan__seats mono">{table.capacity}</span>
           </button>

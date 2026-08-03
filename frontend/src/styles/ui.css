@@ -322,16 +322,19 @@
   text-align: start;
   transition:
     border-color var(--dur-1) var(--ease),
-    background var(--dur-1) var(--ease);
+    background var(--dur-1) var(--ease),
+    transform var(--dur-1) var(--ease);
 }
 
 .card--action:hover {
   border-color: var(--line-2);
   background: var(--surface-2);
+  transform: translateY(-2px);
 }
 
 .card--action:active {
   background: var(--coal-900);
+  transform: translateY(0);
 }
 
 /* Marks a card as needing attention without shouting. */
@@ -472,6 +475,9 @@
 
 .tab {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
   padding: var(--s-3) var(--s-4);
   color: var(--text-3);
   font-size: var(--t-small);
@@ -486,6 +492,22 @@
 
 .tab[aria-selected="true"] {
   color: var(--text);
+}
+
+/* A live count of what still needs the guest's attention, not a lifetime
+   total — it should thin out as things get paid, collected or cancelled. */
+.tab__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding-inline: 0.3rem;
+  border-radius: var(--r-full);
+  background: var(--ember-wash);
+  color: var(--ember-hi);
+  font-size: 0.6875rem;
+  font-weight: 700;
 }
 
 .tab[aria-selected="true"]::after {
