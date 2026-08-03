@@ -81,6 +81,34 @@ export const EMAIL_REPLY_TO = optional("EMAIL_REPLY_TO");
 /** True only when the key needed to actually send is present. */
 export const EMAIL_ENABLED = RESEND_API_KEY.startsWith("re_");
 
+/* ── Outgoing SMS and WhatsApp (Twilio) ────────────────────────────────────
+   Most guests here are reached on a phone number, not an inbox. Until these
+   are supplied every message is still composed, still addressed and still
+   written to the `notifications` table — it just gets marked 'logged' instead
+   of going out, so the wiring can be checked before a provider is paid for.
+
+   To turn it on: set the account SID, the auth token, and whichever of the two
+   from-numbers you have. `TWILIO_WHATSAPP_FROM` takes the bare number; the
+   `whatsapp:` prefix Twilio wants is added when the message is sent. */
+export const TWILIO_ACCOUNT_SID = optional("TWILIO_ACCOUNT_SID");
+export const TWILIO_AUTH_TOKEN = optional("TWILIO_AUTH_TOKEN");
+
+/** The number SMS is sent from, in E.164 (e.g. +12025550123). */
+export const TWILIO_SMS_FROM = optional("TWILIO_SMS_FROM");
+
+/** The WhatsApp sender, in E.164 and without the `whatsapp:` prefix. */
+export const TWILIO_WHATSAPP_FROM = optional("TWILIO_WHATSAPP_FROM");
+
+/** Country code assumed for a local number typed without one. 237 is Cameroon. */
+export const DEFAULT_PHONE_COUNTRY_CODE = optional("DEFAULT_PHONE_COUNTRY_CODE", "237");
+
+/** True only once an account and at least one sender are present. */
+export const SMS_ENABLED =
+  TWILIO_ACCOUNT_SID.startsWith("AC") && TWILIO_AUTH_TOKEN.length > 0 && TWILIO_SMS_FROM.length > 0;
+
+export const WHATSAPP_ENABLED =
+  TWILIO_ACCOUNT_SID.startsWith("AC") && TWILIO_AUTH_TOKEN.length > 0 && TWILIO_WHATSAPP_FROM.length > 0;
+
 /** Public base URL the API is reachable at — used to build absolute image URLs. */
 export const PUBLIC_API_URL = optional("PUBLIC_API_URL", "").replace(/\/+$/, "");
 

@@ -603,14 +603,59 @@
 .plan {
   position: relative;
   width: 100%;
-  min-width: 36rem;
+  min-width: 34rem;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
+  /* A drawn floor, not a lit stage: a fine even grid and no glow. The ember
+     wash used to sit under the top row of tables and made them look selected. */
   background:
-    radial-gradient(60% 60% at 50% 0%, rgba(255, 91, 31, 0.06), transparent 70%),
-    repeating-linear-gradient(90deg, transparent 0 39px, rgba(244, 239, 231, 0.03) 39px 40px),
-    repeating-linear-gradient(0deg, transparent 0 39px, rgba(244, 239, 231, 0.03) 39px 40px),
-    var(--coal-900);
+    repeating-linear-gradient(90deg, transparent 0 31px, rgba(244, 239, 231, 0.028) 31px 32px),
+    repeating-linear-gradient(0deg, transparent 0 31px, rgba(244, 239, 231, 0.028) 31px 32px),
+    var(--coal-950);
+}
+
+/* ── Fixtures ────────────────────────────────────────────────────────────
+   The room around the tables. Drawn flat and quiet, underneath everything: a
+   fixture that competes with a table for attention is worse than no fixture,
+   because the one thing a guest must be able to pick out is a table. */
+
+.plan__fixture {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: var(--s-1);
+  border-radius: var(--r-sm);
+  border: 1px dashed rgba(244, 239, 231, 0.14);
+  background: rgba(244, 239, 231, 0.028);
+  color: var(--text-3);
+  text-align: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.plan__fixture-word {
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* The two that are genuinely hot or loud earn a tint — they are the reason
+   somebody picks the far corner instead. */
+.plan__fixture[data-kind="grill"],
+.plan__fixture[data-kind="kitchen"] {
+  border-color: rgba(255, 91, 31, 0.26);
+  background: rgba(255, 91, 31, 0.05);
+  color: var(--ember-hi);
 }
 
 /* A hint that there is more room to the right, shown only while the frame can
@@ -639,14 +684,14 @@
   min-height: var(--tap);
   display: grid;
   place-content: center;
-  gap: 0.1rem;
-  border-radius: var(--r-md);
+  gap: 0;
+  border-radius: var(--r-sm);
   border: 1px solid var(--line-2);
-  background: var(--coal-750);
+  background: var(--coal-800);
   color: var(--text-2);
-  font-size: var(--t-fine);
+  font-size: var(--t-micro);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1.15;
   /* Named properties, not `all`. `all` included `left`, `top` and `width`, so
      every drag frame in the console animated the table towards the pointer
      instead of tracking it — the lag people read as the plan feeling loose. */
@@ -1656,4 +1701,74 @@
     align-items: center;
     min-height: var(--tap);
   }
+}
+
+/* A step already answered. Distinct from both the current one and the ones
+   still ahead, so the row reads as progress rather than as four equal tabs. */
+.steps__item[data-state="done"] {
+  border-color: var(--line-2);
+  color: var(--text-2);
+}
+
+.steps__item[data-state="done"] .steps__num {
+  background: var(--palm-wash);
+  color: var(--palm);
+}
+
+/* ── Choosing food while booking ─────────────────────────────────────────
+   A list, not the takeaway grid: this is a short add-on to a booking, and
+   photographs here would turn a two-tap step into a scroll. */
+
+.pick-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.pick {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding-block: var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.pick__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.pick__name {
+  font-size: var(--t-small);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.pick__price {
+  font-size: var(--t-fine);
+  color: var(--text-2);
+}
+
+/* Once something is chosen the row says so on its own, without colour being
+   the only carrier: the stepper appearing is the real signal. */
+.pick[data-chosen="true"] .pick__name {
+  color: var(--ember-hi);
+}
+
+.pick__stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+.pick__qty {
+  min-width: 1.75rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+/* The line that says what leaves the account tonight. */
+.total-row {
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line-2);
+  font-size: var(--t-lead);
 }

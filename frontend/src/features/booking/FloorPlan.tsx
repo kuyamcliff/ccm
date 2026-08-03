@@ -1,18 +1,19 @@
 import { useMemo } from "react";
-import type { DiningTable } from "~/lib/api";
+import type { DiningTable, FixtureKind, FloorFixture } from "~/lib/api";
 import { Icon } from "~/ui/Icon";
+import type { IconName } from "~/ui/Icon";
 
 /**
- * The room, laid out the way it actually is.
+ * The room, drawn the way it actually is.
  *
- * Positions are stored in whatever coordinate space the owner dragged them
- * into in the console, so nothing here assumes a fixed canvas: the extent of
- * the tables is measured and mapped onto the available width. That way adding
- * a table out past the others rescales the plan instead of pushing it off the
- * edge.
+ * A plan of nothing but bookable rectangles told a guest where the tables were
+ * and nothing about the room they sit in — which corner faces the screen, which
+ * one is beside the grill and will be warm and loud. Those are the things
+ * people choose a table by, so the fixtures the owner places in the console are
+ * drawn here underneath the tables.
  *
  * The plan holds a minimum width and scrolls sideways rather than shrinking to
- * fit a phone. Squeezed to 360px the tables collided with each other and fell
+ * fit a phone: squeezed to 360px the tables collided with each other and fell
  * under the size a fingertip can hit, which made the picture both wrong and
  * unusable at once.
  *
@@ -22,18 +23,33 @@ import { Icon } from "~/ui/Icon";
 
 const PADDING = 60;
 
+/** How each fixture is drawn. Icon and word together, never colour alone. */
+const FIXTURES: Record<FixtureKind, { icon: IconName; word: string }> = {
+  grill: { icon: "flame", word: "Grill" },
+  tv: { icon: "chart", word: "Screen" },
+  bar: { icon: "wallet", word: "Bar" },
+  door: { icon: "logout", word: "Way in" },
+  toilets: { icon: "user", word: "Toilets" },
+  kitchen: { icon: "basket", word: "Kitchen" },
+  speaker: { icon: "sparkle", word: "Speaker" },
+  plant: { icon: "flame", word: "Plant" },
+};
+
 interface Props {
   tables: DiningTable[];
+  fixtures?: FloorFixture[];
   selectedId: number | null;
   onSelect: (id: number | null) => void;
   partySize: number;
 }
 
-export function FloorPlan({ tables, selectedId, onSelect, partySize }: Props) {
+export function FloorPlan({ tables, fixtures = [], selectedId, onSelect, partySize }: Props) {
+  /* The extent covers the fixtures too, or a grill placed past the last table
+     would sit outside the picture and be clipped away. */
   const bounds = useMemo(() => {
-    if (tables.length === 0) return { minX: 0, minY: 0, width: 600, height: 400 };
-    const xs = tables.map((t) => t.pos_x);
-    const ys = tables.map((t) => t.pos_y);
+    const xs = [...tables.map((t) => t.pos_x), ...fixtures.map((f) => f.pos_x)];
+    const ys = [...tables.map((t) => t.pos_y), ...fixtures.map((f) => f.pos_y)];
+    if (xs.length === 0) return { minX: 0, minY: 0, width: 640, height: 460 };
     const minX = Math.min(...xs) - PADDING;
     const minY = Math.min(...ys) - PADDING;
     return {
@@ -42,14 +58,37 @@ export function FloorPlan({ tables, selectedId, onSelect, partySize }: Props) {
       width: Math.max(...xs) - minX + PADDING,
       height: Math.max(...ys) - minY + PADDING,
     };
-  }, [tables]);
+  }, [tables, fixtures]);
 
-  const zones = [...new Set(tables.map((table) => table.zone))];
+  const pct = (value: number, min: number, span: number) => `${((value - min) / span) * 100}%`;
 
   return (
     <div>
       <div className="plan-frame">
         <div className="plan" style={{ aspectRatio: `${bounds.width} / ${bounds.height}` }}>
+          {/* Underneath the tables, and never in the tab order — this is the
+              room, not something to choose. */}
+          {fixtures.map((fixture) => {
+            const look = FIXTURES[fixture.kind] ?? FIXTURES.plant;
+            return (
+              <div
+                key={`f${fixture.id}`}
+                className="plan__fixture"
+                data-kind={fixture.kind}
+                aria-hidden="true"
+                style={{
+                  left: pct(fixture.pos_x, bounds.minX, bounds.width),
+                  top: pct(fixture.pos_y, bounds.minY, bounds.height),
+                  width: `${(fixture.width / bounds.width) * 100}%`,
+                  height: `${(fixture.height / bounds.height) * 100}%`,
+                }}
+              >
+                <Icon name={look.icon} size={15} />
+                <span className="plan__fixture-word">{fixture.label || look.word}</span>
+              </div>
+            );
+          })}
+
           {tables.map((table) => {
             const free = table.available !== false;
             const fits = table.capacity >= partySize;
@@ -74,14 +113,14 @@ export function FloorPlan({ tables, selectedId, onSelect, partySize }: Props) {
                   !free ? "already taken" : !fits ? "too small for your party" : "free"
                 }`}
                 style={{
-                  left: `${((table.pos_x - bounds.minX) / bounds.width) * 100}%`,
-                  top: `${((table.pos_y - bounds.minY) / bounds.height) * 100}%`,
+                  left: pct(table.pos_x, bounds.minX, bounds.width),
+                  top: pct(table.pos_y, bounds.minY, bounds.height),
                   // Bigger tables are drawn bigger, so the plan reads as a room.
-                  width: `${Math.min(18, 8 + table.capacity * 1.6)}%`,
+                  width: `${Math.min(15, 7.5 + table.capacity * 1.2)}%`,
                 }}
                 onClick={() => onSelect(selected ? null : table.id)}
               >
-                {state === "taken" ? <Icon name="lock" size={13} className="plan__mark" /> : null}
+                {state === "taken" ? <Icon name="lock" size={12} className="plan__mark" /> : null}
                 <span className="plan__label">{table.label}</span>
                 <span className="plan__seats mono">{table.capacity}</span>
               </button>
@@ -90,13 +129,10 @@ export function FloorPlan({ tables, selectedId, onSelect, partySize }: Props) {
         </div>
       </div>
 
-      {/* Sits outside the scrolling frame, so it stays put while the room moves
-          under it. The zone names are here rather than floated over the plan,
-          where on a phone they started life off the right-hand edge. */}
+      {/* Outside the scrolling frame, so it stays put while the room moves. */}
       <p className="plan-hint">
         <Icon name="arrow-right" size={14} />
         Scroll to see the whole room
-        {zones.length > 1 ? <span className="plan-hint__zones">{zones.join(" · ")}</span> : null}
       </p>
     </div>
   );

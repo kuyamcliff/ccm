@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo } from "react";
 import type { ReactNode } from "react";
-import { api } from "~/lib/api";
+import { api, DEFAULT_DEPOSIT_FCFA, DEFAULT_LATE_CANCEL_FCFA } from "~/lib/api";
 import type { SiteSettings } from "~/lib/api";
 import { useResource } from "~/lib/useResource";
 
@@ -36,7 +36,21 @@ interface VenueValue {
   address: string;
   hours: string;
   socials: { label: string; url: string }[];
+  /** What a table costs to hold, as the owner has it set. */
+  depositFcfa: number;
+  /** Charged for cancelling inside the hour, once a deposit has been paid. */
+  lateCancelFcfa: number;
   loading: boolean;
+}
+
+/**
+ * Settings arrive as strings, and one typed by hand may be "2,500" or empty.
+ * Anything that is not a usable amount falls back to the figure the server
+ * uses for the same key, so the two never quote different prices.
+ */
+function readMoney(raw: string | undefined, fallback: number): number {
+  const parsed = Number(String(raw ?? "").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : fallback;
 }
 
 const VenueContext = createContext<VenueValue | null>(null);
@@ -64,6 +78,8 @@ export function VenueProvider({ children }: { children: ReactNode }) {
       address: joinAddress(settings.address?.trim() || FALLBACK.address, settings.city?.trim() || FALLBACK.city),
       hours: settings.hours?.trim() || FALLBACK.hours,
       socials,
+      depositFcfa: readMoney(settings.booking_deposit_fcfa, DEFAULT_DEPOSIT_FCFA),
+      lateCancelFcfa: readMoney(settings.late_cancel_fee_fcfa, DEFAULT_LATE_CANCEL_FCFA),
       loading,
     };
   }, [data, loading]);

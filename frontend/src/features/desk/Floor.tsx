@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { api } from "~/lib/api";
-import type { DeskTable } from "~/lib/api";
+import type { DeskTable, FixtureKind, FloorFixture } from "~/lib/api";
 import { useResource } from "~/lib/useResource";
 import { Button, IconButton } from "~/ui/Button";
 import { SelectField, TextField } from "~/ui/Field";
@@ -25,6 +25,20 @@ import { DeskPage, Loaded, Nothing, TableWrap, Toolbar } from "./parts";
 
 const CANVAS = { width: 640, height: 560 };
 
+/* What the owner can put in the room, and what each one is called on screen.
+   The list matches the server's, which is what the plan knows how to draw —
+   a kind neither side recognises would come out as an unlabelled grey box. */
+const FIXTURE_KINDS: { kind: FixtureKind; word: string }[] = [
+  { kind: "grill", word: "Grill" },
+  { kind: "kitchen", word: "Kitchen" },
+  { kind: "bar", word: "Bar" },
+  { kind: "tv", word: "Screen" },
+  { kind: "door", word: "Way in" },
+  { kind: "toilets", word: "Toilets" },
+  { kind: "speaker", word: "Speaker" },
+  { kind: "plant", word: "Plant" },
+];
+
 /** How far one press of an arrow moves a table, in canvas units. */
 const NUDGE = 12;
 
@@ -41,6 +55,14 @@ export function Floor() {
   const movedRef = useRef(false);
   const [dragging, setDragging] = useState<number | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
+
+  /* Fixtures live beside the tables rather than in the same list: they are not
+     bookable, they have a width and a height rather than a capacity, and the
+     one thing that must never happen is a guest being offered the grill. */
+  const fixtures = useResource(() => api.desk.fixtures.list(), []);
+  const [pickedFixture, setPickedFixture] = useState<number | null>(null);
+  const fixtureDragRef = useRef<number | null>(null);
+  const [addingFixture, setAddingFixture] = useState(false);
 
   const [editing, setEditing] = useState<DeskTable | null>(null);
   const [adding, setAdding] = useState(false);
@@ -70,6 +92,27 @@ export function Floor() {
     }
   }
 
+  async function saveFixture(id: number, patch: Partial<FloorFixture>) {
+    try {
+      await api.desk.fixtures.update(id, patch);
+    } catch (err) {
+      toast.failed(err);
+      fixtures.reload();
+    }
+  }
+
+  /** Moves a fixture, or resizes the one currently selected. */
+  function nudgeFixture(fixture: FloorFixture, patch: Partial<FloorFixture>) {
+    const snapshot = fixtures.data;
+    if (snapshot) {
+      fixtures.set({
+        ...snapshot,
+        fixtures: snapshot.fixtures.map((f) => (f.id === fixture.id ? { ...f, ...patch } : f)),
+      });
+    }
+    void saveFixture(fixture.id, patch);
+  }
+
   /** Moves a table by one step and saves where it landed. */
   function nudge(table: DeskTable, dx: number, dy: number) {
     const next = clampTo(table.pos_x + dx, table.pos_y + dy);
@@ -80,18 +123,23 @@ export function Floor() {
   return (
     <DeskPage
       title="Floor"
-      lead="Tap a table to pick it up, then drag it or use the arrows. Guests see this plan when they book."
+      lead="Tap anything to pick it up, then drag it or use the arrows. Add the grill, the screen and the bar so guests can see the real room. This is the plan they book from."
       actions={
-        <Button
-          tone="primary"
-          icon="plus"
-          onClick={() => {
-            setDraft({ label: "", capacity: 4, zone: "main" });
-            setAdding(true);
-          }}
-        >
-          Add a table
-        </Button>
+        <>
+          <Button icon="plus" onClick={() => setAddingFixture(true)}>
+            Add a fixture
+          </Button>
+          <Button
+            tone="primary"
+            icon="plus"
+            onClick={() => {
+              setDraft({ label: "", capacity: 4, zone: "main" });
+              setAdding(true);
+            }}
+          >
+            Add a table
+          </Button>
+        </>
       }
     >
       {confirmElement}
@@ -108,6 +156,75 @@ export function Floor() {
                   className="plan plan--edit"
                   style={{ aspectRatio: `${CANVAS.width} / ${CANVAS.height}` }}
                 >
+                  {(fixtures.data?.fixtures ?? []).map((fixture) => {
+                    const word =
+                      fixture.label || FIXTURE_KINDS.find((k) => k.kind === fixture.kind)?.word || fixture.kind;
+                    return (
+                      <button
+                        key={`f${fixture.id}`}
+                        type="button"
+                        className="plan__fixture plan__fixture--edit"
+                        data-kind={fixture.kind}
+                        data-picked={pickedFixture === fixture.id}
+                        aria-pressed={pickedFixture === fixture.id}
+                        aria-label={`${word}. Selected fixtures move with the arrow keys.`}
+                        style={{
+                          left: `${(fixture.pos_x / CANVAS.width) * 100}%`,
+                          top: `${(fixture.pos_y / CANVAS.height) * 100}%`,
+                          width: `${(fixture.width / CANVAS.width) * 100}%`,
+                          height: `${(fixture.height / CANVAS.height) * 100}%`,
+                        }}
+                        onPointerDown={(event) => {
+                          event.currentTarget.setPointerCapture(event.pointerId);
+                          fixtureDragRef.current = fixture.id;
+                          movedRef.current = false;
+                          setPickedFixture(fixture.id);
+                          setPicked(null);
+                        }}
+                        onPointerMove={(event) => {
+                          if (fixtureDragRef.current !== fixture.id) return;
+                          const position = toPlan(event.clientX, event.clientY);
+                          if (!position) return;
+                          movedRef.current = true;
+                          const snapshot = fixtures.data;
+                          if (snapshot) {
+                            fixtures.set({
+                              ...snapshot,
+                              fixtures: snapshot.fixtures.map((f) =>
+                                f.id === fixture.id ? { ...f, ...position } : f
+                              ),
+                            });
+                          }
+                        }}
+                        onPointerUp={(event) => {
+                          if (fixtureDragRef.current !== fixture.id) return;
+                          fixtureDragRef.current = null;
+                          if (!movedRef.current) return;
+                          const position = toPlan(event.clientX, event.clientY);
+                          if (position) void saveFixture(fixture.id, position);
+                        }}
+                        onPointerCancel={() => {
+                          fixtureDragRef.current = null;
+                        }}
+                        onKeyDown={(event) => {
+                          const step: Record<string, Partial<FloorFixture>> = {
+                            ArrowUp: { pos_y: fixture.pos_y - NUDGE },
+                            ArrowDown: { pos_y: fixture.pos_y + NUDGE },
+                            ArrowLeft: { pos_x: fixture.pos_x - NUDGE },
+                            ArrowRight: { pos_x: fixture.pos_x + NUDGE },
+                          };
+                          const move = step[event.key];
+                          if (!move) return;
+                          event.preventDefault();
+                          setPickedFixture(fixture.id);
+                          nudgeFixture(fixture, move);
+                        }}
+                      >
+                        <span className="plan__fixture-word">{word}</span>
+                      </button>
+                    );
+                  })}
+
                   {rows.map((table) => (
                     <button
                       key={table.id}
@@ -129,6 +246,7 @@ export function Floor() {
                         movedRef.current = false;
                         setDragging(table.id);
                         setPicked(table.id);
+                        setPickedFixture(null);
                       }}
                       onPointerMove={(event) => {
                         if (dragRef.current !== table.id) return;
@@ -216,6 +334,69 @@ export function Floor() {
                 </div>
               ) : null}
 
+              {(() => {
+                const fixture = (fixtures.data?.fixtures ?? []).find((f) => f.id === pickedFixture);
+                if (!fixture) return null;
+                const word =
+                  fixture.label || FIXTURE_KINDS.find((k) => k.kind === fixture.kind)?.word || fixture.kind;
+                return (
+                  <div className="plan-tools">
+                    <div className="plan-tools__who">
+                      <strong>{word}</strong>
+                      <span className="fine faint">
+                        {fixture.width} × {fixture.height}
+                      </span>
+                    </div>
+
+                    <div className="plan-tools__pad">
+                      <IconButton name="arrow-up" label={`Move ${word} up`} onClick={() => nudgeFixture(fixture, { pos_y: fixture.pos_y - NUDGE })} />
+                      <IconButton name="arrow-left" label={`Move ${word} left`} onClick={() => nudgeFixture(fixture, { pos_x: fixture.pos_x - NUDGE })} />
+                      <IconButton name="arrow-down" label={`Move ${word} down`} onClick={() => nudgeFixture(fixture, { pos_y: fixture.pos_y + NUDGE })} />
+                      <IconButton name="arrow-right" label={`Move ${word} right`} onClick={() => nudgeFixture(fixture, { pos_x: fixture.pos_x + NUDGE })} />
+                    </div>
+
+                    <div className="row" style={{ gap: "var(--s-1)" }}>
+                      <IconButton
+                        name="minus"
+                        label={`Make ${word} smaller`}
+                        onClick={() => nudgeFixture(fixture, { width: fixture.width - 20, height: fixture.height - 20 })}
+                      />
+                      <IconButton
+                        name="plus"
+                        label={`Make ${word} bigger`}
+                        onClick={() => nudgeFixture(fixture, { width: fixture.width + 20, height: fixture.height + 20 })}
+                      />
+                    </div>
+
+                    <Button
+                      tone="danger"
+                      icon="trash"
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: `Remove the ${word.toLowerCase()}?`,
+                          body: "It only stops being drawn on the plan. No booking is affected.",
+                          confirmLabel: "Remove",
+                        });
+                        if (!ok) return;
+                        try {
+                          await api.desk.fixtures.remove(fixture.id);
+                          setPickedFixture(null);
+                          fixtures.reload();
+                          toast.done("Removed.");
+                        } catch (err) {
+                          toast.failed(err);
+                        }
+                      }}
+                    >
+                      Remove
+                    </Button>
+                    <Button tone="ghost" onClick={() => setPickedFixture(null)}>
+                      Done
+                    </Button>
+                  </div>
+                );
+              })()}
+
               {rows.length === 0 ? <Nothing>No tables yet. Add the first one.</Nothing> : null}
 
               <Toolbar>
@@ -300,6 +481,35 @@ export function Floor() {
           );
         }}
       </Loaded>
+
+      <Sheet
+        open={addingFixture}
+        onClose={() => setAddingFixture(false)}
+        title="Add to the room"
+        description="It appears in the middle of the plan. Drag it where it belongs."
+      >
+        <div className="fixture-picker">
+          {FIXTURE_KINDS.map((entry) => (
+            <button
+              key={entry.kind}
+              type="button"
+              className="fixture-choice"
+              onClick={async () => {
+                try {
+                  await api.desk.fixtures.create({ kind: entry.kind });
+                  setAddingFixture(false);
+                  fixtures.reload();
+                  toast.done(`${entry.word} added.`);
+                } catch (err) {
+                  toast.failed(err);
+                }
+              }}
+            >
+              {entry.word}
+            </button>
+          ))}
+        </div>
+      </Sheet>
 
       <Sheet
         open={adding || editing !== null}

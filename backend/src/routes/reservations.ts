@@ -2,6 +2,8 @@ import { Router } from "express";
 import { db } from "../db.js";
 import { requireAuth } from "../auth.js";
 import { generateBookingCode } from "../lib/bookingCode.js";
+import { getLateCancelFcfa } from "../lib/pricing.js";
+import { priceChosenItems } from "../lib/orderItems.js";
 
 export const reservationsRouter = Router();
 reservationsRouter.use(requireAuth);
@@ -23,6 +25,7 @@ reservationsRouter.get("/", async (req, res) => {
     .prepare(
       `SELECT r.id, r.date, r.time, r.party_size, r.phone, r.note, r.status,
               r.payment_status, r.cancellation_fee_fcfa, r.ccm_code, r.created_at,
+              r.items_json, r.items_total_fcfa, r.deposit_fcfa,
               r.cancelled_at, r.cancel_reason, r.checked_in_at,
               t.label as table_label, t.zone as table_zone,
               p.amount_fcfa, p.discount_fcfa, p.method as pay_method, p.reference as pay_reference
@@ -126,11 +129,33 @@ reservationsRouter.post("/", async (req, res) => {
     return;
   }
 
+  /* Food and drink chosen alongside the table. Priced here, against the live
+     menu, because a total that arrived in the request body is a total the guest
+     could have written themselves. */
+  let priced;
+  try {
+    priced = await priceChosenItems(req.body?.items);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "That basket could not be read." });
+    return;
+  }
+
   const info = await db
     .prepare(
-      "INSERT INTO reservations (user_id, table_id, date, time, party_size, phone, note, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_payment')"
+      `INSERT INTO reservations (user_id, table_id, date, time, party_size, phone, note, status, items_json, items_total_fcfa)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?)`
     )
-    .run(req.user!.id, tableId, date, time, partySize, phone, note);
+    .run(
+      req.user!.id,
+      tableId,
+      date,
+      time,
+      partySize,
+      phone,
+      note,
+      priced.lines.length > 0 ? JSON.stringify(priced.lines) : null,
+      priced.total
+    );
 
   const id = Number(info.lastInsertRowid);
   await db.prepare("UPDATE reservations SET ccm_code = ? WHERE id = ?").run(await generateBookingCode(), id);
@@ -139,6 +164,7 @@ reservationsRouter.post("/", async (req, res) => {
     .prepare(
       `SELECT r.id, r.date, r.time, r.party_size, r.phone, r.note, r.status,
               r.payment_status, r.cancellation_fee_fcfa, r.ccm_code, r.created_at,
+              r.items_json, r.items_total_fcfa, r.deposit_fcfa,
               t.label as table_label, t.zone as table_zone
        FROM reservations r
        LEFT JOIN restaurant_tables t ON r.table_id = t.id
@@ -172,10 +198,11 @@ reservationsRouter.delete("/:id", async (req, res) => {
   const minutesUntil = (resDateTime.getTime() - Date.now()) / 60000;
 
   if (reservation.payment_status === "paid" && minutesUntil <= 60 && minutesUntil > 0) {
+    const feeFcfa = await getLateCancelFcfa();
     res.status(402).json({
-      error: "Cancelling within 60 minutes of your reservation requires a cancellation fee of 1,500 FCFA.",
+      error: `Cancelling within 60 minutes of your reservation requires a cancellation fee of ${feeFcfa.toLocaleString("en-US")} FCFA.`,
       requires_fee: true,
-      fee_fcfa: 1500,
+      fee_fcfa: feeFcfa,
     });
     return;
   }

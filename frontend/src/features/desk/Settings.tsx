@@ -26,6 +26,18 @@ const FIELDS: { key: keyof SiteSettings; label: string; hint?: string; type?: st
   { key: "tiktok_url", label: "TikTok", type: "url" },
   { key: "ig_url", label: "Instagram", type: "url" },
   { key: "fb_url", label: "Facebook", type: "url" },
+  {
+    key: "booking_deposit_fcfa",
+    label: "Table deposit, FCFA",
+    hint: "What a guest pays to hold a table. It comes off their bill. Changing it changes every price the site quotes.",
+    type: "number",
+  },
+  {
+    key: "late_cancel_fee_fcfa",
+    label: "Late cancellation fee, FCFA",
+    hint: "Kept when somebody cancels inside the hour, because the table sat empty.",
+    type: "number",
+  },
 ];
 
 export function Settings() {

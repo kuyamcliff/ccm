@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, DEPOSIT_FCFA, MAX_PARTY, SLOTS } from "~/lib/api";
-import type { Booking } from "~/lib/api";
+import { api, MAX_PARTY, SLOTS } from "~/lib/api";
+import type { Booking, MenuItem } from "~/lib/api";
 import { ApiError } from "~/lib/http";
 import { addDays, dayLabel, longDate, normalisePhone, todayISO, toISODate } from "~/lib/format";
 import { useAction, useResource } from "~/lib/useResource";
@@ -11,29 +11,45 @@ import { Money } from "~/ui/Bits";
 import { Notice, Skeleton } from "~/ui/Feedback";
 import { useSession } from "~/state/session";
 import { useToast } from "~/state/toast";
+import { useVenue } from "~/state/venue";
 import { FloorPlan } from "./FloorPlan";
+import { OrderStep, basketCount, basketLines, basketTotal } from "./OrderStep";
+import type { Basket } from "./OrderStep";
 import { MomoDialog } from "~/features/pay/MomoDialog";
 import { BookingPass } from "~/features/mine/BookingPass";
 
 /**
  * Booking a table.
  *
- * Three questions in a fixed order, one screen each on a phone: when, which
- * table, and how to reach you. The order matters — the tables shown in step two
- * are the ones actually free for the slot picked in step one, so availability
- * is never a promise that gets broken at the end.
+ * Four questions in a fixed order, one screen each on a phone: when, who is
+ * coming, which table, and what to have ready. The order is not arbitrary —
+ * the tables offered in step three are the ones actually free for the slot
+ * picked in step one and big enough for the party given in step two, so
+ * availability is never a promise that gets broken at the end.
+ *
+ * Food chosen in step four is charged with the deposit, in one payment. The
+ * server prices it against the live menu; nothing here is trusted to say what
+ * anything costs.
  *
  * The booking is created before payment and sits as pending until the deposit
  * lands, which is also what the server does. A guest who abandons the payment
- * still has the booking in "Mine", where they can pay or drop it.
+ * still has the booking in "Mine", where they can pay it or drop it.
  */
 
-type Step = "when" | "where" | "who";
+type Step = "when" | "party" | "table" | "food";
+
+const STEPS: { id: Step; label: string }[] = [
+  { id: "when", label: "When" },
+  { id: "party", label: "Who" },
+  { id: "table", label: "Table" },
+  { id: "food", label: "Food" },
+];
 
 const DAYS_AHEAD = 14;
 
 export function BookPage() {
   const { user, ready } = useSession();
+  const { depositFcfa } = useVenue();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -44,6 +60,8 @@ export function BookPage() {
   const [tableId, setTableId] = useState<number | null>(null);
   const [phone, setPhone] = useState("");
   const [note, setNote] = useState("");
+  const [basket, setBasket] = useState<Basket>({});
+  const [menu, setMenu] = useState<MenuItem[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
   const [booking, setBooking] = useState<Booking | null>(null);
@@ -55,22 +73,30 @@ export function BookPage() {
     []
   );
 
-  /* Only ask the server about tables once a slot is chosen: without one the
-     answer would be "all of them", which is a lie by the time it is shown. */
-  const tables = useResource(
-    () => (time ? api.booking.tables(date, time) : api.booking.tables()),
+  /* Only ask the server about the room once a slot is chosen: without one the
+     answer would be "everything is free", which is a lie by the time it shows. */
+  const floor = useResource(
+    () => (time ? api.booking.floor(date, time) : api.booking.floor()),
     [date, time]
   );
 
   const create = useAction(api.booking.create);
 
-  const chosenTable = tables.data?.find((table) => table.id === tableId) ?? null;
+  const tables = floor.data?.tables ?? [];
+  const chosenTable = tables.find((table) => table.id === tableId) ?? null;
+
+  const foodTotal = basketTotal(basket, menu);
+  const chosenCount = basketCount(basket);
+  const dueNow = depositFcfa + foodTotal;
+
+  const stepIndex = STEPS.findIndex((s) => s.id === step);
 
   async function submit() {
     setProblem(null);
     const digits = normalisePhone(phone);
     if (digits.length < 8) {
       setProblem("Enter a phone number we can reach you on.");
+      setStep("party");
       return;
     }
     if (!time) {
@@ -86,6 +112,7 @@ export function BookPage() {
       phone: digits,
       note,
       tableId,
+      items: basketLines(basket),
     });
 
     if (!created) {
@@ -116,15 +143,16 @@ export function BookPage() {
           <h1 className="display display--xl">Book a table</h1>
         </div>
         <div className="card stack" style={{ maxWidth: "32rem" }}>
-          <p className="lead">
-            Bookings are tied to an account so you can find yours later, change it, or cancel without calling anyone.
+          <p className="muted">
+            Booking needs an account, so your table, your code and your receipt stay in one place and you can change or
+            cancel without calling anybody.
           </p>
           <div className="row row--wrap">
-            <LinkButton to="/signin" state={{ from: "/book" }} tone="primary">
-              Sign in
-            </LinkButton>
-            <LinkButton to="/join" tone="ghost">
+            <LinkButton to="/join" tone="primary">
               Create an account
+            </LinkButton>
+            <LinkButton to="/signin" tone="ghost">
+              I already have one
             </LinkButton>
           </div>
           <p className="fine faint">
@@ -160,6 +188,7 @@ export function BookPage() {
               setStep("when");
               setTime(null);
               setTableId(null);
+              setBasket({});
             }}
           >
             Book another
@@ -177,14 +206,20 @@ export function BookPage() {
       </div>
 
       <ol className="steps" aria-label="Booking steps">
-        {(["when", "where", "who"] as Step[]).map((name, index) => (
-          <li key={name} className="steps__item" data-state={step === name ? "on" : "off"}>
+        {STEPS.map((entry, index) => (
+          <li
+            key={entry.id}
+            className="steps__item"
+            data-state={step === entry.id ? "on" : index < stepIndex ? "done" : "off"}
+            aria-current={step === entry.id ? "step" : undefined}
+          >
             <span className="steps__num mono">{index + 1}</span>
-            {name === "when" ? "When" : name === "where" ? "Table" : "Details"}
+            {entry.label}
           </li>
         ))}
       </ol>
 
+      {/* ── 1. When ── */}
       {step === "when" ? (
         <div className="stack stack--loose">
           <section className="stack">
@@ -227,6 +262,15 @@ export function BookPage() {
             </div>
           </section>
 
+          <Button tone="primary" size="lg" disabled={!time} onClick={() => setStep("party")} iconEnd="arrow-right">
+            {time ? `${dayLabel(date)} at ${time}` : "Pick a time"}
+          </Button>
+        </div>
+      ) : null}
+
+      {/* ── 2. Who is coming ── */}
+      {step === "party" ? (
+        <div className="stack stack--loose" style={{ maxWidth: "34rem" }}>
           <section className="stack">
             <h2 className="label">How many of you</h2>
             <Counter value={party} min={1} max={MAX_PARTY} onChange={setParty} label="party size" />
@@ -238,24 +282,57 @@ export function BookPage() {
             ) : null}
           </section>
 
-          <Button tone="primary" size="lg" disabled={!time} onClick={() => setStep("where")} iconEnd="arrow-right">
-            {time ? `${dayLabel(date)} at ${time}` : "Pick a time"}
-          </Button>
+          <PhoneField
+            label="Phone number"
+            hint="We text your booking code here, and use it if we need to reach you."
+            value={phone}
+            onChange={setPhone}
+            required
+          />
+
+          <TextAreaField
+            label="Anything we should know"
+            hint="A birthday, a wheelchair, someone who cannot take pepper."
+            placeholder="Optional"
+            maxLength={300}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+
+          {problem ? <Notice tone="bad">{problem}</Notice> : null}
+
+          <div className="row row--wrap">
+            <Button tone="ghost" icon="arrow-left" onClick={() => setStep("when")}>
+              Back
+            </Button>
+            <Button
+              tone="primary"
+              size="lg"
+              disabled={normalisePhone(phone).length < 8}
+              onClick={() => setStep("table")}
+              iconEnd="arrow-right"
+            >
+              Pick a table
+            </Button>
+          </div>
         </div>
       ) : null}
 
-      {step === "where" ? (
+      {/* ── 3. Table ── */}
+      {step === "table" ? (
         <div className="stack stack--loose">
           <p className="muted">
-            Free tables for {longDate(date)} at {time}. Pick one, or carry on and we will seat you where there is room.
+            Free tables for {longDate(date)} at {time}, for {party}. Pick one, or carry on and we will seat you where
+            there is room.
           </p>
 
-          {tables.loading ? (
+          {floor.loading ? (
             <Skeleton height="20rem" radius="var(--r-lg)" />
-          ) : tables.data ? (
+          ) : floor.data ? (
             <>
               <FloorPlan
-                tables={tables.data}
+                tables={tables}
+                fixtures={floor.data.fixtures}
                 selectedId={tableId}
                 onSelect={setTableId}
                 partySize={party}
@@ -270,18 +347,26 @@ export function BookPage() {
           ) : null}
 
           <div className="row row--wrap">
-            <Button tone="ghost" icon="arrow-left" onClick={() => setStep("when")}>
+            <Button tone="ghost" icon="arrow-left" onClick={() => setStep("party")}>
               Back
             </Button>
-            <Button tone="primary" onClick={() => setStep("who")} iconEnd="arrow-right">
+            <Button tone="primary" size="lg" onClick={() => setStep("food")} iconEnd="arrow-right">
               {chosenTable ? `Take table ${chosenTable.label}` : "Any table is fine"}
             </Button>
           </div>
         </div>
       ) : null}
 
-      {step === "who" ? (
-        <div className="stack stack--loose" style={{ maxWidth: "34rem" }}>
+      {/* ── 4. Food, then pay ── */}
+      {step === "food" ? (
+        <div className="stack stack--loose">
+          <p className="muted">
+            Order now and it starts cooking before you sit down. You can also skip this and order at the table —
+            everything here is cooked fresh either way.
+          </p>
+
+          <OrderStep basket={basket} onChange={setBasket} onMenuLoaded={setMenu} />
+
           <div className="summary card">
             <h2 className="card__title">{longDate(date)}</h2>
             <dl className="summary__grid">
@@ -303,42 +388,39 @@ export function BookPage() {
             </button>
           </div>
 
-          <PhoneField
-            label="Phone number"
-            hint="Only used if we need to reach you about this booking."
-            value={phone}
-            onChange={setPhone}
-            required
-          />
-
-          <TextAreaField
-            label="Anything we should know"
-            hint="A birthday, a wheelchair, someone who cannot take pepper."
-            placeholder="Optional"
-            maxLength={300}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-          />
-
-          <div className="deposit card card--flat">
+          <div className="deposit card card--flat stack stack--tight">
             <div className="row row--between">
               <span>Deposit to hold the table</span>
-              <Money value={DEPOSIT_FCFA} />
+              <Money value={depositFcfa} />
+            </div>
+            {chosenCount > 0 ? (
+              <div className="row row--between">
+                <span>
+                  Food and drinks, {chosenCount} {chosenCount === 1 ? "item" : "items"}
+                </span>
+                <Money value={foodTotal} />
+              </div>
+            ) : null}
+            <div className="row row--between total-row">
+              <strong>To pay now</strong>
+              <strong>
+                <Money value={dueNow} />
+              </strong>
             </div>
             <p className="fine faint">
-              Paid by MTN Mobile Money and taken off your bill on the night. Cancel more than an hour ahead and it comes
-              back to you.
+              Paid by MTN Mobile Money. The deposit comes off your bill on the night. Cancel more than an hour ahead and
+              it comes back to you.
             </p>
           </div>
 
           {problem ? <Notice tone="bad">{problem}</Notice> : null}
 
           <div className="row row--wrap">
-            <Button tone="ghost" icon="arrow-left" onClick={() => setStep("where")}>
+            <Button tone="ghost" icon="arrow-left" onClick={() => setStep("table")}>
               Back
             </Button>
             <Button tone="primary" size="lg" busy={create.busy} onClick={submit}>
-              Hold this table
+              {chosenCount > 0 ? "Hold the table and order" : "Hold this table"}
             </Button>
           </div>
         </div>
@@ -347,8 +429,8 @@ export function BookPage() {
       {booking ? (
         <MomoDialog
           open={paying}
-          amountFcfa={DEPOSIT_FCFA}
-          title="Pay the deposit"
+          amountFcfa={dueNow}
+          title={chosenCount > 0 ? "Pay the deposit and your order" : "Pay the deposit"}
           what={`${longDate(booking.date)} at ${booking.time}, ${booking.party_size} people`}
           driver={{
             allowDiscounts: true,

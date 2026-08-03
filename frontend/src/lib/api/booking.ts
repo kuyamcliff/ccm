@@ -1,9 +1,18 @@
 import { http } from "../http";
-import type { Booking, DiningTable, MomoPrompt, MomoStatus } from "./types";
+import type { Booking, DiningTable, FloorFixture, MomoPrompt, MomoStatus } from "./types";
 
-/** The deposit a table costs to hold. Mirrors DEPOSIT_FCFA on the server; the
-    server is the authority, this is only what we say before asking. */
-export const DEPOSIT_FCFA = 2500;
+/**
+ * What the deposit was before the owner could set it.
+ *
+ * The price is a site setting now — read it with `useVenue().depositFcfa`,
+ * which is what every screen showing a figure must use. This is only the
+ * fallback for the moment before settings have loaded, and it matches the
+ * server's own default, so the two can never disagree about what to charge.
+ */
+export const DEFAULT_DEPOSIT_FCFA = 2500;
+
+/** Likewise for cancelling inside the hour. */
+export const DEFAULT_LATE_CANCEL_FCFA = 1500;
 
 /** Half-hour slots, 09:00 through 22:30 — the window the server accepts. */
 export const SLOTS: string[] = Array.from({ length: 28 }, (_, i) => {
@@ -18,10 +27,24 @@ export const bookingApi = {
   tables: (date?: string, time?: string) =>
     http.get<{ tables: DiningTable[] }>(`/api/tables${http.query({ date, time })}`).then((r) => r.tables),
 
+  /** The room in full — bookable tables plus the fixtures drawn around them. */
+  floor: (date?: string, time?: string) =>
+    http
+      .get<{ tables: DiningTable[]; fixtures?: FloorFixture[] }>(`/api/tables${http.query({ date, time })}`)
+      .then((r) => ({ tables: r.tables, fixtures: r.fixtures ?? [] })),
+
   mine: () => http.get<{ reservations: Booking[] }>("/api/reservations").then((r) => r.reservations),
 
-  create: (input: { date: string; time: string; partySize: number; phone: string; note: string; tableId: number | null }) =>
-    http.post<{ reservation: Booking }>("/api/reservations", input).then((r) => r.reservation),
+  create: (input: {
+    date: string;
+    time: string;
+    partySize: number;
+    phone: string;
+    note: string;
+    tableId: number | null;
+    /** Food and drink to have ready. Priced by the server, never from here. */
+    items?: { id: number; qty: number }[];
+  }) => http.post<{ reservation: Booking }>("/api/reservations", input).then((r) => r.reservation),
 
   /**
    * Cancels a booking. Close to the sitting the restaurant keeps a fee, and the

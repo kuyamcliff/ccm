@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../db.js";
+import { readFixtures } from "../lib/fixtures.js";
 
 export const tablesRouter = Router();
 
@@ -13,8 +14,13 @@ tablesRouter.get("/", async (req, res) => {
     .prepare("SELECT id, label, capacity, zone, pos_x, pos_y FROM restaurant_tables WHERE active = 1 ORDER BY zone, id")
     .all()) as { id: number; label: string; capacity: number; zone: string; pos_x: number; pos_y: number }[];
 
+  /* The rest of the room: the grill, the screen, the bar. None of it is
+     bookable, which is why it lives in its own table — but without it the plan
+     is a field of rectangles and a guest cannot tell which corner is which. */
+  const fixtures = await readFixtures();
+
   if (!DATE_RE.test(date) || !time) {
-    res.json({ tables: tables.map((t) => ({ ...t, available: true })) });
+    res.json({ tables: tables.map((t) => ({ ...t, available: true })), fixtures });
     return;
   }
 
@@ -31,5 +37,6 @@ tablesRouter.get("/", async (req, res) => {
 
   res.json({
     tables: tables.map((t) => ({ ...t, available: !reservedIds.has(t.id) })),
+    fixtures,
   });
 });

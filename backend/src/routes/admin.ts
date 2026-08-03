@@ -6,6 +6,8 @@ import { audit } from "../lib/audit.js";
 import { MediaError, storeOrValidateUrl } from "../lib/media.js";
 import { awardPoints } from "./loyalty.js";
 import { failPayment } from "./payments.js";
+import { messagingAvailable } from "../lib/notify.js";
+import { FIXTURE_KINDS, FLOOR_CANVAS, clampFixture, isFixtureKind, readFixtures } from "../lib/fixtures.js";
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireAdmin);
@@ -357,6 +359,97 @@ adminRouter.get("/payments", async (_req, res) => {
      ORDER BY p.created_at DESC LIMIT 100`
   ).all();
   res.json({ payments });
+});
+
+/* ── The room itself ───────────────────────────────────────────────────────
+   Fixtures are not bookable and never join a reservation query, which is why
+   they are their own table rather than a `kind` column on restaurant_tables. */
+
+adminRouter.get("/fixtures", async (_req, res) => {
+  res.json({ fixtures: await readFixtures(), kinds: FIXTURE_KINDS });
+});
+
+adminRouter.post("/fixtures", async (req, res) => {
+  const kind = req.body?.kind;
+  if (!isFixtureKind(kind)) {
+    res.status(400).json({ error: "Pick one of the fixture types we can draw." });
+    return;
+  }
+  const label = String(req.body?.label ?? "").trim().slice(0, 40);
+  const box = clampFixture(
+    Number(req.body?.pos_x ?? FLOOR_CANVAS.width / 2),
+    Number(req.body?.pos_y ?? FLOOR_CANVAS.height / 2),
+    Number(req.body?.width ?? 90),
+    Number(req.body?.height ?? 90)
+  );
+
+  const info = await db
+    .prepare("INSERT INTO floor_fixtures (kind, label, pos_x, pos_y, width, height) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(kind, label, box.pos_x, box.pos_y, box.width, box.height);
+
+  audit(req, { action: "floor.fixture.add", targetType: "fixture", targetId: String(info.lastInsertRowid), detail: kind });
+  res.status(201).json({ id: Number(info.lastInsertRowid) });
+});
+
+adminRouter.patch("/fixtures/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad fixture id." }); return; }
+
+  const existing = (await db
+    .prepare("SELECT id, kind, label, pos_x, pos_y, width, height FROM floor_fixtures WHERE id = ?")
+    .get(id)) as { pos_x: number; pos_y: number; width: number; height: number } | undefined;
+  if (!existing) { res.status(404).json({ error: "Fixture not found." }); return; }
+
+  const fields: Record<string, SqlValue> = {};
+  if (req.body?.kind !== undefined) {
+    if (!isFixtureKind(req.body.kind)) { res.status(400).json({ error: "Not a fixture type we can draw." }); return; }
+    fields.kind = req.body.kind;
+  }
+  if (req.body?.label !== undefined) fields.label = String(req.body.label).trim().slice(0, 40);
+
+  /* Position and size are clamped as a set: moving a wide fixture to the edge
+     has to take its width into account, so they cannot be validated apart. */
+  if (["pos_x", "pos_y", "width", "height"].some((k) => req.body?.[k] !== undefined)) {
+    const box = clampFixture(
+      Number(req.body?.pos_x ?? existing.pos_x),
+      Number(req.body?.pos_y ?? existing.pos_y),
+      Number(req.body?.width ?? existing.width),
+      Number(req.body?.height ?? existing.height)
+    );
+    Object.assign(fields, box);
+  }
+
+  if (Object.keys(fields).length === 0) { res.status(400).json({ error: "Nothing to change." }); return; }
+  await applyUpdate("floor_fixtures", fields, id);
+  res.json({ ok: true });
+});
+
+adminRouter.delete("/fixtures/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad fixture id." }); return; }
+  const info = await db.prepare("DELETE FROM floor_fixtures WHERE id = ?").run(id);
+  if (info.changes === 0) { res.status(404).json({ error: "Fixture not found." }); return; }
+  audit(req, { action: "floor.fixture.remove", targetType: "fixture", targetId: String(id) });
+  res.json({ ok: true });
+});
+
+/**
+ * Every message the site tried to send.
+ *
+ * Worth a screen of its own because "did the guest actually get told?" is a
+ * question staff will be asked at the door, and because until a provider is
+ * configured every row here says 'logged' — which is how the owner can see the
+ * wiring works before paying for it.
+ */
+adminRouter.get("/notifications", async (_req, res) => {
+  const notifications = await db.prepare(
+    `SELECT n.id, n.channel, n.recipient, n.template, n.body, n.status, n.error,
+            n.created_at, n.sent_at, u.name as user_name
+     FROM notifications n
+     LEFT JOIN users u ON u.id = n.user_id
+     ORDER BY n.created_at DESC LIMIT 100`
+  ).all();
+  res.json({ notifications, delivery_enabled: messagingAvailable() });
 });
 
 adminRouter.patch("/payments/:id", async (req, res) => {

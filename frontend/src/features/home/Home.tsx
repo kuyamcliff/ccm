@@ -70,6 +70,9 @@ function Hero({ images }: { images: string[] }) {
             <dd>{address}</dd>
           </div>
           <div>
+            {/* What the cheapest thing on the menu costs — not the deposit,
+                which happens to be the same figure today and would otherwise
+                start claiming food costs whatever the owner sets a table at. */}
             <dt className="label">From</dt>
             <dd className="mono">2,500 FCFA</dd>
           </div>
@@ -130,6 +133,8 @@ function Favourites() {
 /** Three ways in, because the answer to "can I just show up" genuinely
     depends on the night. */
 function Ways() {
+  const { depositFcfa } = useVenue();
+
   return (
     <section className="section page">
       <div className="ways">
@@ -139,7 +144,7 @@ function Ways() {
           </span>
           <h3 className="card__title">Hold a table</h3>
           <p className="fine muted">
-            Pick a time and a table. A {money(2500)} FCFA deposit through MTN Mobile Money holds it, and it comes off
+            Pick a time and a table. A {money(depositFcfa)} FCFA deposit through MTN Mobile Money holds it, and it comes off
             your bill.
           </p>
           <span className="way__go">

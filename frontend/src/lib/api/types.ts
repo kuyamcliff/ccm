@@ -31,6 +31,11 @@ export interface SiteSettings {
   tiktok_url?: string;
   ig_url?: string;
   fb_url?: string;
+  /* Money, but delivered as strings like every other setting — site_settings is
+     a key/value table. Read them through `useVenue`, which parses and falls
+     back, rather than pulling them out here. */
+  booking_deposit_fcfa?: string;
+  late_cancel_fee_fcfa?: string;
 }
 
 export interface MenuItem {
@@ -46,6 +51,19 @@ export interface MenuItem {
   is_active: number;
   /** JSON array as a string, e.g. '["spicy"]'. */
   dietary_tags: string;
+}
+
+/** Everything in the room that is not a table. Drawn on the plan, never booked. */
+export type FixtureKind = "grill" | "tv" | "bar" | "door" | "toilets" | "kitchen" | "speaker" | "plant";
+
+export interface FloorFixture {
+  id: number;
+  kind: FixtureKind;
+  label: string;
+  pos_x: number;
+  pos_y: number;
+  width: number;
+  height: number;
 }
 
 export interface DiningTable {
@@ -85,6 +103,11 @@ export interface Booking {
   discount_fcfa?: number | null;
   pay_method?: string | null;
   pay_reference?: string | null;
+  /** Food and drink ordered with the table. A JSON array, as the server stores it. */
+  items_json?: string | null;
+  items_total_fcfa?: number | null;
+  /** What the deposit was when this booking was paid, not what it is today. */
+  deposit_fcfa?: number | null;
 }
 
 export interface ReviewReply {
@@ -168,10 +191,13 @@ export interface WaitlistEntry {
   seated_at: string | null;
 }
 
+/** A line of food or drink — on a takeaway, or ordered ahead with a table. */
 export interface OrderLine {
   name: string;
   qty: number;
   price: number;
+  /** The menu item it came from. Absent on rows written before pre-ordering. */
+  id?: number;
 }
 
 export type OrderStatus = "pending" | "confirmed" | "ready" | "picked_up" | "cancelled";
