@@ -50,7 +50,6 @@ function Dish({ item }: { item: MenuItem }) {
         </p>
         {orderable ? (
           <Button
-            size="sm"
             tone={inBasket > 0 ? "ghost" : "default"}
             icon="plus"
             onClick={() => {
