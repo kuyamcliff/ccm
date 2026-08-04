@@ -14,14 +14,14 @@ import { useResource } from "~/lib/useResource";
  */
 
 const FALLBACK: Required<Pick<SiteSettings, "address" | "city" | "region" | "hours">> = {
-  address: "Clerks Quarters, opposite the Survey School",
+  address: "Razel Street, opposite P and T school",
   city: "Buea",
   region: "South-West",
   hours: "Every day, midday until late",
 };
 
 /** Owners usually type the town into the street line already; appending it
-    again is how you end up with "Clerks Quarters, Buea, Buea". */
+    again is how you end up with "Razel Street, Buea, Buea". */
 function joinAddress(street: string, city: string): string {
   if (!city) return street;
   return street.toLowerCase().includes(city.toLowerCase()) ? street : `${street}, ${city}`;

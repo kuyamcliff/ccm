@@ -28,25 +28,27 @@ function Hero({ images }: { images: string[] }) {
   return (
     <section className="hero">
       {/*
-        The restaurant's own photographs, crossfading. They are the whole
-        argument for eating here, so they get the screen rather than a strip of
-        thumbnails, and the first is loaded eagerly because it is the largest
-        thing above the fold.
+        The restaurant's own photographs, crossfading, with the words on solid
+        black underneath rather than floating on top of them. See the hero
+        block in pages.css for why that is the only arrangement that survives
+        the owner uploading whatever they photographed that day.
       */}
-      <div className="hero__frames" aria-hidden="true">
-        {images.slice(0, 3).map((src, index) => (
-          <div key={src} className={`hero__frame hero__frame--${index + 1}`}>
-            <Photo src={src} alt="" eager={index === 0} />
-          </div>
-        ))}
+      <div className="hero__media">
+        <div className="hero__frames" aria-hidden="true">
+          {images.slice(0, 3).map((src, index) => (
+            <div key={src} className={`hero__frame hero__frame--${index + 1}`}>
+              <Photo src={src} alt="" eager={index === 0} />
+            </div>
+          ))}
+        </div>
+
+        <p className="hero__eyebrow label">
+          <span className="hero__coal" aria-hidden="true" />
+          Razel Street, Buea
+        </p>
       </div>
 
       <div className="page hero__inner">
-        <p className="hero__eyebrow label">
-          <span className="hero__coal" aria-hidden="true" />
-          Clerks Quarters, Buea
-        </p>
-
         <h1 className="display display--hero hero__title">
           Off the fire,
           <br />
@@ -59,17 +61,17 @@ function Hero({ images }: { images: string[] }) {
         </p>
 
         <div className="hero__actions">
-          <LinkButton to="/menu" tone="primary" size="lg" icon="list">
+          <LinkButton to="/menu" tone="primary" icon="list">
             See the menu
           </LinkButton>
-          <LinkButton to="/order" tone="ghost" size="lg" icon="bag">
+          <LinkButton to="/order" tone="ghost" icon="bag">
             Order now
           </LinkButton>
         </div>
 
         {/*
-          Three facts, and each one is short enough to hold a column on a
-          360px screen. The address is not among them: the line above already
+          Three facts, each short enough to hold a column on a 320px screen.
+          The address is not among them: the badge on the photograph already
           says where this is, and repeating it here wraps to five lines and
           throws the row out.
         */}

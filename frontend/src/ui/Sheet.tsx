@@ -27,6 +27,29 @@ export function Sheet({ open, onClose, title, description, children, footer, bus
   const panel = useRef<HTMLDivElement>(null);
   const restoreTo = useRef<HTMLElement | null>(null);
 
+  /*
+   * The callbacks are held in refs, and the effect below depends on `open`
+   * alone. This is not a tidiness point, it is the whole reason typing works.
+   *
+   * Every caller writes `onClose={() => setDraft(null)}`, which is a new
+   * function on every render. With `onClose` in the dependency list, one
+   * keystroke in a field re-rendered the parent, changed the identity of
+   * `onClose`, and made React tear the effect down and set it up again. The
+   * teardown calls `restoreTo.current.focus()` and the setup calls
+   * `panel.current.focus()`, so focus was pulled out of the input and onto the
+   * panel between every single letter, which on a phone closes the keyboard.
+   * You could type one character per tap.
+   *
+   * Reading them from refs keeps the handler current without making the effect
+   * depend on their identity.
+   */
+  const onCloseRef = useRef(onClose);
+  const busyRef = useRef(busy);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    busyRef.current = busy;
+  });
+
   useEffect(() => {
     if (!open) return;
 
@@ -40,9 +63,9 @@ export function Sheet({ open, onClose, title, description, children, footer, bus
     panel.current?.focus();
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !busy) {
+      if (event.key === "Escape" && !busyRef.current) {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !panel.current) return;
@@ -70,7 +93,7 @@ export function Sheet({ open, onClose, title, description, children, footer, bus
       document.body.style.overflow = overflow;
       restoreTo.current?.focus?.();
     };
-  }, [open, onClose, busy]);
+  }, [open]);
 
   if (!open) return null;
 

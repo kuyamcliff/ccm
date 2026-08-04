@@ -1282,6 +1282,14 @@ body:has(.basket-bar) .toaster {
   }
 }
 
+/* A screen with a basket bar or a booking footer has an action fixed to the
+   bottom of it, and a floating chat button lands squarely on top of it. Nobody
+   is opening a support chat in the middle of paying. */
+body:has(.basket-bar) .helper,
+body:has(.booking__foot) .helper {
+  display: none;
+}
+
 .helper__dot {
   width: 0.45rem;
   height: 0.45rem;

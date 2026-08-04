@@ -78,21 +78,31 @@
   --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   --font-num: var(--font-sans);
 
-  /* Fluid only where it earns it. Body copy is fixed at 16px on a phone: it is
-     the floor for reading on a bright street and it never needs to be smaller. */
-  --t-hero: clamp(2.75rem, 12vw, 5.5rem);
-  --t-display: clamp(2rem, 7vw, 3.25rem);
-  --t-title: clamp(1.5rem, 5vw, 2.125rem);
-  --t-head: clamp(1.1875rem, 3.2vw, 1.375rem);
-  --t-lead: clamp(1.0625rem, 1rem + 0.4vw, 1.1875rem);
+  /*
+   * The ramp was too big on a real phone.
+   *
+   * Every size below came down by roughly a fifth in 2026-08 after the site was
+   * read on the device it is actually for. Headings had been sized for a
+   * screenshot rather than for a hand, and a booking pass was taking most of a
+   * screen to say four things.
+   *
+   * Body copy is the one thing that does not move. It stays at 16px because
+   * anything under that makes iOS zoom the page the moment an input takes
+   * focus, and the layout never recovers.
+   */
+  --t-hero: clamp(2.125rem, 9vw, 4rem);
+  --t-display: clamp(1.5rem, 5.2vw, 2.25rem);
+  --t-title: clamp(1.1875rem, 3.8vw, 1.5rem);
+  --t-head: clamp(1rem, 2.4vw, 1.125rem);
+  --t-lead: clamp(0.9375rem, 0.9rem + 0.25vw, 1rem);
   --t-body: 1rem;
-  --t-small: 0.9375rem;
+  --t-small: 0.875rem;
   /* 14px, not 13px. This size carries dish descriptions and every helper line
      in the product, and at 13px it is the one thing people squint at. */
-  --t-fine: 0.875rem;
-  --t-label: 0.75rem;
+  --t-fine: 0.8125rem;
+  --t-label: 0.6875rem;
   /* The floor. Seat counts, tab labels, badge digits. Nothing goes under it. */
-  --t-micro: 0.6875rem;
+  --t-micro: 0.625rem;
 
   --lh-tight: 1;
   --lh-head: 1.12;
@@ -110,22 +120,22 @@
   --s-2: 0.5rem;
   --s-3: 0.75rem;
   --s-4: 1rem;
-  --s-5: 1.5rem;
-  --s-6: 2rem;
-  --s-7: 3rem;
-  --s-8: 4rem;
-  --s-9: 6rem;
+  --s-5: 1.25rem;
+  --s-6: 1.75rem;
+  --s-7: 2.25rem;
+  --s-8: 3rem;
+  --s-9: 4rem;
 
   /* 20px on the smallest phone we design for, opening out on a desk. Wider
      than it looks: the breathing room is most of what stops the page reading
      as a template. */
-  --gutter: clamp(1.25rem, 5vw, 3rem);
+  --gutter: clamp(1rem, 4vw, 2.5rem);
   --page-max: 75rem;
   --prose-max: 36rem;
 
   /* The smallest a control may be and still be hit with a thumb on a moving
      bike taxi. Controls read this rather than each picking a height. */
-  --tap: 3rem;
+  --tap: 2.75rem;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
 
@@ -134,8 +144,8 @@
   --r-xs: 6px;
   --r-sm: 10px;
   --r-md: 14px;
-  --r-lg: 20px;
-  --r-xl: 28px;
+  --r-lg: 16px;
+  --r-xl: 22px;
   --r-full: 999px;
 
   /* On black a black shadow is invisible, so depth is carried by the surface
@@ -167,8 +177,8 @@
 
   /* The tab bar's height. Page padding and every sticky offset read it, so
      they cannot drift apart. */
-  --tabbar-h: 4.5rem;
-  --topbar-h: 3.75rem;
+  --tabbar-h: 3.875rem;
+  --topbar-h: 3.25rem;
 }
 
 /* When somebody has asked their phone for less movement, they get none of it:

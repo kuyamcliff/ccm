@@ -93,7 +93,9 @@ None. Every fact on the site (phone, address, hours, socials) comes from
 site_settings and is edited in the console under Details.
 
 ## Real, sourced details
-- Location: opposite the Survey School, Clerks Quarters, Buea.
+- Location: Razel Street, opposite the P and T school, Buea. The address the
+  site actually shows comes from site_settings and is edited in Desk > Details;
+  what is in the code is the fallback and the prose around it.
 - TikTok: https://www.tiktok.com/@cam.chop.meat
 - Price anchors: food from 2,500 FCFA, drinks from 500 FCFA.
 - Table deposit: 2,500 FCFA. Late cancellation fee: 1,500 FCFA. Both are set by

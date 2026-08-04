@@ -7,7 +7,7 @@ import { useVenue } from "~/state/venue";
 /**
  * Where we are, how to get here, and how to reach us.
  *
- * Written for somebody standing on Molyko road with one bar of signal. The
+ * Written for somebody standing on a Buea road with one bar of signal. The
  * three things they need are a tap that calls, a tap that opens their own maps
  * app, and the landmark to tell a bike rider. Everything else on the page is
  * underneath those.
@@ -20,9 +20,9 @@ import { useVenue } from "~/state/venue";
  */
 
 const DIRECTIONS = [
-  "Coming from Molyko, follow the road towards Clerks Quarters.",
-  "Pass the Survey School and keep it on your left.",
-  "We are directly opposite it, on the corner. Look for the grill and the smoke.",
+  "Make your way to Razel Street.",
+  "Find the P and T school and keep it on your left.",
+  "We are directly opposite it. Look for the grill and the smoke.",
 ];
 
 export function FindPage() {
@@ -126,7 +126,7 @@ export function FindPage() {
             ))}
           </div>
           <p className="fine faint" style={{ marginTop: "var(--s-4)" }}>
-            Telling a bike rider "Cam Chop Meat, opposite Survey School" is usually enough.
+            Telling a bike rider "Cam Chop Meat, Razel Street, opposite P and T" is usually enough.
           </p>
         </Reveal>
 

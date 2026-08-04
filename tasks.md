@@ -66,6 +66,36 @@
 - [x] Checked at 320px and 390px, plus the console's own floor editor, which
       keeps its scrolling canvas.
 
+## Done (2026-08-04, sizing pass and the typing bug)
+- [x] **Typing in the console is fixed.** Every sheet took `onClose` in its
+      focus effect's dependency list, and every caller passes an inline arrow,
+      so one keystroke changed its identity, tore the effect down and set it up
+      again. The teardown restored focus and the setup moved it to the panel,
+      so focus left the field between every letter and the keyboard closed. One
+      character per tap, on menu, promo codes, gift cards and the rest. The
+      callbacks are held in refs now and the effect depends on `open` alone.
+- [x] The whole type and space ramp came down by roughly a fifth. Body copy
+      stays at 16px because anything under it makes iOS zoom on focus.
+- [x] The booking pass was taking most of a screen to say four things. The code
+      is still the largest thing on it, just not on the phone.
+- [x] Console panels, stat tiles and page padding tightened with the ramp.
+- [x] Takeaway and booking now share one time picker (`ui/SlotPicker`). The
+      checkout used to offer a native select of twenty eight times, which a
+      phone renders as a wheel you cannot scan and which happily offered a slot
+      that had already gone. It also holds the kitchen's half hour of notice.
+- [x] The takeaway confirmation lists what was ordered, not just a code. The
+      PDF receipt already itemised.
+- [x] Address is Razel Street, opposite the P and T school, throughout: the
+      fallback, the prose on Home, Our story and Find us, the page description
+      and both PDF receipts.
+- [x] Home rebuilt so the words sit on solid black under the photograph rather
+      than on top of it. No gradient is safe for both a dark night shot and a
+      bright flash one, and the owner uploads both.
+- [x] Checkout no longer shows two Pay Now buttons on a phone, and the floating
+      support button no longer lands on top of a sticky pay bar.
+- [x] Swept all 23 customer and console pages at 320px and 390px: nothing
+      overflows.
+
 ## Waiting on the owner
 - [ ] Real photographs of the food, uploaded in Desk > Menu.
       Everything else on the site is now real; the pictures are the last thing

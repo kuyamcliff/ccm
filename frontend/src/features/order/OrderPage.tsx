@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { api, SLOTS } from "~/lib/api";
+import { api } from "~/lib/api";
 import { ApiError } from "~/lib/http";
-import { money, normalisePhone, timeLabel } from "~/lib/format";
+import { money, normalisePhone, timeLabel, todayISO } from "~/lib/format";
 import { useAction, useResource } from "~/lib/useResource";
 import { Button, IconButton, LinkButton } from "~/ui/Button";
-import { PhoneField, SelectField, TextAreaField, TextField } from "~/ui/Field";
+import { PhoneField, TextAreaField, TextField } from "~/ui/Field";
 import { Icon } from "~/ui/Icon";
 import { Photo } from "~/ui/Photo";
 import { Money } from "~/ui/Bits";
 import { EmptyState, ErrorState, Notice, SkeletonCards } from "~/ui/Feedback";
+import { SlotPicker, firstBookableSlot } from "~/ui/SlotPicker";
 import { useBasket } from "~/state/basket";
 import { useSession } from "~/state/session";
 import { useToast } from "~/state/toast";
@@ -30,6 +31,9 @@ import { MomoDialog } from "~/features/pay/MomoDialog";
  * more thing to lose on a dropped connection.
  */
 
+/** What the grill needs between an order landing and somebody arriving. */
+const PICKUP_LEAD_MINUTES = 30;
+
 interface Placed {
   order_no: string;
   total_fcfa: number;
@@ -45,13 +49,20 @@ export function OrderPage() {
 
   const [name, setName] = useState(user?.name ?? "");
   const [phone, setPhone] = useState("");
-  const [pickup, setPickup] = useState(SLOTS[8] ?? "13:00");
+  /* Collection is today, and the kitchen wants half an hour. Start on the
+     first slot that actually satisfies both rather than on a fixed one that
+     may already have gone. */
+  const today = todayISO();
+  const [pickup, setPickup] = useState<string | null>(() => firstBookableSlot(today, PICKUP_LEAD_MINUTES));
   const [note, setNote] = useState("");
   const [promo, setPromo] = useState("");
   const [gift, setGift] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
 
   const [placed, setPlaced] = useState<Placed | null>(null);
+  /* Snapshotted as the order goes out, because the basket is emptied the
+     moment it does and the confirmation still has to say what was bought. */
+  const [ordered, setOrdered] = useState<{ name: string; qty: number; total: number }[]>([]);
   const [paying, setPaying] = useState(false);
   const [collected, setCollected] = useState(false);
 
@@ -88,7 +99,7 @@ export function OrderPage() {
           <header className="pass__head">
             <span className="badge badge--good">Sent to the kitchen</span>
             <span className="pass__table">
-              Collect at <strong>{timeLabel(pickup)}</strong>
+              Collect at <strong>{pickup ? timeLabel(pickup) : "the time you chose"}</strong>
             </span>
           </header>
 
@@ -104,8 +115,33 @@ export function OrderPage() {
             </div>
           </footer>
 
+          {/* What was actually bought. A code on its own is a promise nobody
+              can check; the counter and the customer should be reading the
+              same list. */}
+          {ordered.length > 0 ? (
+            <div className="stack stack--tight">
+              <span className="label">Your order</span>
+              <ul className="lines">
+                {ordered.map((line) => (
+                  <li key={line.name}>
+                    <span className="mono lines__qty">{line.qty}</span>
+                    <span>{line.name}</span>
+                    <Money value={line.total} className="push" />
+                  </li>
+                ))}
+              </ul>
+              <div className="row row--between total-row">
+                <strong>Paid</strong>
+                <strong>
+                  <Money value={placed.total_fcfa} />
+                </strong>
+              </div>
+            </div>
+          ) : null}
+
           <p className="fine muted">
-            We start cooking closer to the time so it is hot when you arrive. Your code is also saved in Mine.
+            We start cooking closer to the time so it is hot when you arrive. Your code and this list are also saved in
+            Mine.
           </p>
         </div>
 
@@ -154,6 +190,10 @@ export function OrderPage() {
       setProblem("Enter a phone number we can reach you on.");
       return;
     }
+    if (!pickup) {
+      setProblem("Pick a collection time.");
+      return;
+    }
 
     const result = await place.run({
       name: name.trim(),
@@ -171,6 +211,7 @@ export function OrderPage() {
       return;
     }
 
+    setOrdered(lines.map((line) => ({ name: line.item.name, qty: line.qty, total: line.lineTotal })));
     setPlaced(result);
     if (result.payment_required) {
       setPaying(true);
@@ -261,18 +302,29 @@ export function OrderPage() {
               onChange={setPhone}
               required
             />
-            <SelectField
-              label="Collection time"
-              hint="Give us at least half an hour. Everything is grilled fresh when you order it."
-              value={pickup}
-              onChange={(e) => setPickup(e.target.value)}
-            >
-              {SLOTS.map((slot) => (
-                <option key={slot} value={slot}>
-                  {slot}
-                </option>
-              ))}
-            </SelectField>
+            {/*
+              The same picker the booking flow uses, not a native select. A
+              select holding twenty eight times is a spinning wheel on a phone
+              that you cannot scan, and it happily offered a slot that had
+              already gone.
+            */}
+            <div className="field">
+              <span className="field__label">Collection time</span>
+              <span className="field__hint">
+                Give us at least half an hour. Everything is grilled fresh when you order it.
+              </span>
+              <SlotPicker
+                date={today}
+                value={pickup}
+                onChange={setPickup}
+                leadMinutes={PICKUP_LEAD_MINUTES}
+                emptyMessage={
+                  <Notice tone="warn">
+                    The kitchen has closed for today. Come back tomorrow, or call us to ask.
+                  </Notice>
+                }
+              />
+            </div>
             <TextAreaField
               label="Anything to add"
               placeholder="Optional. Extra pepper, no onions, that sort of thing."
@@ -337,7 +389,15 @@ export function OrderPage() {
 
             {problem ? <Notice tone="bad">{problem}</Notice> : null}
 
-            <Button tone="primary" size="lg" block busy={place.busy} onClick={submit} icon="wallet">
+            <Button
+              tone="primary"
+              size="lg"
+              block
+              className="checkout__pay"
+              busy={place.busy}
+              onClick={submit}
+              icon="wallet"
+            >
               Pay Now
             </Button>
           </div>
@@ -366,7 +426,7 @@ export function OrderPage() {
           open={paying}
           amountFcfa={placed.total_fcfa}
           title="Pay for your order"
-          what={`Order ${placed.order_no}, collect at ${timeLabel(pickup)}`}
+          what={`Order ${placed.order_no}, collect at ${pickup ? timeLabel(pickup) : ""}`.trim()}
           driver={{
             start: (input) =>
               api.orders.pay(placed.order_no, input.momoPhone).then((prompt) => ({

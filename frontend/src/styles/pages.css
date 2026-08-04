@@ -10,28 +10,42 @@
  */
 
 /* ══ Hero ═══════════════════════════════════════════════════════════════════
-   One photograph, full bleed, running up under the status bar, with the type
-   sitting on the dark end of it. Everything above the fold on a phone: the
-   name of the thing, where it is, and the two buttons that matter. */
+   A photograph, and then the words underneath it on solid ground.
+
+   The words used to sit on top of the picture, which is the arrangement every
+   restaurant site reaches for and the one that cannot be made to work. The
+   photographs are the owner's own and they change: a dark shot of goat at
+   night takes white type well, a bright plate under a flash does not, and no
+   amount of gradient is safe for both. Scrim it hard enough for the bright one
+   and you have hidden the dark one behind a grey sheet.
+
+   So the picture gets the top of the screen and the words get their own black
+   below it, with a gradient closing the seam. The type is legible against a
+   known colour whatever the owner uploads, and the photograph is not being
+   half-covered to make it so. */
 
 .hero {
   position: relative;
   display: flex;
-  align-items: flex-end;
-  min-height: 88svh;
+  flex-direction: column;
   /* Pulled up under the transparent top bar so the picture is the first thing
      on the screen rather than a strip of black above it. */
   margin-top: calc((var(--topbar-h) + var(--safe-t)) * -1);
-  padding-top: calc(var(--topbar-h) + var(--safe-t));
-  padding-bottom: var(--s-7);
+}
+
+.hero__media {
+  position: relative;
+  height: 46svh;
+  min-height: 15rem;
+  max-height: 24rem;
   overflow: hidden;
   isolation: isolate;
 }
 
 @media (min-width: 60rem) {
-  .hero {
-    min-height: 82svh;
-    align-items: center;
+  .hero__media {
+    height: 58svh;
+    max-height: 34rem;
   }
 }
 
@@ -59,23 +73,17 @@
   animation: hero-drift 21s var(--ease-inout) infinite;
 }
 
-.hero__frame--1 {
-  animation-delay: 0s;
-}
+.hero__frame--1,
 .hero__frame--1 img {
   animation-delay: 0s;
 }
 
-.hero__frame--2 {
-  animation-delay: 7s;
-}
+.hero__frame--2,
 .hero__frame--2 img {
   animation-delay: 7s;
 }
 
-.hero__frame--3 {
-  animation-delay: 14s;
-}
+.hero__frame--3,
 .hero__frame--3 img {
   animation-delay: 14s;
 }
@@ -96,15 +104,15 @@
 
 @keyframes hero-drift {
   from {
-    transform: scale(1.06);
+    transform: scale(1.04);
   }
   to {
-    transform: scale(1.16);
+    transform: scale(1.13);
   }
 }
 
-/* A single photograph never gets held on its own by the crossfade above, so a
-   lone frame is simply left showing. */
+/* A single photograph is never held on its own by the crossfade, so a lone
+   frame is simply left showing. */
 .hero__frames > .hero__frame:only-child {
   opacity: 1;
   animation: none;
@@ -125,39 +133,42 @@
   }
 }
 
-/* Two gradients, not one. The bottom one is what the words sit on; the top one
-   only has to keep the wordmark off a bright sky. */
-.hero::before {
+/* Two jobs only: keep the wordmark off a bright sky at the top, and close the
+   seam into the black below. Nothing has to be readable through the middle. */
+.hero__media::after {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
   background:
-    linear-gradient(180deg, rgba(5, 5, 5, 0.6) 0%, rgba(5, 5, 5, 0) 26%),
-    linear-gradient(0deg, var(--bg) 1%, rgba(5, 5, 5, 0.82) 22%, rgba(5, 5, 5, 0.08) 58%, rgba(5, 5, 5, 0.28) 100%);
+    linear-gradient(180deg, rgba(5, 5, 5, 0.7) 0%, rgba(5, 5, 5, 0) 26%),
+    linear-gradient(0deg, var(--bg) 0%, rgba(10, 10, 10, 0.45) 10%, rgba(5, 5, 5, 0) 26%);
 }
 
-.hero__inner {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--s-4);
-  width: 100%;
-}
-
+/* The one thing that does sit on the picture, so it gets its own backing
+   rather than trusting the gradient. */
 .hero__eyebrow {
+  position: absolute;
+  left: var(--gutter);
+  bottom: var(--s-4);
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: var(--s-2);
-  color: var(--text-2);
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--r-full);
+  background: rgba(5, 5, 5, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: var(--text);
   animation: rise var(--dur-4) var(--ease) both;
 }
 
 /* The live dot. It says the place is a place, open now, not a brochure. */
 .hero__coal {
   position: relative;
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 0.45rem;
+  height: 0.45rem;
   border-radius: 50%;
   background: var(--red);
   flex: none;
@@ -189,11 +200,21 @@
   }
 }
 
+.hero__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-3);
+  width: 100%;
+  padding-top: var(--s-5);
+  padding-bottom: var(--s-5);
+}
+
 .hero__title {
-  max-width: 14ch;
+  max-width: 16ch;
   color: var(--white);
   animation: rise var(--dur-4) var(--ease) both;
-  animation-delay: 70ms;
+  animation-delay: 60ms;
 }
 
 .hero__hot {
@@ -201,29 +222,29 @@
 }
 
 .hero__blurb {
-  max-width: 34ch;
+  max-width: 38ch;
   font-size: var(--t-lead);
   line-height: 1.5;
   color: var(--text-2);
   text-wrap: pretty;
   animation: rise var(--dur-4) var(--ease) both;
-  animation-delay: 140ms;
+  animation-delay: 120ms;
 }
 
 .hero__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--s-3);
+  gap: var(--s-2);
   width: 100%;
   margin-top: var(--s-2);
   animation: rise var(--dur-4) var(--ease) both;
-  animation-delay: 210ms;
+  animation-delay: 180ms;
 }
 
 /* On the narrowest phones the two buttons share the width evenly rather than
    one of them wrapping onto a line of its own. */
 .hero__actions > * {
-  flex: 1 1 9rem;
+  flex: 1 1 8rem;
 }
 
 @media (min-width: 30rem) {
@@ -236,25 +257,25 @@
 .hero__facts {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: var(--s-3);
+  gap: var(--s-2);
   width: 100%;
-  margin-top: var(--s-4);
-  padding-top: var(--s-4);
-  border-top: 1px solid var(--line-2);
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line);
   animation: rise var(--dur-4) var(--ease) both;
-  animation-delay: 280ms;
+  animation-delay: 240ms;
 }
 
 .hero__facts > div {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.1rem;
   min-width: 0;
 }
 
 .hero__facts dd {
   font-size: var(--t-fine);
-  line-height: 1.35;
+  line-height: 1.3;
   color: var(--text);
   font-weight: 500;
 }
@@ -264,7 +285,7 @@
 .hero__facts a {
   display: inline-flex;
   align-items: center;
-  min-height: 2.25rem;
+  min-height: 2rem;
   color: var(--white);
   border-bottom: 1px solid var(--red);
   transition: color var(--dur-2) var(--ease);
@@ -1030,6 +1051,24 @@
   align-items: start;
 }
 
+/*
+ * On a phone the summary is not a panel and does not carry the action.
+ *
+ * The bar fixed to the bottom of the screen already holds the total and the
+ * payment, so a card repeating both a thumb's reach above it is a second Pay
+ * Now on the same screen. Here it is a plain run of rows; from 60rem, where
+ * there is no bar, it becomes the sticky column that carries the button.
+ */
+.checkout__side > .card {
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.checkout__pay {
+  display: none;
+}
+
 @media (min-width: 60rem) {
   .checkout {
     grid-template-columns: 1fr 22rem;
@@ -1039,6 +1078,16 @@
   .checkout__side {
     position: sticky;
     top: calc(var(--topbar-h) + var(--s-5));
+  }
+
+  .checkout__side > .card {
+    padding: var(--s-5);
+    background: var(--surface);
+    border: 1px solid var(--line);
+  }
+
+  .checkout__pay {
+    display: flex;
   }
 }
 
@@ -1282,8 +1331,8 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--s-4);
-  padding: var(--s-5);
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-4) var(--s-4) var(--s-5);
   border-radius: var(--r-lg);
   background: var(--surface);
   border: 1px solid var(--line-2);
@@ -1327,13 +1376,14 @@
 }
 
 .pass__when {
-  font-size: var(--t-head);
+  font-size: var(--t-small);
+  font-weight: 700;
 }
 
 .pass__facts {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--s-6);
+  gap: var(--s-5);
 }
 
 .pass__facts > div {
@@ -1343,9 +1393,9 @@
 }
 
 .pass__big {
-  font-size: var(--t-title);
+  font-size: var(--t-head);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1.15;
   color: var(--white);
 }
 
@@ -1365,7 +1415,7 @@
 .pass__tear {
   position: relative;
   height: 1px;
-  margin-inline: calc(var(--s-5) * -1);
+  margin-inline: calc(var(--s-4) * -1);
   border-top: 1px dashed var(--line-2);
 }
 
@@ -1394,22 +1444,29 @@
   flex-wrap: wrap;
 }
 
-/* The code is the thing that matters at the door, so it is the biggest element
-   on the card and set with the characters pulled apart, because somebody is
-   going to read it out over a phone. */
+/*
+ * The code still matters most at the door, so it is still the largest thing on
+ * the pass. It just does not need to be the largest thing on the phone.
+ *
+ * It was set at up to 32px with a seventh of an em between characters, which
+ * pushed a thirteen character code across the full width of a 390px screen and
+ * made one booking fill most of a scroll. At this size it is still the first
+ * thing the eye lands on and still unambiguous read aloud.
+ */
 .pass__code {
-  font-size: clamp(1.5rem, 6vw, 2rem);
+  font-size: clamp(1.0625rem, 4.4vw, 1.25rem);
   font-weight: 800;
-  letter-spacing: 0.14em;
-  line-height: 1.1;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
   color: var(--white);
+  word-break: break-word;
 }
 
 .pass__actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--s-2);
-  padding-top: var(--s-4);
+  padding-top: var(--s-3);
   border-top: 1px solid var(--line);
 }
 

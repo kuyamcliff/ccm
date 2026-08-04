@@ -1,6 +1,10 @@
 /*
  * The staff console.
  *
+ * Sized down in 2026-08 with the rest of the site. Everything here inherits the
+ * shared type and space tokens, so the ramp coming down took most of it; what
+ * is left below is the handful of figures this file sets for itself.
+ *
  * Same tokens, different temperature. Where the customer site is spacious and
  * photographic, this is dense and quiet: someone is reading it mid-service with
  * a queue in front of them, so nothing here is decorative and the type is a
@@ -146,12 +150,12 @@
 .desk__main {
   flex: 1;
   min-width: 0;
-  padding: var(--s-5) var(--s-4) var(--s-8);
+  padding: var(--s-4) var(--s-4) var(--s-7);
 }
 
 @media (min-width: 64rem) {
   .desk__main {
-    padding: var(--s-6);
+    padding: var(--s-5);
   }
 }
 
@@ -226,7 +230,7 @@
 }
 
 .desk-nothing {
-  padding: var(--s-6);
+  padding: var(--s-5);
   text-align: center;
   border: 1px dashed var(--line-2);
   border-radius: var(--r-md);
@@ -251,7 +255,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--s-2);
-  padding: var(--s-4);
+  padding: var(--s-3);
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -262,7 +266,7 @@
 }
 
 .stat__value {
-  font-size: 1.75rem;
+  font-size: 1.375rem;
   line-height: 1;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -458,8 +462,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--s-4);
-  padding: var(--s-5);
+  gap: var(--s-3);
+  padding: var(--s-4);
   color: var(--text-3);
   text-align: center;
 }
@@ -487,8 +491,8 @@
 .verdict {
   display: flex;
   flex-direction: column;
-  gap: var(--s-3);
-  padding: var(--s-5);
+  gap: var(--s-2);
+  padding: var(--s-3);
   border-radius: var(--r-lg);
   border: 1px solid var(--line-2);
   background: var(--surface);

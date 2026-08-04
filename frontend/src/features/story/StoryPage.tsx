@@ -47,7 +47,7 @@ export function StoryPage() {
       <div className="section-head">
         <hr className="heat-rule" />
         <h1 className="display display--xl">Our story</h1>
-        <p className="lead">A grill on the corner at Clerks Quarters, and the reason people keep walking back to it.</p>
+        <p className="lead">A grill on Razel Street, and the reason people keep walking back to it.</p>
       </div>
 
       <div className="stack stack--loose">
@@ -67,7 +67,7 @@ export function StoryPage() {
             site exists.
           </p>
           <p>
-            We are on the corner at Clerks Quarters, opposite the Survey School. Students, workers finishing a shift,
+            We are on Razel Street, opposite the P and T school. Students, workers finishing a shift,
             families on a Sunday. Everybody gets the same meat off the same grill.
           </p>
         </Reveal>

@@ -143,7 +143,7 @@ receiptsRouter.get("/takeaway/:orderNo", requireAuth, async (req, res) => {
   doc.fontSize(19).font("Helvetica-Bold").fillColor(INK)
     .text("CAM CHOP MEAT", L, PAGE_MARGIN, { characterSpacing: 1.2 });
   doc.fontSize(8.5).font("Helvetica").fillColor(MUTED)
-    .text("Charcoal grill · Opposite Supptic, Clerks Quarters, Buea, Cameroon", { characterSpacing: 0.3 });
+    .text("Razel Street, opposite P and T school, Buea, Cameroon", { characterSpacing: 0.3 });
 
   const badge = isPaid ? "PAID" : "UNPAID";
   const badgeColor = isPaid ? GREEN : BRAND;
@@ -365,7 +365,7 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
   doc.fontSize(19).font("Helvetica-Bold").fillColor(INK)
     .text("CAM CHOP MEAT", L, PAGE_MARGIN, { characterSpacing: 1.2 });
   doc.fontSize(8.5).font("Helvetica").fillColor(MUTED)
-    .text("Charcoal grill · Opposite Supptic, Clerks Quarters, Buea, Cameroon", { characterSpacing: 0.3 });
+    .text("Razel Street, opposite P and T school, Buea, Cameroon", { characterSpacing: 0.3 });
 
   // Status badge, right-aligned against the masthead.
   const badge = isPaid ? "PAID" : "UNPAID";

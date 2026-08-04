@@ -2,12 +2,13 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { api, MAX_PARTY, SLOTS } from "~/lib/api";
 import type { DiningTable, MenuItem } from "~/lib/api";
-import { longDate, money, relativeDay, shortDate, timeLabel, todayISO } from "~/lib/format";
+import { longDate, money, relativeDay, shortDate, timeLabel } from "~/lib/format";
 import { useResource } from "~/lib/useResource";
 import { Counter, PhoneField, TextAreaField } from "~/ui/Field";
 import { Money } from "~/ui/Bits";
 import { Icon } from "~/ui/Icon";
 import { Notice, Skeleton } from "~/ui/Feedback";
+import { SlotPicker, isPastSlot } from "~/ui/SlotPicker";
 import { FloorPlan, tableState } from "./FloorPlan";
 import { OrderStep, basketCount } from "./OrderStep";
 import type { Basket } from "./OrderStep";
@@ -22,28 +23,6 @@ import type { Basket } from "./OrderStep";
  */
 
 export const DAYS_AHEAD = 14;
-
-/*
- * Times, in the three blocks people actually think in.
- *
- * Twenty eight half hours in one grid is a wall, and the difference between
- * 09:30 and 21:00 at this restaurant is the difference between an empty room
- * and a full one. Splitting them lets somebody go straight to their part of
- * the day.
- */
-const BLOCKS: { label: string; from: string; to: string }[] = [
-  { label: "Midday", from: "09:00", to: "14:30" },
-  { label: "Evening", from: "15:00", to: "19:30" },
-  { label: "Late", from: "20:00", to: "22:30" },
-];
-
-/** A slot that has already gone today cannot be booked, so it is not offered. */
-function isPast(date: string, slot: string): boolean {
-  if (date !== todayISO()) return false;
-  const now = new Date();
-  const [hour, minute] = slot.split(":").map(Number);
-  return (hour ?? 0) * 60 + (minute ?? 0) <= now.getHours() * 60 + now.getMinutes();
-}
 
 /* ── 1. When ───────────────────────────────────────────────────────────── */
 
@@ -60,7 +39,7 @@ export function WhenStep({
   onDate: (next: string) => void;
   onTime: (next: string) => void;
 }) {
-  const allGone = SLOTS.every((slot) => isPast(date, slot));
+  const allGone = SLOTS.every((slot) => isPastSlot(date, slot));
 
   return (
     <div className="stack stack--loose">
@@ -89,34 +68,8 @@ export function WhenStep({
           Tonight is finished. Pick tomorrow, or <Link to="/waitlist">join the queue</Link> if you are already outside.
         </Notice>
       ) : (
-        BLOCKS.map((block) => {
-          /* A time that has gone is dropped, not dimmed. Nine dead buttons at
-             seven in the evening is most of the screen spent on times nobody
-             can have. */
-          const slots = SLOTS.filter(
-            (slot) => slot >= block.from && slot <= block.to && !isPast(date, slot)
-          );
-          if (slots.length === 0) return null;
-
-          return (
-            <section key={block.label} className="stack stack--tight">
-              <h2 className="label">{block.label}</h2>
-              <div className="slots">
-                {slots.map((slot) => (
-                  <button
-                    key={slot}
-                    type="button"
-                    className="slot"
-                    aria-pressed={slot === time}
-                    onClick={() => onTime(slot)}
-                  >
-                    {slot}
-                  </button>
-                ))}
-              </div>
-            </section>
-          );
-        })
+        /* The same picker the takeaway checkout uses. See ui/SlotPicker. */
+        <SlotPicker date={date} value={time} onChange={onTime} />
       )}
     </div>
   );

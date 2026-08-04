@@ -261,7 +261,7 @@ h4 {
 }
 
 .section {
-  padding-block: clamp(2.75rem, 9vw, 5.5rem);
+  padding-block: clamp(1.75rem, 6vw, 3.5rem);
 }
 
 /* Back to back sections would otherwise stack their padding into a gap twice
@@ -271,14 +271,14 @@ h4 {
 }
 
 .section--tight {
-  padding-block: clamp(2rem, 6vw, 3.5rem);
+  padding-block: clamp(1.25rem, 4vw, 2.25rem);
 }
 
 /* A hairline the full width of the content, used to part two sections without
    drawing a box around either. */
 .section--ruled {
   border-top: 1px solid var(--line);
-  padding-top: clamp(2.75rem, 9vw, 5.5rem);
+  padding-top: clamp(1.75rem, 6vw, 3.5rem);
 }
 
 .stack {
@@ -368,8 +368,8 @@ h4 {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--s-3);
-  margin-block-end: var(--s-6);
+  gap: var(--s-2);
+  margin-block-end: var(--s-5);
 }
 
 .section-head > .heat-rule {
