@@ -33,8 +33,10 @@ Vite + React 19 + TypeScript. Path alias `~/` points at `src/`.
 - `src/ui/` — the primitives: Button, Field, Sheet, Icon, Bits, Feedback, Photo,
   and Reveal (the scroll entrance).
 - `src/features/` — one folder per area. `story/` and `find/` are the two pages
-  added in v4. `desk/` is the staff console and is code-split away from the
-  customer site.
+  added in v4. `booking/` is a four step flow on one route, with the step in
+  the URL so the back gesture works; its `FloorPlan.tsx` fits the screen and
+  never scrolls sideways. `desk/` is the staff console, code-split away from
+  the customer site, and its floor editor keeps a scrolling canvas of its own.
 - `src/styles/` — `tokens.css` (the design language), `base.css`, `ui.css`,
   `shell.css`, `pages.css`, and `desk.css` which ships with the console chunk.
 

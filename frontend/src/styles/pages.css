@@ -831,9 +831,13 @@
   font-weight: 600;
 }
 
+/* Two across when they fit, stacked when they do not. At 320px "Call us" and
+   "WhatsApp" at large-button padding are wider than half the screen each, and
+   a grid item does not shrink below its own content, so the pair pushed the
+   page sideways. */
 .visit__actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
   gap: var(--s-3);
 }
 
@@ -1409,43 +1413,175 @@
   border-top: 1px solid var(--line);
 }
 
-/* ══ Booking ════════════════════════════════════════════════════════════════ */
+/* ══ Booking ═══════════════════════════════════════════════════════════════
+   A flow, not a page and not a dialog. A header that is also the way back, one
+   question at full width, and a bar at the bottom that always says what has
+   been chosen and what happens next. */
 
-.book-intro {
+.booking {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: var(--s-5);
-  max-width: 34rem;
+  min-height: 100%;
 }
 
-.book-how {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  counter-reset: how;
+/* The site footer and the floating support button are noise inside a flow that
+   ends in a payment. While a booking is open, the screen is the booking. */
+body:has(.booking) .footer,
+body:has(.booking) .helper {
+  display: none;
 }
 
-.book-how li {
+.booking__head {
+  position: sticky;
+  /* Under the top bar, which is sticky too and at a higher layer. At top zero
+     this slid underneath it and the progress vanished on the first scroll. */
+  top: calc(var(--topbar-h) + var(--safe-t));
+  z-index: var(--z-sticky);
+  /* Solid, not blurred. It sits directly under the top bar, which is already
+     translucent, and two frosted strips stacked on each other read as a
+     smear rather than as chrome. Opaque also spares a second backdrop filter
+     on every scroll frame, which is the sort of thing a four year old Android
+     notices. */
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.booking__head-in {
   display: flex;
   align-items: center;
-  gap: var(--s-4);
-  padding: var(--s-4) 0;
-  border-bottom: 1px solid var(--line);
-  font-size: var(--t-small);
+  gap: var(--s-3);
+  min-height: 3.5rem;
 }
 
-.book-how li:first-child {
+.booking__back {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  margin-left: calc(var(--s-3) * -1);
+  border-radius: 50%;
+  color: var(--white);
+  transition:
+    background-color var(--dur-1) var(--ease),
+    transform var(--dur-1) var(--ease);
+}
+
+.booking__back:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.booking__back:active {
+  transform: scale(0.9);
+}
+
+/* Four ticks. The one you are on is red and wider, the ones behind you are
+   white and can be tapped, the ones ahead are dim and are not targets. */
+.booking__ticks {
+  display: flex;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+
+.booking__ticks button {
+  display: block;
+  width: 1.25rem;
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--ink-700);
+  transition:
+    background-color var(--dur-3) var(--ease),
+    width var(--dur-3) var(--ease);
+}
+
+.booking__ticks button[data-state="done"] {
+  background: var(--white);
+}
+
+.booking__ticks button[data-state="now"] {
+  width: 2.25rem;
+  background: var(--red);
+}
+
+.booking__ticks button:disabled {
+  cursor: default;
+}
+
+.booking__body {
+  flex: 1;
+  padding-block: var(--s-6) var(--s-7);
+}
+
+.booking__q {
+  margin-bottom: var(--s-5);
+  max-width: 18ch;
+}
+
+.booking__foot {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--tabbar-h) + var(--safe-b));
+  z-index: var(--z-sticky);
+  padding-block: var(--s-3);
+  background: rgba(10, 10, 10, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid var(--line);
+  animation: bar-up var(--dur-3) var(--ease-soft) both;
 }
 
-.book-how svg {
-  flex: none;
-  color: var(--red-hi);
+@media (min-width: 60rem) {
+  .booking__foot {
+    bottom: 0;
+  }
 }
 
-.book-progress {
-  margin-bottom: var(--s-2);
+/* The flow's own bar claims the strip the tab bar does not, so the page has to
+   give the height back or the last question sits underneath it. */
+body:has(.booking__foot) .shell__main {
+  padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + 6rem);
+}
+
+@media (min-width: 60rem) {
+  body:has(.booking__foot) .shell__main {
+    padding-bottom: 6rem;
+  }
+}
+
+.booking__recap {
+  min-width: 0;
+  font-size: var(--t-fine);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-2);
+}
+
+/* A primary action that cannot be taken yet stops being red. Dimmed red reads
+   as a button that is broken; grey reads as a question not yet answered, which
+   is what it is. */
+.booking__foot .btn--primary:disabled {
+  background: var(--ink-700);
+  color: var(--text-3);
+  box-shadow: none;
+  opacity: 1;
+}
+
+/* ── The questions ─────────────────────────────────────────────────────── */
+
+/* A day chip carries two lines: the word people use, and the date under it. */
+.chip--day {
+  flex-direction: column;
+  gap: 0;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 3.25rem;
+  padding-block: var(--s-2);
+}
+
+.chip__sub {
+  font-size: var(--t-micro);
+  font-weight: 500;
+  opacity: 0.7;
 }
 
 .slots {
@@ -1470,8 +1606,13 @@
     transform var(--dur-1) var(--ease);
 }
 
-.slot:active {
+.slot:active:not(:disabled) {
   transform: scale(0.95);
+}
+
+.slot:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .slot[aria-pressed="true"] {
@@ -1480,30 +1621,38 @@
   color: var(--on-red);
 }
 
-.deposit {
-  padding: var(--s-4);
-  border-radius: var(--r-md);
+/* Party size, given the room to be the only thing on the screen. */
+.party {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-5) 0;
 }
 
-/* ══ Floor plan ═════════════════════════════════════════════════════════════
-   The room as it actually is. Holds a minimum width and scrolls sideways
-   rather than shrinking: squeezed onto a 360px screen the tables collide and
-   fall under the size a fingertip can hit. */
-
-.plan-frame {
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  border-radius: var(--r-md);
-  border: 1px solid var(--line);
-  background: linear-gradient(160deg, var(--ink-900), var(--ink-1000));
-  padding: var(--s-3);
+.party .counter {
+  transform: scale(1.15);
 }
 
-.plan {
+.party__word {
+  font-family: var(--font-display);
+  font-size: var(--t-title);
+  font-weight: 800;
+  letter-spacing: var(--track-display);
+}
+
+/* ── The room ──────────────────────────────────────────────────────────────
+   Fits the width it is given, always. See FloorPlan.tsx for why. */
+
+.plan-fit {
   position: relative;
-  min-width: 30rem;
   width: 100%;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(120% 100% at 50% 0%, rgba(255, 255, 255, 0.04), transparent 60%),
+    var(--ink-900);
+  overflow: hidden;
 }
 
 .plan__table {
@@ -1514,8 +1663,11 @@
   align-items: center;
   justify-content: center;
   gap: 1px;
+  /* The floor a touch target may not go under, whatever the room's shape
+     works out to in percentages. */
+  min-width: 2.75rem;
   min-height: 2.75rem;
-  aspect-ratio: 1.2;
+  aspect-ratio: 1.15;
   padding: var(--s-1);
   border-radius: var(--r-sm);
   border: 1px solid var(--line-2);
@@ -1539,8 +1691,9 @@
   background: var(--red);
   border-color: var(--red);
   color: var(--on-red);
-  transform: translate(-50%, -50%) scale(1.1);
+  transform: translate(-50%, -50%) scale(1.12);
   box-shadow: var(--shadow-red);
+  z-index: 2;
 }
 
 .plan__table[data-state="taken"],
@@ -1641,50 +1794,185 @@
   opacity: 0.4;
 }
 
-.plan-hint {
+/* A table as a row: the reliable target, and what a screen reader walks. */
+.table-opt {
   display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  margin-top: var(--s-2);
-  font-size: var(--t-fine);
-  color: var(--text-3);
-}
-
-.plan-hint__zones {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-2);
-}
-
-/* The console's editable version of the same plan. */
-.plan--edit .plan__table {
-  cursor: grab;
-}
-
-.plan--edit .plan__table:active {
-  cursor: grabbing;
-}
-
-.plan-tools {
-  display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--s-3);
+  width: 100%;
+  min-height: 3.75rem;
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: transparent;
+  text-align: left;
+  transition:
+    background-color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    transform var(--dur-1) var(--ease);
 }
 
-.plan-tools__pad {
+.table-opt:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.table-opt:hover:not(:disabled) {
+  border-color: var(--line-2);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.table-opt[aria-pressed="true"] {
+  border-color: var(--red);
+  background: var(--red-wash);
+}
+
+.table-opt:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.table-opt__mark {
   display: grid;
-  grid-template-columns: repeat(3, 2.25rem);
-  grid-template-rows: repeat(2, 2.25rem);
-  gap: 2px;
-}
-
-.plan-tools__who {
-  font-size: var(--t-fine);
+  place-items: center;
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--r-sm);
+  background: var(--ink-800);
   color: var(--text-2);
+  font-size: var(--t-fine);
+  font-weight: 700;
 }
 
-/* ══ Ordering ahead, inside the booking sheet ═══════════════════════════════ */
+.table-opt[aria-pressed="true"] .table-opt__mark {
+  background: var(--red);
+  color: var(--on-red);
+}
+
+.table-opt__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.table-opt__name {
+  font-size: var(--t-small);
+  font-weight: 600;
+}
+
+.table-opt__tick {
+  flex: none;
+  color: var(--red-hi);
+}
+
+/* ── The summary on the last step ──────────────────────────────────────────
+   Named recap, not review: `.review` is a customer's write-up on the reviews
+   page, and reusing it here quietly inherited that card's gap and its bottom
+   border, which drew a stray line under the last row. */
+
+.recap {
+  display: flex;
+  flex-direction: column;
+}
+
+.recap-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--s-1) var(--s-3);
+  align-items: center;
+  padding: var(--s-4) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.recap-row:first-child {
+  border-top: 1px solid var(--line);
+}
+
+.recap-row .label {
+  grid-column: 1;
+}
+
+.recap-row p {
+  grid-column: 1;
+  font-size: var(--t-small);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.recap-row__edit {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  min-height: 2.375rem;
+  padding-inline: var(--s-3);
+  border-radius: var(--r-full);
+  color: var(--red-hi);
+  font-size: var(--t-fine);
+  font-weight: 600;
+  transition: background-color var(--dur-2) var(--ease);
+}
+
+.recap-row__edit:hover {
+  background: var(--red-wash);
+}
+
+/* Ordering ahead: closed until asked for, so it never reads as a fifth step. */
+.addons {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.addons summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  list-style: none;
+  cursor: pointer;
+  transition: background-color var(--dur-2) var(--ease);
+}
+
+.addons summary::-webkit-details-marker {
+  display: none;
+}
+
+.addons summary:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.addons summary > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.addons__title {
+  font-size: var(--t-small);
+  font-weight: 600;
+}
+
+.addons summary svg {
+  flex: none;
+  color: var(--text-3);
+  transition: transform var(--dur-3) var(--ease);
+}
+
+.addons[open] summary svg {
+  transform: rotate(180deg);
+}
+
+.addons__body {
+  padding: 0 var(--s-4) var(--s-4);
+  border-top: 1px solid var(--line);
+  animation: rise var(--dur-3) var(--ease) both;
+}
+
+/* ══ Ordering ahead, on the review step ═══════════════════════════════ */
 
 .pick-list {
   display: flex;

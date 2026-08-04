@@ -719,6 +719,75 @@
   background: var(--surface-2);
 }
 
+/* ── The floor editor ─────────────────────────────────────────────────────
+   The guest's plan and this one draw the same tables, and they share
+   `.plan__table` and the fixture styling in pages.css. What is different is
+   the canvas.
+
+   A guest's plan has to fit the phone it is on, because a table off the edge
+   is a table nobody books. This one is a drag surface on a desk: it holds a
+   fixed canvas and scrolls, because dropping a table precisely matters more
+   here than seeing the whole room at once, and the owner is not doing this on
+   a bike taxi. */
+
+.plan-frame {
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, var(--ink-900), var(--ink-1000));
+  padding: var(--s-3);
+}
+
+.plan {
+  position: relative;
+  min-width: 34rem;
+  width: 100%;
+}
+
+.plan--edit .plan__table {
+  cursor: grab;
+}
+
+.plan--edit .plan__table:active {
+  cursor: grabbing;
+}
+
+.plan-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+  font-size: var(--t-fine);
+  color: var(--text-3);
+}
+
+.plan-hint__zones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.plan-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.plan-tools__who {
+  font-size: var(--t-fine);
+  color: var(--text-2);
+}
+
+.plan-tools__pad {
+  display: grid;
+  grid-template-columns: repeat(3, 2.25rem);
+  grid-template-rows: repeat(2, 2.25rem);
+  gap: 2px;
+}
+
 /* A fixture in the console is something you can grab; on the guest plan it is
    scenery and takes no pointer at all. */
 .plan__fixture--edit {

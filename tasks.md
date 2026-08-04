@@ -45,6 +45,27 @@
       in, menu, add to basket, checkout, the booking wizard through the floor
       plan, waitlist, sign in, story and find. No page errors.
 
+## Done (2026-08-04, booking rebuilt)
+- [x] Booking is a screen, not a dialog. Four questions at full width, a
+      progress header that is also the way back, and a bar at the bottom
+      carrying the running answer and the next action.
+- [x] The step lives in the URL (`/book?step=where`), so the phone's back
+      gesture walks back through the questions instead of throwing away a
+      half-finished booking.
+- [x] Step four is a summary and the payment, with ordering ahead folded into
+      it as an option. It used to be a menu with a deposit box at the bottom.
+- [x] The floor plan fits the screen. It no longer holds a minimum width and
+      scrolls sideways, so no table is off the edge, and a list of tables under
+      it gives every one a full width row a thumb cannot miss.
+- [x] Times are grouped into midday, evening and late, and slots that have
+      already gone today are dropped rather than dimmed.
+- [x] Fixed at the same time, and it affected every page: the top bar overflowed
+      at 320px, which widened the document and pushed every fixed bar on the
+      site off the bottom of the screen. The wordmark now stands down to the
+      mark alone on the narrowest phones.
+- [x] Checked at 320px and 390px, plus the console's own floor editor, which
+      keeps its scrolling canvas.
+
 ## Waiting on the owner
 - [ ] Real photographs of the food, uploaded in Desk > Menu.
       Everything else on the site is now real; the pictures are the last thing

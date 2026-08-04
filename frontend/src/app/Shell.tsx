@@ -91,10 +91,12 @@ function TopBar() {
       </nav>
 
       <div className="topbar__actions">
+        {/* Icon only on a phone: the word costs seventy pixels in a bar that
+            does not have them, and staff know where their own console is. */}
         {isStaff ? (
-          <Link to="/desk" className="btn btn--ghost btn--sm" title="Staff console">
+          <Link to="/desk" className="btn btn--ghost btn--sm topbar__desk" title="Staff console" aria-label="Staff console">
             <Icon name="grid" size={16} />
-            Desk
+            <span>Desk</span>
           </Link>
         ) : null}
 

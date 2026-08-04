@@ -69,6 +69,7 @@ body:has(.basket-bar) .shell__main {
   align-items: center;
   gap: var(--s-2);
   margin-right: auto;
+  min-width: 0;
   transition: opacity var(--dur-1) var(--ease);
 }
 
@@ -98,6 +99,21 @@ body:has(.basket-bar) .shell__main {
    meaning "press here", and it is the name of the restaurant. */
 .brand__name span {
   color: var(--red);
+}
+
+/*
+ * On the narrowest phones the wordmark stands down to the mark alone.
+ *
+ * At 320px the name, the basket and the way in came to more than the width of
+ * the screen, and the overflow did not simply clip: it widened the document,
+ * which moved the containing block every fixed bar on the site is positioned
+ * against, and pushed the basket bar and the booking footer off the bottom of
+ * the screen. The mark alone still says whose site this is.
+ */
+@media (max-width: 22rem) {
+  .brand__name {
+    display: none;
+  }
 }
 
 .topnav {
@@ -157,6 +173,10 @@ body:has(.basket-bar) .shell__main {
   display: none;
 }
 
+.topbar__desk span {
+  display: none;
+}
+
 @media (min-width: 60rem) {
   .topbar__actions {
     gap: var(--s-2);
@@ -164,6 +184,10 @@ body:has(.basket-bar) .shell__main {
 
   .topbar__call {
     display: inline-flex;
+  }
+
+  .topbar__desk span {
+    display: inline;
   }
 }
 
