@@ -20,12 +20,19 @@ to the same backend, which is untouched.
   console is a separate bundle chunk.
 
 ## Design direction (one sentence)
-Charcoal and Ember: a dark, warm, type-led interface built for a phone at
-night, with Anton signage headlines, one hot colour that always means "act
-here", and bookings that behave like a torn pass rather than a form receipt.
+Black, white and one red, built for a phone held at arm's length outside the
+place at eight in the evening: full bleed photography, type that carries the
+hierarchy on its own, red reserved for the thing you are meant to press, and
+bookings that behave like a torn pass rather than a form receipt.
 
 Committed to dark rather than offering a light mode: it is the brand, and one
 well-made theme beats two half-checked ones.
+
+Redesigned end to end on 2026-08-04. What changed: the palette (warm charcoal
+and orange became black and red), the type (Anton, Karla and DM Mono became
+Plus Jakarta Sans and Inter, two files instead of four), the chrome, and the
+composition of every customer screen. What did not: the data layer, the API
+surface, the routes, and the backend.
 
 ## What was rebuilt
 - A token layer that nothing is allowed to reach past (`styles/tokens.css`).
@@ -38,8 +45,8 @@ well-made theme beats two half-checked ones.
   readers.
 
 ## Navigation
-Customers: bottom tab bar on phones (Home, Menu, Book, Mine, You), top bar from
-60rem. Staff: a rail that collapses to a drawer, grouped by Tonight, The place,
+Customers: bottom tab bar on phones (Home, Menu, Order, Book or Mine, Find us
+or You, depending on whether they are signed in), top bar from 60rem. Staff: a rail that collapses to a drawer, grouped by Tonight, The place,
 Money, People, Settings.
 
 ## API surface used

@@ -38,7 +38,7 @@ export function ReviewsAdmin() {
 
       <div className="stat-grid">
         <Stat label="Reviews" value={rows.length} icon="message" />
-        <Stat label="Average" value={rows.length ? average.toFixed(1) : "—"} icon="star" />
+        <Stat label="Average" value={rows.length ? average.toFixed(1) : "No reviews"} icon="star" />
         <Stat label="Without a reply" value={unanswered} icon="alert" />
       </div>
 

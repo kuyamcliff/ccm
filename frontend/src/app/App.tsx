@@ -12,6 +12,8 @@ import { MenuPage } from "~/features/menu/MenuPage";
 import { BookPage } from "~/features/booking/BookPage";
 
 const OrderPage = lazy(() => import("~/features/order/OrderPage").then((m) => ({ default: m.OrderPage })));
+const StoryPage = lazy(() => import("~/features/story/StoryPage").then((m) => ({ default: m.StoryPage })));
+const FindPage = lazy(() => import("~/features/find/FindPage").then((m) => ({ default: m.FindPage })));
 const MinePage = lazy(() => import("~/features/mine/MinePage").then((m) => ({ default: m.MinePage })));
 const ReviewsPage = lazy(() => import("~/features/reviews/ReviewsPage").then((m) => ({ default: m.ReviewsPage })));
 const GalleryPage = lazy(() => import("~/features/gallery/GalleryPage").then((m) => ({ default: m.GalleryPage })));
@@ -46,6 +48,8 @@ export function App() {
             <Route path="menu" element={<MenuPage />} />
             <Route path="book" element={<BookPage />} />
             <Route path="order" element={<OrderPage />} />
+            <Route path="story" element={<StoryPage />} />
+            <Route path="find" element={<FindPage />} />
             <Route path="reviews" element={<ReviewsPage />} />
             <Route path="gallery" element={<GalleryPage />} />
             <Route path="events" element={<EventsPage />} />
@@ -81,6 +85,8 @@ export function App() {
                 anything a search engine has indexed, still land somewhere. */}
             <Route path="reserve" element={<Navigate to="/book" replace />} />
             <Route path="takeaway" element={<Navigate to="/order" replace />} />
+            <Route path="about" element={<Navigate to="/story" replace />} />
+            <Route path="contact" element={<Navigate to="/find" replace />} />
             <Route path="my-tables" element={<Navigate to="/mine" replace />} />
             <Route path="admin/*" element={<Navigate to="/desk" replace />} />
 

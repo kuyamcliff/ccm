@@ -105,8 +105,8 @@ export function TrendChart({
       >
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--ember)" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="var(--ember)" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--red)" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="var(--red)" stopOpacity="0" />
           </linearGradient>
         </defs>
 
@@ -127,11 +127,11 @@ export function TrendChart({
             instead of an invisible path. A new restaurant sees this for its
             first week and an empty panel would read as broken. */}
         {points.length === 1 ? (
-          <circle cx={x(0)} cy={y(points[0]!.value)} r="5" fill="var(--ember)" />
+          <circle cx={x(0)} cy={y(points[0]!.value)} r="5" fill="var(--red)" />
         ) : (
           <>
             <path d={area} fill={`url(#${gradientId})`} />
-            <path d={line} fill="none" stroke="var(--ember)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+            <path d={line} fill="none" stroke="var(--red)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
           </>
         )}
 
@@ -145,7 +145,7 @@ export function TrendChart({
               stroke="var(--line-2)"
               strokeWidth="1"
             />
-            <circle cx={x(hover)} cy={y(active.value)} r="4.5" fill="var(--ember)" stroke="var(--surface)" strokeWidth="2" />
+            <circle cx={x(hover)} cy={y(active.value)} r="4.5" fill="var(--red)" stroke="var(--surface)" strokeWidth="2" />
           </>
         ) : null}
 

@@ -30,7 +30,7 @@
   gap: var(--s-3);
   height: var(--desk-bar);
   padding-inline: var(--s-4);
-  background: var(--coal-900);
+  background: var(--ink-900);
   border-bottom: 1px solid var(--line);
 }
 
@@ -62,7 +62,7 @@
   width: min(17rem, 82vw);
   padding: var(--s-4) var(--s-3);
   overflow-y: auto;
-  background: var(--coal-900);
+  background: var(--ink-900);
   border-right: 1px solid var(--line);
   transform: translateX(-102%);
   transition: transform var(--dur-2) var(--ease);
@@ -76,7 +76,7 @@
   position: fixed;
   inset: var(--desk-bar) 0 0;
   z-index: var(--z-sticky);
-  background: rgba(6, 6, 5, 0.6);
+  background: rgba(5, 5, 5, 0.6);
   border: 0;
 }
 
@@ -123,7 +123,7 @@
 }
 
 .desk__link:hover {
-  background: rgba(244, 239, 231, 0.05);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text);
 }
 
@@ -134,13 +134,13 @@
 
 /* The current screen is marked by an ember edge as well as colour. */
 .desk__link[aria-current="page"] {
-  background: var(--ember-wash);
+  background: var(--red-wash);
   color: var(--text);
-  box-shadow: inset 2px 0 0 var(--ember);
+  box-shadow: inset 2px 0 0 var(--red);
 }
 
 .desk__link[aria-current="page"] svg {
-  color: var(--ember-hi);
+  color: var(--red-hi);
 }
 
 .desk__main {
@@ -192,7 +192,7 @@
   gap: var(--s-3);
   flex-wrap: wrap;
   padding: var(--s-3);
-  background: var(--coal-900);
+  background: var(--ink-900);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
 }
@@ -221,7 +221,7 @@
 .desk-table {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
-  background: var(--coal-900);
+  background: var(--ink-900);
   max-height: 70dvh;
 }
 
@@ -277,11 +277,11 @@
 }
 
 .delta--up {
-  color: var(--palm);
+  color: var(--good);
 }
 
 .delta--down {
-  color: var(--blood);
+  color: var(--bad);
 }
 
 /* An arrow that points the way the number went, so the direction does not
@@ -364,13 +364,13 @@
   flex: 1;
   display: flex;
   align-items: flex-end;
-  background: rgba(244, 239, 231, 0.03);
+  background: rgba(255, 255, 255, 0.03);
   border-radius: var(--r-xs);
 }
 
 .vbar__fill {
   width: 100%;
-  background: var(--ember);
+  background: var(--red);
   border-radius: var(--r-xs) var(--r-xs) 0 0;
   transition: height var(--dur-3) var(--ease);
 }
@@ -406,7 +406,7 @@
 
 .hbar__track {
   height: 0.75rem;
-  background: rgba(244, 239, 231, 0.04);
+  background: rgba(255, 255, 255, 0.04);
   border-radius: var(--r-xs);
   overflow: hidden;
 }
@@ -414,7 +414,7 @@
 .hbar__fill {
   display: block;
   height: 100%;
-  background: var(--ember);
+  background: var(--red);
   border-radius: 0 var(--r-xs) var(--r-xs) 0;
 }
 
@@ -442,7 +442,7 @@
   aspect-ratio: 4 / 3;
   display: grid;
   place-items: center;
-  background: var(--coal-1000);
+  background: var(--black);
   border: 1px solid var(--line-2);
   border-radius: var(--r-lg);
   overflow: hidden;
@@ -469,9 +469,9 @@
 .door__reticle {
   position: absolute;
   inset: 18%;
-  border: 2px solid var(--ember);
+  border: 2px solid var(--red);
   border-radius: var(--r-lg);
-  box-shadow: 0 0 0 100vmax rgba(6, 6, 5, 0.45);
+  box-shadow: 0 0 0 100vmax rgba(5, 5, 5, 0.45);
   pointer-events: none;
 }
 
@@ -480,7 +480,7 @@
   bottom: var(--s-3);
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(6, 6, 5, 0.7);
+  background: rgba(5, 5, 5, 0.7);
 }
 
 /* The verdict fills the panel and is readable at arm's length. */
@@ -495,28 +495,28 @@
 }
 
 .verdict--good {
-  border-color: var(--palm);
-  background: linear-gradient(180deg, var(--palm-wash), transparent 60%), var(--surface);
+  border-color: var(--good);
+  background: linear-gradient(180deg, var(--good-wash), transparent 60%), var(--surface);
 }
 
 .verdict--warn {
-  border-color: var(--gold);
-  background: linear-gradient(180deg, var(--gold-wash), transparent 60%), var(--surface);
+  border-color: var(--warn);
+  background: linear-gradient(180deg, var(--warn-wash), transparent 60%), var(--surface);
 }
 
 .verdict--bad {
-  border-color: var(--blood);
-  background: linear-gradient(180deg, var(--blood-wash), transparent 60%), var(--surface);
+  border-color: var(--bad);
+  background: linear-gradient(180deg, var(--bad-wash), transparent 60%), var(--surface);
 }
 
 .verdict--good .verdict__title {
-  color: var(--palm);
+  color: var(--good);
 }
 .verdict--warn .verdict__title {
-  color: var(--gold);
+  color: var(--warn);
 }
 .verdict--bad .verdict__title {
-  color: var(--blood);
+  color: var(--bad);
 }
 
 .verdict__facts {
@@ -545,7 +545,7 @@
 
 .order-card__time {
   font-size: var(--t-lead);
-  color: var(--ember-hi);
+  color: var(--red-hi);
 }
 
 /* ── Photo review ────────────────────────────────────────────────────── */
@@ -631,7 +631,7 @@
 }
 
 .inbox__item:hover {
-  background: rgba(244, 239, 231, 0.04);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .inbox__item[aria-current="true"] {
@@ -705,7 +705,7 @@
   padding: var(--s-3);
   border: 1px solid var(--line-2);
   border-radius: var(--r-md);
-  background: var(--coal-900);
+  background: var(--ink-900);
   color: var(--text);
   font-size: var(--t-small);
   font-weight: 700;
@@ -729,9 +729,9 @@
 
 .plan__fixture--edit[data-picked="true"] {
   border-style: solid;
-  border-color: var(--ember);
+  border-color: var(--red);
   color: var(--text);
-  box-shadow: var(--glow);
+  box-shadow: var(--shadow-red);
   z-index: 2;
 }
 
@@ -780,7 +780,7 @@
   .desk-table .table tbody tr {
     margin-bottom: var(--s-3);
     padding: var(--s-2) var(--s-4) var(--s-3);
-    background: var(--coal-900);
+    background: var(--ink-900);
     border: 1px solid var(--line);
     border-radius: var(--r-md);
   }

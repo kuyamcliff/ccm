@@ -84,7 +84,7 @@ export function Queue() {
               <tbody>
                 {ordered.map((entry, index) => (
                   <tr key={entry.id}>
-                    <td className="mono">{entry.status === "waiting" || entry.status === "notified" ? index + 1 : "—"}</td>
+                    <td className="mono">{entry.status === "waiting" || entry.status === "notified" ? index + 1 : "Off the list"}</td>
                     <td>
                       {entry.name}
                       <span className="fine faint"> {phoneLabel(entry.phone)}</span>

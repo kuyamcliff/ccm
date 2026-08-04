@@ -59,9 +59,11 @@ export function YourStuff({ name }: { name: string }) {
           <h1 className="display display--lg">
             {greeting}, {firstName}
           </h1>
-          <LinkButton to="/mine" tone="quiet" iconEnd="arrow-right">
-            Everything of mine
-          </LinkButton>
+          {/* A link, not a button. Wrapped onto its own line on a phone, a
+              button's side padding reads as a stray indent. */}
+          <Link to="/mine" className="quote__more">
+            Everything of mine <Icon name="arrow-right" size={15} />
+          </Link>
         </div>
 
         {loading ? (
@@ -71,9 +73,9 @@ export function YourStuff({ name }: { name: string }) {
           </div>
         ) : !booking && !order ? (
           /* Nothing on. Say so plainly and offer the two things they can do. */
-          <div className="card stack">
+          <div className="stack">
             <p className="muted">You have no table booked and nothing waiting at the counter.</p>
-            <div className="row row--wrap">
+            <div className="actions">
               <LinkButton to="/book" tone="primary" icon="calendar">
                 Book a table
               </LinkButton>

@@ -127,7 +127,7 @@ export function MenuAdmin() {
                       </td>
                       <td>{item.category}</td>
                       <td className="table__num">
-                        {item.price_fcfa !== null ? <Money value={item.price_fcfa} /> : <span className="fine">{item.price_label ?? "—"}</span>}
+                        {item.price_fcfa !== null ? <Money value={item.price_fcfa} /> : <span className="fine">{item.price_label ?? "By weight"}</span>}
                       </td>
                       <td className="table__num">{item.position}</td>
                       <td>

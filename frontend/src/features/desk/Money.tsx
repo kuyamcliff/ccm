@@ -168,7 +168,7 @@ export function MoneyDesk() {
                       </td>
                       <td className="mono fine">{receipt.ccm_code}</td>
                       <td className="table__num">
-                        {receipt.amount_fcfa ? <Amount value={receipt.amount_fcfa} /> : "—"}
+                        {receipt.amount_fcfa ? <Amount value={receipt.amount_fcfa} /> : "None"}
                       </td>
                       <td className="mono fine">{receipt.pay_reference}</td>
                       <td className="fine faint">{stampLabel(receipt.created_at)}</td>

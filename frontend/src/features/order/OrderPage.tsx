@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, SLOTS } from "~/lib/api";
 import { ApiError } from "~/lib/http";
-import { normalisePhone, timeLabel } from "~/lib/format";
+import { money, normalisePhone, timeLabel } from "~/lib/format";
 import { useAction, useResource } from "~/lib/useResource";
 import { Button, IconButton, LinkButton } from "~/ui/Button";
 import { PhoneField, SelectField, TextAreaField, TextField } from "~/ui/Field";
@@ -16,12 +16,18 @@ import { useToast } from "~/state/toast";
 import { MomoDialog } from "~/features/pay/MomoDialog";
 
 /**
- * The basket and checkout for takeaway orders.
+ * The basket and the checkout for takeaway orders.
  *
  * Prices shown here are only ever a preview: the server prices the order again
  * from the menu when it is placed, which is what stops a stale basket or an
  * edited request from buying a 4,500 FCFA chicken for 100. When the two
- * disagree, the server wins and the difference is shown before payment.
+ * disagree the server wins, and the difference is shown before anything is
+ * paid.
+ *
+ * One decision shapes the whole screen. There is no separate review step: the
+ * lines, the details and the total are on one page, and the button at the
+ * bottom of it is the payment. A second confirmation screen on a phone is one
+ * more thing to lose on a dropped connection.
  */
 
 interface Placed {
@@ -51,8 +57,21 @@ export function OrderPage() {
 
   const place = useAction(api.orders.place);
 
-  if (menu.loading) return <div className="page section"><SkeletonCards count={2} height="8rem" /></div>;
-  if (menu.error) return <div className="page section"><ErrorState error={menu.error} onRetry={menu.reload} /></div>;
+  if (menu.loading) {
+    return (
+      <div className="page section">
+        <SkeletonCards count={3} height="6rem" />
+      </div>
+    );
+  }
+
+  if (menu.error) {
+    return (
+      <div className="page section">
+        <ErrorState error={menu.error} onRetry={menu.reload} />
+      </div>
+    );
+  }
 
   const { lines, subtotal, dropped } = basket.price(menu.data ?? []);
 
@@ -64,13 +83,32 @@ export function OrderPage() {
           <hr className="heat-rule" />
           <h1 className="display display--xl">Order in</h1>
         </div>
-        <div className="card stack">
-          <span className="label">Show this at the counter</span>
-          <p className="pass__code mono">{placed.order_no}</p>
-          <p className="muted">
-            Collect from {timeLabel(pickup)}. We start cooking closer to the time so it is hot when you arrive.
+
+        <div className="pass">
+          <header className="pass__head">
+            <span className="badge badge--good">Sent to the kitchen</span>
+            <span className="pass__table">
+              Collect at <strong>{timeLabel(pickup)}</strong>
+            </span>
+          </header>
+
+          <div className="pass__tear" aria-hidden="true">
+            <span />
+            <span />
+          </div>
+
+          <footer className="pass__foot">
+            <div>
+              <span className="label">Show this at the counter</span>
+              <p className="pass__code mono">{placed.order_no}</p>
+            </div>
+          </footer>
+
+          <p className="fine muted">
+            We start cooking closer to the time so it is hot when you arrive. Your code is also saved in Mine.
           </p>
         </div>
+
         <div className="row row--wrap">
           <LinkButton to="/mine" tone="primary" iconEnd="arrow-right">
             See my orders
@@ -99,7 +137,7 @@ export function OrderPage() {
             </LinkButton>
           }
         >
-          Add what you want from the menu and pick a collection time here.
+          Add what you want from the menu, then pick a collection time here.
         </EmptyState>
       </div>
     );
@@ -137,8 +175,8 @@ export function OrderPage() {
     if (result.payment_required) {
       setPaying(true);
     } else {
-      // Nothing left to charge: a promo or gift card covered it, so the order
-      // is already settled and the items are genuinely spoken for.
+      // Nothing left to charge: a promo or a gift card covered it, so the
+      // order is settled and the items are genuinely spoken for.
       basket.clear();
       setCollected(true);
     }
@@ -152,7 +190,7 @@ export function OrderPage() {
       </div>
 
       <div className="checkout">
-        <section className="stack">
+        <section className="stack stack--loose">
           {dropped > 0 ? (
             <Notice tone="warn">
               {dropped === 1 ? "An item" : `${dropped} items`} came off the menu since you added it, so it is no longer
@@ -206,17 +244,26 @@ export function OrderPage() {
           </ul>
 
           <div className="stack" style={{ maxWidth: "32rem" }}>
+            <h2 className="display display--lg">Who is collecting</h2>
+
             <TextField
               label="Name for the order"
+              hint="What we call out at the counter."
               value={name}
               autoComplete="name"
               onChange={(e) => setName(e.target.value)}
               required
             />
-            <PhoneField label="Phone number" value={phone} onChange={setPhone} required />
+            <PhoneField
+              label="Phone number"
+              hint="We call this number if there is a question about your order."
+              value={phone}
+              onChange={setPhone}
+              required
+            />
             <SelectField
-              label="Pickup time"
-              hint="Give us at least half an hour. Everything is cooked fresh when you order it."
+              label="Collection time"
+              hint="Give us at least half an hour. Everything is grilled fresh when you order it."
               value={pickup}
               onChange={(e) => setPickup(e.target.value)}
             >
@@ -235,7 +282,7 @@ export function OrderPage() {
             />
 
             {user ? (
-              <div className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+              <div className="grid--two">
                 <TextField
                   label="Promo code"
                   placeholder="Optional"
@@ -256,14 +303,18 @@ export function OrderPage() {
                 <Link to="/signin" state={{ from: "/order" }}>
                   Sign in
                 </Link>{" "}
-                to use a promo code or gift card, and to keep your orders in one place.
+                to use a promo code or a gift card, and to keep your orders in one place.
               </p>
             )}
           </div>
         </section>
 
-        {/* On a phone this sits under the basket; from 60rem it sticks to the
-            side, where a long basket cannot push it off the screen. */}
+        {/*
+          On a phone this sits under the details and the real action is the bar
+          fixed to the bottom of the screen. From 60rem it becomes a column
+          that sticks beside the basket, where a long list cannot push it out
+          of reach.
+        */}
         <aside className="checkout__side">
           <div className="card stack">
             <div className="row row--between">
@@ -274,24 +325,40 @@ export function OrderPage() {
               <span className="muted">Takeaway</span>
               <span className="fine">Free</span>
             </div>
-            <hr />
-            <div className="row row--between">
+            <div className="row row--between total-row">
               <strong>To pay</strong>
               <strong className="checkout__total">
                 <Money value={subtotal} />
               </strong>
             </div>
             <p className="fine faint">
-              Paid ahead by MTN Mobile Money. Any promo or gift card is applied when the order is placed.
+              Paid with MTN Mobile Money. Any promo code or gift card comes off when the order is placed.
             </p>
 
             {problem ? <Notice tone="bad">{problem}</Notice> : null}
 
-            <Button tone="primary" size="lg" block busy={place.busy} onClick={submit}>
-              Place the order
+            <Button tone="primary" size="lg" block busy={place.busy} onClick={submit} icon="wallet">
+              Pay Now
             </Button>
           </div>
         </aside>
+      </div>
+
+      {/*
+        The bar. On a phone the total and the payment button follow the page
+        down, so the amount and the way to settle it are always one thumb reach
+        away no matter how long the basket runs.
+      */}
+      <div className="basket-bar basket-bar--phone">
+        <div className="page row row--between">
+          <span className="stack stack--tight">
+            <span className="label">To pay</span>
+            <strong className="basket-bar__total">{money(subtotal)} FCFA</strong>
+          </span>
+          <Button tone="primary" busy={place.busy} onClick={submit} icon="wallet">
+            Pay Now
+          </Button>
+        </div>
       </div>
 
       {placed ? (
@@ -312,11 +379,11 @@ export function OrderPage() {
           }}
           onClose={() => {
             setPaying(false);
-            // The order already exists on the server whether or not this
-            // payment attempt succeeded, so the basket items are spoken for
-            // either way — clearing here (not before the dialog opened) is
-            // what stops a failed or abandoned Momo payment from silently
-            // emptying the basket with nothing to show for it.
+            // The order exists on the server whether or not this payment
+            // attempt succeeded, so the basket items are spoken for either
+            // way. Clearing here, and not before the dialog opened, is what
+            // stops a failed or abandoned payment from silently emptying the
+            // basket with nothing to show for it.
             basket.clear();
             toast.say(`Order ${placed.order_no} is saved. Pay for it in Mine so the kitchen can start.`);
             setCollected(true);

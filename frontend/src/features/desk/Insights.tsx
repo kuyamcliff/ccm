@@ -53,7 +53,7 @@ export function Insights() {
               />
               <Stat
                 label="Rating"
-                value={data.reviewSummary.avg_rating ? data.reviewSummary.avg_rating.toFixed(1) : "—"}
+                value={data.reviewSummary.avg_rating ? data.reviewSummary.avg_rating.toFixed(1) : "No reviews"}
                 icon="star"
                 hint={`${data.reviewSummary.total} reviews`}
               />

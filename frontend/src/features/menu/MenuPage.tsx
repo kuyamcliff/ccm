@@ -9,30 +9,31 @@ import { Button, LinkButton } from "~/ui/Button";
 import { Money } from "~/ui/Bits";
 import { ErrorState, Skeleton } from "~/ui/Feedback";
 import { useBasket } from "~/state/basket";
-import { useToast } from "~/state/toast";
 
 /**
- * The menu, and the place most orders start.
+ * The menu, and where most orders start.
  *
- * Categories come from the data rather than a hard-coded list, so the owner
- * can add "Weekend special" from the console and it appears here without a
- * deploy.
+ * Categories come from the data rather than a hard-coded list, so the owner can
+ * add "Weekend special" from the console and it appears here without a deploy.
  */
 
 function Dish({ item }: { item: MenuItem }) {
   const { add, lines } = useBasket();
-  const toast = useToast();
   const inBasket = lines.find((line) => line.id === item.id)?.qty ?? 0;
   const tags = parseTags(item.dietary_tags);
   const orderable = item.price_fcfa !== null;
 
   return (
     <article className="row-item">
-      {item.image_url ? <Photo className="row-item__photo" src={item.image_url} alt="" /> : null}
+      {/* Always drawn, even with nothing to draw. A menu where half the rows
+          start at the text edge and half start four rems in reads as broken;
+          the fallback is a deliberate shape, so a row without a photograph
+          still lines up with the rows above and below it. */}
+      <Photo className="row-item__photo" src={item.image_url} alt="" />
 
       <div className="row-item__body">
         <h3 className="row-item__name">{item.name}</h3>
-        {item.description ? <p className="fine muted">{item.description}</p> : null}
+        {item.description ? <p className="fine">{item.description}</p> : null}
         {tags.length > 0 ? (
           <p className="row-item__tags">
             {tags.map((tag) => (
@@ -42,22 +43,39 @@ function Dish({ item }: { item: MenuItem }) {
             ))}
           </p>
         ) : null}
-      </div>
-
-      <div className="row-item__end">
+        {/* The price belongs with the name, not across the row from it. Put it
+            on the right and a long dish name is squeezed into two words by a
+            column it is not competing with. */}
         <p className="row-item__price">
           {item.price_fcfa !== null ? <Money value={item.price_fcfa} /> : <span className="fine">{item.price_label}</span>}
         </p>
+      </div>
+
+      <div className="row-item__end">
         {orderable ? (
+          /*
+            One button that changes what it says, rather than a stepper on
+            every row: on a phone, plus and minus controls beside twenty dishes
+            is a wall of targets, and the count belongs in the bar at the
+            bottom where the order actually is.
+
+            It is quiet until the dish is chosen and red after. Twenty red
+            buttons down a menu is twenty instructions, and red stops meaning
+            anything; one red button per dish you have actually picked means
+            "this is in your order" at a glance while scrolling back up.
+          */
           <Button
-            tone={inBasket > 0 ? "ghost" : "default"}
-            icon="plus"
-            onClick={() => {
-              add(item.id);
-              toast.done(`${item.name} added`);
-            }}
+            tone={inBasket > 0 ? "primary" : "default"}
+            size="sm"
+            icon={inBasket > 0 ? "check" : "plus"}
+            /* No toast. The button changes, the basket count jumps in two
+               places and the bar at the bottom updates, all in the same frame.
+               A message on top of that is a fourth confirmation of something
+               nobody doubted, and three of them stack up over the bar the
+               customer is trying to press. */
+            onClick={() => add(item.id)}
           >
-            {inBasket > 0 ? `In basket, ${inBasket}` : "Add"}
+            {inBasket > 0 ? `${inBasket} added` : "Add"}
           </Button>
         ) : (
           <span className="fine faint">Ask at the counter</span>
@@ -97,13 +115,14 @@ export function MenuPage() {
         <hr className="heat-rule" />
         <h1 className="display display--xl">The menu</h1>
         <p className="lead">
-          Everything is cooked fresh when you order it. Anything priced by weight is settled at the counter when it is weighed.
+          Everything is grilled fresh when you order it. Anything priced by weight is settled at the counter once it is
+          weighed.
         </p>
       </div>
 
       {loading ? (
         <div className="stack">
-          {[0, 1, 2, 3].map((n) => (
+          {[0, 1, 2, 3, 4].map((n) => (
             <Skeleton key={n} height="5.5rem" radius="var(--r-md)" />
           ))}
         </div>
@@ -152,10 +171,10 @@ export function MenuPage() {
           <div className="page row row--between">
             <span className="row" style={{ gap: "var(--s-2)" }}>
               <Icon name="basket" size={18} />
-              <strong>{count}</strong> <span className="muted">in your basket</span>
+              <strong>{count}</strong> <span className="muted fine">in your basket</span>
             </span>
             <LinkButton to="/order" tone="primary" iconEnd="arrow-right">
-              Check out
+              Go to basket
             </LinkButton>
           </div>
         </div>

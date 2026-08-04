@@ -4,27 +4,27 @@
     <meta charset="utf-8" />
     <!-- `interactive-widget=resizes-content` makes the on-screen keyboard shrink
          the layout viewport instead of sliding the page up under it, which is
-         what keeps a dialog's buttons reachable while a field has focus. -->
+         what keeps a sheet's buttons reachable while a field has focus. -->
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0a0a09" />
+    <meta name="theme-color" content="#0a0a0a" />
 
-    <title>Cam Chop Meat — the best meat in Buea</title>
+    <title>Cam Chop Meat, Buea | Fresh grilled chicken, goat and pork</title>
     <meta
       name="description"
-      content="The best meat in Buea. Beef, chicken and more, cooked fresh every day. Order a takeaway meal or book a table at Cam Chop Meat, Clerks Quarters."
+      content="Fresh grilled chicken, goat and pork over the fire in Buea. See the menu and prices in FCFA, order takeaway with Mobile Money, or book a table. Clerks Quarters, opposite the Survey School."
     />
     <link rel="canonical" href="https://camchopmeat.com/" />
 
     <meta property="og:type" content="restaurant" />
     <meta property="og:site_name" content="Cam Chop Meat" />
-    <meta property="og:title" content="Cam Chop Meat — the best meat in Buea" />
+    <meta property="og:title" content="Cam Chop Meat, Buea" />
     <meta
       property="og:description"
-      content="Beef, chicken and more, cooked fresh every day. Order a takeaway meal or book a table."
+      content="Fresh grilled chicken, goat and pork over the fire. Order takeaway or book a table, both from your phone."
     />
     <meta property="og:url" content="https://camchopmeat.com/" />
     <meta name="twitter:card" content="summary" />
@@ -35,11 +35,57 @@
 
     <!-- Fonts are bundled with the app and served from this origin, so there is
          no third-party connection to warm up here. See src/main.tsx. -->
+
+    <!--
+      The first paint, before any JavaScript has run.
+
+      On a slow connection the gap between the HTML landing and React mounting
+      is where a white flash lives. Painting the page's own black here closes
+      it, and the mark fading in gives the wait something honest to look at
+      rather than a spinner that implies an error is coming.
+    -->
+    <style>
+      html {
+        background: #0a0a0a;
+      }
+      #boot {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: #0a0a0a;
+      }
+      #boot img {
+        width: 44px;
+        height: 44px;
+        animation: boot 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+      }
+      @keyframes boot {
+        0%,
+        100% {
+          opacity: 0.35;
+          transform: scale(0.94);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot img {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot">
+        <img src="/mark.svg" alt="Cam Chop Meat" width="44" height="44" />
+      </div>
+    </div>
     <noscript>
-      <p style="font-family: system-ui, sans-serif; padding: 2rem; color: #f4efe7; background: #0a0a09">
+      <p style="font-family: system-ui, sans-serif; padding: 2rem; color: #f6f6f6; background: #0a0a0a">
         This site needs JavaScript. Turn it on and reload, or call the restaurant to book.
       </p>
     </noscript>

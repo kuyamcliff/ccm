@@ -1,11 +1,19 @@
 /*
- * Charcoal & Ember — the design language for Cam Chop Meat.
+ * The design language for Cam Chop Meat.
  *
- * The room this describes is the restaurant after dark: near-black warm
- * surfaces, one hot colour, and type that behaves like painted signage. The
- * site commits to dark. That is not a mode here, it is the brand — every
- * surface, border and state below is drawn for it, so there is no light
- * variant to keep in step and no half-lit second design to maintain.
+ * The picture this describes is a phone held at arm's length outside the place
+ * on Clerks Quarters at eight in the evening: black ground, white type, and one
+ * red that only ever appears where you are meant to press. Black is not a mode
+ * here, it is the brand, so there is no light theme to keep in step and no
+ * second set of surfaces to check.
+ *
+ * Three rules hold the whole thing together.
+ *   1. Red is an instruction. If it is not a button, an active tab or a price
+ *      you are about to pay, it is not red.
+ *   2. Boxes are earned. Space and a hairline separate most things. A raised
+ *      surface is for something you can pick up and carry: a pass, a receipt.
+ *   3. Nothing animates a property that costs layout. Transform and opacity
+ *      only, so a four year old Android stays at sixty frames.
  *
  * Nothing outside this file may invent a colour, a radius or a duration.
  */
@@ -13,88 +21,91 @@
 :root {
   color-scheme: dark;
 
-  /* ── Charcoal. Warm greys, never neutral: every step carries a little red so
-     the interface reads as fire-lit rather than as a screenshot of a terminal. */
-  --coal-1000: #060605;
-  --coal-950: #0a0a09;
-  --coal-900: #100f0e;
-  --coal-850: #161513;
-  --coal-800: #1d1b19;
-  --coal-750: #252220;
-  --coal-700: #2f2b28;
+  /* ── Ground. Pure blacks, not warmed: on an OLED phone in daylight the
+     deepest step is the one that makes white type carry, and every panel
+     above it is a measured amount of white mixed back in. */
+  --black: #050505;
+  --ink-1000: #0a0a0a;
+  --ink-900: #111111;
+  --ink-850: #161616;
+  --ink-800: #1c1c1c;
+  --ink-700: #262626;
+  --ink-600: #333333;
 
-  /* ── Bone. The text ramp. Slightly yellow so it sits in the same light. */
-  --bone: #f4efe7;
-  --bone-2: #b9afa3;
-  --bone-3: #93887c;
+  /* ── Type ramp. Pure white for the thing you read first, then two steps
+     down. Nothing below --text-3 is used for words a customer must read. */
+  --white: #ffffff;
+  --text: #f6f6f6;
+  --text-2: #a6a6a6;
+  --text-3: #767676;
 
-  /* ── Ember. One hot colour, used sparingly enough that it always means
-     "act here". Anything decorative uses coal and bone instead. */
-  --ember: #ff5b1f;
-  --ember-hi: #ff8442;
-  --ember-lo: #cf3f0e;
-  --ember-wash: rgba(255, 91, 31, 0.14);
-  --heat: linear-gradient(97deg, #ff3d00 0%, #ff7a1a 45%, #ffb43d 100%);
+  /* ── Red. One colour, three weights: the button, its lit state, and the
+     shadow under it. The wash is for a tinted background, never for text. */
+  --red: #e31c23;
+  --red-hi: #ff333b;
+  --red-lo: #a8121a;
+  --red-wash: rgba(227, 28, 35, 0.12);
+  --red-line: rgba(227, 28, 35, 0.38);
+  --on-red: #ffffff;
 
-  /* ── Signals. Each one also gets an icon or a word in the UI; colour alone
-     never carries the meaning. */
-  --palm: #5fc47a;
-  --palm-wash: rgba(95, 196, 122, 0.14);
-  --gold: #f0b429;
-  --gold-wash: rgba(240, 180, 41, 0.14);
-  --blood: #e8555a;
-  --blood-wash: rgba(232, 85, 90, 0.14);
+  /* ── Signals. Kept away from the brand red so "paid" and "pay" never look
+     alike. Each is always paired with an icon or a word. */
+  --good: #2fbf6b;
+  --good-wash: rgba(47, 191, 107, 0.13);
+  --warn: #f0a927;
+  --warn-wash: rgba(240, 169, 39, 0.13);
+  --bad: #ff5a5f;
+  --bad-wash: rgba(255, 90, 95, 0.13);
 
-  /* ── Roles. Components reference these, not the raw ramps above. */
-  --bg: var(--coal-950);
-  --bg-sunk: var(--coal-1000);
-  --surface: var(--coal-850);
-  --surface-2: var(--coal-800);
-  --raised: var(--coal-750);
-  --text: var(--bone);
-  --text-2: var(--bone-2);
-  --text-3: var(--bone-3);
-  --accent: var(--ember);
-  --on-accent: #1a0a02;
+  /* ── Roles. Components read these, never the ramps above. */
+  --bg: var(--ink-1000);
+  --bg-sunk: var(--black);
+  --surface: var(--ink-900);
+  --surface-2: var(--ink-850);
+  --raised: var(--ink-800);
+  --accent: var(--red);
+  --on-accent: var(--on-red);
 
-  --line: rgba(244, 239, 231, 0.09);
-  --line-2: rgba(244, 239, 231, 0.16);
-  --line-hot: rgba(255, 91, 31, 0.42);
+  --line: rgba(255, 255, 255, 0.08);
+  --line-2: rgba(255, 255, 255, 0.14);
+  --line-hot: var(--red-line);
 
-  /* ── Type. Anton paints the headlines, Karla runs the interface, DM Mono
-     holds anything a person might read out loud: codes, prices, times. */
-  --font-display: "Anton", "Haettenschweiler", "Arial Narrow", system-ui, sans-serif;
-  --font-sans: "Karla", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "DM Mono", ui-monospace, "SF Mono", "Cascadia Mono", monospace;
+  /* ── Type. Plus Jakarta Sans carries the headings: it has the tight, wide
+     shoulders a food sign wants and stays readable set small. Inter runs the
+     interface and every figure in it, with tabular numerals switched on for
+     anything a person reads out loud: a price, a time, a booking code. */
+  --font-display: "Plus Jakarta Sans Variable", "SF Pro Display", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-num: var(--font-sans);
 
-  /* Fluid where it earns it: display type has to survive a 360px phone and a
-     desktop without a second set of rules. */
-  --t-hero: clamp(3rem, 13vw, 8.5rem);
-  --t-display: clamp(2.25rem, 7.5vw, 4.25rem);
-  --t-title: clamp(1.65rem, 4.5vw, 2.5rem);
-  --t-head: clamp(1.1875rem, 1.05rem + 0.7vw, 1.3125rem);
-  --t-lead: clamp(1.0625rem, 1rem + 0.35vw, 1.125rem);
+  /* Fluid only where it earns it. Body copy is fixed at 16px on a phone: it is
+     the floor for reading on a bright street and it never needs to be smaller. */
+  --t-hero: clamp(2.75rem, 12vw, 5.5rem);
+  --t-display: clamp(2rem, 7vw, 3.25rem);
+  --t-title: clamp(1.5rem, 5vw, 2.125rem);
+  --t-head: clamp(1.1875rem, 3.2vw, 1.375rem);
+  --t-lead: clamp(1.0625rem, 1rem + 0.4vw, 1.1875rem);
   --t-body: 1rem;
   --t-small: 0.9375rem;
-  /* 14px, not 13px. This size carries the dish descriptions and every helper
-     line in the product; at 13px it was the one thing on a phone people had to
-     squint at. */
+  /* 14px, not 13px. This size carries dish descriptions and every helper line
+     in the product, and at 13px it is the one thing people squint at. */
   --t-fine: 0.875rem;
   --t-label: 0.75rem;
-  /* The floor below which nothing may be set: seat counts on the plan, tab bar
-     labels, badge digits. Anything smaller is unreadable at arm's length. */
+  /* The floor. Seat counts, tab labels, badge digits. Nothing goes under it. */
   --t-micro: 0.6875rem;
 
-  --lh-tight: 0.92;
-  --lh-head: 1.15;
+  --lh-tight: 1;
+  --lh-head: 1.12;
   --lh-body: 1.6;
 
-  /* Anton is a display face; at small sizes it needs air, at large sizes none. */
-  --track-display: -0.015em;
-  --track-label: 0.14em;
+  /* Big display type wants to be pulled in; small caps want to be opened up. */
+  --track-hero: -0.04em;
+  --track-display: -0.025em;
+  --track-head: -0.015em;
+  --track-label: 0.1em;
 
-  /* ── Space. 4px rhythm, named by use rather than by number so a section gap
-     never gets typed in as a card's padding. */
+  /* ── Space. A 4px rhythm, named by use so a section gap never gets typed in
+     as a row's padding. */
   --s-1: 0.25rem;
   --s-2: 0.5rem;
   --s-3: 0.75rem;
@@ -105,38 +116,46 @@
   --s-8: 4rem;
   --s-9: 6rem;
 
-  --gutter: clamp(1rem, 4vw, 2.5rem);
-  --page-max: 78rem;
-  --prose-max: 38rem;
+  /* 20px on the smallest phone we design for, opening out on a desk. Wider
+     than it looks: the breathing room is most of what stops the page reading
+     as a template. */
+  --gutter: clamp(1.25rem, 5vw, 3rem);
+  --page-max: 75rem;
+  --prose-max: 36rem;
 
-  /* The smallest a thing may be and still be tapped: 44px, the figure both
-     Apple and Material land on. Controls read this rather than each picking
-     their own height, so nothing drifts under it. */
-  --tap: 2.75rem;
+  /* The smallest a control may be and still be hit with a thumb on a moving
+     bike taxi. Controls read this rather than each picking a height. */
+  --tap: 3rem;
   --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
 
-  /* ── Shape. Cards are generously rounded, controls less so, and anything
-     that behaves like a stamp or a chip goes fully round. */
-  --r-xs: 4px;
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 18px;
-  --r-xl: 26px;
+  /* ── Shape. Pills for anything you press, soft rectangles for anything that
+     holds a photograph, and nothing in between. */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-xl: 28px;
   --r-full: 999px;
 
-  /* Shadows are warm and low. On a dark ground a black shadow is invisible, so
-     depth comes mostly from the surface step and a lit top edge. */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-2: 0 8px 24px -12px rgba(0, 0, 0, 0.8);
-  --shadow-3: 0 24px 60px -20px rgba(0, 0, 0, 0.9);
-  --glow: 0 0 0 1px rgba(255, 91, 31, 0.35), 0 12px 40px -16px rgba(255, 91, 31, 0.45);
+  /* On black a black shadow is invisible, so depth is carried by the surface
+     step and a lit top edge. These are for things that genuinely float. */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.6);
+  --shadow-2: 0 10px 30px -14px rgba(0, 0, 0, 0.9);
+  --shadow-3: 0 30px 70px -24px rgba(0, 0, 0, 0.95);
+  --shadow-red: 0 10px 30px -12px rgba(227, 28, 35, 0.55);
 
-  /* ── Motion. One easing for everything that enters, a faster one out. */
-  --ease: cubic-bezier(0.2, 0.8, 0.24, 1);
-  --ease-out: cubic-bezier(0.3, 0, 0.6, 1);
-  --dur-1: 140ms;
-  --dur-2: 220ms;
-  --dur-3: 340ms;
+  /* ── Motion. One curve for everything that arrives, which is the decelerating
+     one every native platform uses; a symmetrical one for anything that moves
+     from A to B and stays. Durations are short: on a phone, anything over a
+     third of a second reads as the network being slow. */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-soft: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+  --dur-4: 480ms;
 
   /* ── Layers. Anything with a z-index takes it from here. */
   --z-base: 1;
@@ -146,18 +165,19 @@
   --z-modal: 70;
   --z-toast: 90;
 
-  /* Height of the mobile tab bar; content padding and sticky offsets both read
-     it so they can never drift apart. */
-  --tabbar-h: 4.25rem;
-  --topbar-h: 4rem;
+  /* The tab bar's height. Page padding and every sticky offset read it, so
+     they cannot drift apart. */
+  --tabbar-h: 4.5rem;
+  --topbar-h: 3.75rem;
 }
 
-/* Anything that moves does so because it means something. When the visitor has
-   asked the system for less of that, they get none of it. */
+/* When somebody has asked their phone for less movement, they get none of it:
+   every duration collapses and the transitions become instant swaps. */
 @media (prefers-reduced-motion: reduce) {
   :root {
     --dur-1: 0ms;
     --dur-2: 0ms;
     --dur-3: 0ms;
+    --dur-4: 0ms;
   }
 }

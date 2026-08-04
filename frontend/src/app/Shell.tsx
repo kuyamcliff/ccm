@@ -3,30 +3,33 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { Icon, type IconName } from "~/ui/Icon";
 import { useBasket } from "~/state/basket";
 import { useSession } from "~/state/session";
+import { phoneLabel } from "~/lib/format";
 import { useVenue } from "~/state/venue";
 import { SupportLauncher } from "~/features/support/SupportLauncher";
 
 type NavItem = { to: string; label: string; icon: IconName };
 
 /*
- * Five destinations, and the last two depend on who is looking.
+ * Five destinations at the bottom of the screen, and the last two depend on
+ * who is looking.
  *
  * "Mine" is an empty room for somebody with no account, and "You" is a sign-in
  * page wearing the wrong name. A signed-out visitor gets the two things they
- * can actually act on instead: takeaway, and a way in.
+ * can actually act on instead: the order they are here to place, and the
+ * directions they are here to find.
  */
 const NAV_SIGNED_OUT: NavItem[] = [
   { to: "/", label: "Home", icon: "flame" },
   { to: "/menu", label: "Menu", icon: "list" },
+  { to: "/order", label: "Order", icon: "bag" },
   { to: "/book", label: "Book", icon: "calendar" },
-  { to: "/order", label: "Takeaway", icon: "bag" },
-  { to: "/signin", label: "Sign in", icon: "user" },
+  { to: "/find", label: "Find us", icon: "pin" },
 ];
 
 const NAV_SIGNED_IN: NavItem[] = [
   { to: "/", label: "Home", icon: "flame" },
   { to: "/menu", label: "Menu", icon: "list" },
-  { to: "/book", label: "Book", icon: "calendar" },
+  { to: "/order", label: "Order", icon: "bag" },
   { to: "/mine", label: "Mine", icon: "ticket" },
   { to: "/account", label: "You", icon: "user" },
 ];
@@ -46,10 +49,20 @@ function TopBar() {
   const [scrolled, setScrolled] = useState(false);
   const { count } = useBasket();
   const { user, isStaff } = useSession();
-  const nav = user ? NAV_SIGNED_IN : NAV_SIGNED_OUT;
+  const { phoneHref } = useVenue();
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
+    /* Read the scroll position on the next frame rather than inside the event,
+       so a fast flick never asks the browser for a layout mid-scroll. */
+    let queued = false;
+    const onScroll = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        setScrolled(window.scrollY > 8);
+        queued = false;
+      });
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -60,16 +73,20 @@ function TopBar() {
       <Wordmark />
 
       <nav className="topnav" aria-label="Main">
-        {nav.slice(0, 4).map((item) => (
-          <NavLink key={item.to} to={item.to} end={item.to === "/"} className="topnav__link">
-            {item.label}
-          </NavLink>
-        ))}
-        <NavLink to="/reviews" className="topnav__link">
-          Reviews
+        <NavLink to="/menu" className="topnav__link">
+          Menu
         </NavLink>
-        <NavLink to="/gallery" className="topnav__link">
-          Gallery
+        <NavLink to="/order" className="topnav__link">
+          Takeaway
+        </NavLink>
+        <NavLink to="/book" className="topnav__link">
+          Book a table
+        </NavLink>
+        <NavLink to="/story" className="topnav__link">
+          Our story
+        </NavLink>
+        <NavLink to="/find" className="topnav__link">
+          Find us
         </NavLink>
       </nav>
 
@@ -81,6 +98,16 @@ function TopBar() {
           </Link>
         ) : null}
 
+        {/* Calling matters, but on a 390px screen four controls beside the
+            wordmark is one too many and the last one falls off the edge. On a
+            phone the call lives in the hero and on the Find us tab, both a
+            thumb's reach away; here it appears only where there is room. */}
+        {phoneHref ? (
+          <a href={phoneHref} className="btn btn--quiet btn--icon topbar__call" aria-label="Call the restaurant">
+            <Icon name="phone" size={20} />
+          </a>
+        ) : null}
+
         <Link to="/order" className="btn btn--quiet btn--icon tally" aria-label={`Basket, ${count} items`}>
           <Icon name="basket" size={20} />
           {count > 0 ? (
@@ -90,8 +117,6 @@ function TopBar() {
           ) : null}
         </Link>
 
-        {/* Signed out, this is a labelled invitation rather than a mystery
-            icon: it is the one thing a new visitor may need to find. */}
         {user ? (
           <Link to="/account" className="btn btn--quiet btn--icon" aria-label="Your account">
             <Icon name="user" size={20} />
@@ -117,8 +142,6 @@ function TabBar() {
         <NavLink key={item.to} to={item.to} end={item.to === "/"} className="tabbar__item">
           <span className="tabbar__icon">
             <Icon name={item.icon} size={22} />
-            {/* The count belongs on the basket. Signed in there is no takeaway
-                tab, and the basket icon in the top bar carries it instead. */}
             {item.to === "/order" && count > 0 ? (
               <span className="tally__count" aria-hidden="true" style={{ top: "-0.35rem", right: "-0.6rem" }}>
                 {count}
@@ -133,7 +156,7 @@ function TabBar() {
 }
 
 function Footer() {
-  const { address, hours, phone, phoneHref, socials } = useVenue();
+  const { address, hours, phone, phoneHref, whatsappHref, socials } = useVenue();
   const year = new Date().getFullYear();
 
   return (
@@ -143,7 +166,7 @@ function Footer() {
           <div>
             <Wordmark />
             <p className="fine muted" style={{ marginTop: "var(--s-3)", maxWidth: "24rem" }}>
-              The best meat in Buea. Beef, chicken and more, cooked fresh every day. {address}.
+              Fresh chicken, goat and pork off the fire every day. {address}.
             </p>
             <p className="fine faint" style={{ marginTop: "var(--s-2)" }}>
               {hours}
@@ -154,17 +177,24 @@ function Footer() {
             <p className="footer__heading">Come and eat</p>
             <div className="footer__links">
               <Link to="/menu">Menu and prices</Link>
-              <Link to="/book">Book a table</Link>
               <Link to="/order">Order takeaway</Link>
+              <Link to="/book">Book a table</Link>
               <Link to="/waitlist">Join the queue</Link>
               <Link to="/events">Private events</Link>
             </div>
           </div>
 
           <div>
-            <p className="footer__heading">Get in touch</p>
+            <p className="footer__heading">Reach us</p>
             <div className="footer__links">
-              {phoneHref ? <a href={phoneHref}>{phone}</a> : null}
+              {phone && phoneHref ? <a href={phoneHref}>{phoneLabel(phone)}</a> : null}
+              {whatsappHref ? (
+                <a href={whatsappHref} target="_blank" rel="noreferrer noopener">
+                  WhatsApp
+                </a>
+              ) : null}
+              <Link to="/find">Find us</Link>
+              <Link to="/story">Our story</Link>
               <Link to="/help">Message us</Link>
               {socials.map((social) => (
                 <a key={social.label} href={social.url} target="_blank" rel="noreferrer noopener">
@@ -198,6 +228,8 @@ function ScrollReset() {
 }
 
 export function Shell() {
+  const { pathname } = useLocation();
+
   return (
     <div className="shell">
       <a className="skip-link" href="#main">
@@ -205,7 +237,13 @@ export function Shell() {
       </a>
       <ScrollReset />
       <TopBar />
-      <main id="main" className="shell__main" tabIndex={-1}>
+      {/*
+        Keying the main element on the path is what gives every navigation its
+        fade. React tears the old subtree down and mounts a new one, so the
+        entrance on `.route-in` runs again rather than being skipped as an
+        animation that has already played on a reused element.
+      */}
+      <main key={pathname} id="main" className="shell__main route-in" tabIndex={-1}>
         <Outlet />
       </main>
       <Footer />

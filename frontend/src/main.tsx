@@ -8,16 +8,19 @@ import { ToastProvider } from "./state/toast";
 import { VenueProvider } from "./state/venue";
 
 /*
- * Fonts are bundled rather than fetched from a font CDN. On a Buea mobile
- * connection a third-party lookup costs a DNS resolution, a TLS handshake and a
- * round trip before a single glyph arrives, and it hands a third party a log
- * entry for every visitor. Served from our own origin they are just two more
- * files in the same connection the page is already using.
+ * Two families, both bundled rather than fetched from a font CDN.
+ *
+ * On a Buea mobile connection a third-party lookup costs a DNS resolution, a
+ * TLS handshake and a round trip before a single glyph arrives, and it hands a
+ * stranger a log entry for every visitor. Served from our own origin they are
+ * two more files on the connection the page is already using.
+ *
+ * Both are variable, so every weight the interface uses comes out of one file
+ * each, and each ships as a set of subsets keyed by unicode range: a phone
+ * here downloads the Latin one and nothing else.
  */
-import "@fontsource/anton/latin-400.css";
-import "@fontsource-variable/karla/index.css";
-import "@fontsource/dm-mono/latin-400.css";
-import "@fontsource/dm-mono/latin-500.css";
+import "@fontsource-variable/plus-jakarta-sans/wght.css";
+import "@fontsource-variable/inter/wght.css";
 
 import "./styles/tokens.css";
 import "./styles/base.css";

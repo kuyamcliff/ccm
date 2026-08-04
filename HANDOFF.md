@@ -2,14 +2,15 @@
 
 The site is two programs that talk to each other:
 
-- **frontend/** — what people see. Rebuilt from scratch in July 2026.
+- **frontend/** — what people see. Rebuilt from scratch in July 2026 and
+  redesigned in August 2026: black, white and one red, built phone first.
 - **backend/** — the engine: accounts, bookings, orders, payments, messages.
   Unchanged by the rebuild. Its data lives in a Postgres database at Supabase.
 
 ## The two halves of the site
 
-**The public site** is for customers: the menu, booking a table, ordering for
-collection, reviews, photos, events, the queue.
+**The public site** is for customers: the menu, booking a table, ordering
+takeaway, your story, where to find you, reviews, photos, events, the queue.
 
 **The console** is for you and your staff, at **/desk**. Sign in with a staff
 account and a "Desk" button appears in the top bar. Everything you used to have

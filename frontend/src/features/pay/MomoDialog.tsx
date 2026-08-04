@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MomoStatus } from "~/lib/api";
 import { ApiError } from "~/lib/http";
-import { normalisePhone } from "~/lib/format";
+import { normalisePhone, phoneLabel } from "~/lib/format";
 import { Button } from "~/ui/Button";
 import { PhoneField, TextField } from "~/ui/Field";
 import { Icon } from "~/ui/Icon";
@@ -15,11 +15,11 @@ import { Sheet } from "~/ui/Sheet";
  * The shape of this payment is unusual and the interface has to be honest
  * about it: pressing the button does not take money, it pushes a prompt to the
  * customer's handset, and nothing happens until they enter their PIN there. So
- * the dialog spends most of its life waiting, and its main job is to say
- * clearly what the customer should be looking at — their phone, not this
- * screen — and how long they have.
+ * the sheet spends most of its life waiting, and its real job is to say plainly
+ * what the customer should be looking at, which is their phone and not this
+ * screen, and how long they have to do it.
  *
- * Used by both a table deposit and a collection order; the two differ only in
+ * Used by both a table deposit and a takeaway order. The two differ only in
  * which pair of functions they hand in.
  */
 
@@ -151,7 +151,7 @@ export function MomoDialog({ open, onClose, onPaid, amountFcfa, title, what, dri
       setCharged(result.amount_fcfa);
 
       if (result.zero_cost || result.amount_fcfa === 0) {
-        // A promo or gift card covered it. Nothing was pushed to the handset.
+        // A promo or a gift card covered it. Nothing was pushed to the handset.
         setPhase("paid");
         return;
       }
@@ -189,7 +189,7 @@ export function MomoDialog({ open, onClose, onPaid, amountFcfa, title, what, dri
               Not now
             </Button>
             <Button tone="primary" busy={busy} onClick={begin} icon="wallet">
-              Send the prompt
+              Pay Now
             </Button>
           </>
         ) : phase === "waiting" ? (
@@ -215,7 +215,7 @@ export function MomoDialog({ open, onClose, onPaid, amountFcfa, title, what, dri
       {phase === "form" ? (
         <>
           <div className="pay-total">
-            <span className="label">To pay now</span>
+            <span className="label">Amount</span>
             <Money value={amountFcfa} className="pay-total__value" />
           </div>
 
@@ -246,6 +246,10 @@ export function MomoDialog({ open, onClose, onPaid, amountFcfa, title, what, dri
             </>
           ) : null}
 
+          <p className="fine faint">
+            Nothing leaves your account until you approve the prompt with your PIN.
+          </p>
+
           {error ? <Notice tone="bad">{error}</Notice> : null}
         </>
       ) : phase === "waiting" ? (
@@ -255,7 +259,8 @@ export function MomoDialog({ open, onClose, onPaid, amountFcfa, title, what, dri
           </span>
           <p className="pay-wait__lead">Check your phone</p>
           <p className="muted">
-            A prompt for <Money value={charged} /> has gone to {phone}. Enter your Mobile Money PIN there to approve it.
+            A prompt for <Money value={charged} /> has gone to {phoneLabel(phone)}. Enter your Mobile Money PIN there to
+            approve it.
           </p>
           <p className="pay-wait__clock mono" role="timer" aria-live="off">
             {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}

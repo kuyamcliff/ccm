@@ -64,7 +64,7 @@ export function Offers() {
                       <strong>{offer.title}</strong>
                       <p className="fine faint">{offer.description}</p>
                     </td>
-                    <td className="fine">{offer.badge || "—"}</td>
+                    <td className="fine">{offer.badge || "None"}</td>
                     <td className="fine">{offer.valid_until ? longDate(offer.valid_until) : "No end date"}</td>
                     <td className="table__num">{offer.sort_order}</td>
                     <td>

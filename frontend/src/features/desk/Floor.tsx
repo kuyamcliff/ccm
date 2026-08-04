@@ -3,6 +3,7 @@ import { api } from "~/lib/api";
 import type { DeskTable, FixtureKind, FloorFixture } from "~/lib/api";
 import { useResource } from "~/lib/useResource";
 import { Button, IconButton } from "~/ui/Button";
+import { Icon } from "~/ui/Icon";
 import { SelectField, TextField } from "~/ui/Field";
 import { Sheet, useConfirm } from "~/ui/Sheet";
 import { useToast } from "~/state/toast";
@@ -294,7 +295,7 @@ export function Floor() {
               </div>
 
               <p className="plan-hint">
-                <span aria-hidden="true">←→</span> Scroll the plan sideways to see the whole room.
+                <Icon name="arrow-right" size={14} /> Scroll the plan sideways to see the whole room.
               </p>
 
               {current ? (

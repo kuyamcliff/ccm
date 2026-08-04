@@ -1,9 +1,11 @@
 # Project context (living file)
 
 ## State
-v3, 2026-07-31. The frontend was deleted and rebuilt from nothing; the backend
-was not touched. v1 (static site) and v2 (butcher-paper React app) are in git
-history.
+v4, 2026-08-04. The frontend was redesigned end to end: a new design language,
+new type, new chrome and rewritten customer screens, plus two new pages (Our
+story, Find us). The data layer, the routes and the backend were untouched, so
+every feature v3 had, v4 still has. v1 (static site), v2 (butcher paper) and v3
+(Charcoal and Ember) are in git history.
 
 ## Backend file map (backend/)
 Unchanged in this rewrite. Postgres (Supabase) through `pg`, 23 routers under
@@ -28,28 +30,51 @@ Vite + React 19 + TypeScript. Path alias `~/` points at `src/`.
 - `src/lib/format.ts` — every date, money and phone conversion in the product.
 - `src/state/` — session, toast, venue (the restaurant's own details) and
   basket (takeaway orders, kept in localStorage).
-- `src/ui/` — the primitives: Button, Field, Sheet, Icon, Bits, Feedback, Photo.
-- `src/features/` — one folder per area. `desk/` is the staff console and is
-  code-split away from the customer site.
+- `src/ui/` — the primitives: Button, Field, Sheet, Icon, Bits, Feedback, Photo,
+  and Reveal (the scroll entrance).
+- `src/features/` — one folder per area. `story/` and `find/` are the two pages
+  added in v4. `desk/` is the staff console and is code-split away from the
+  customer site.
 - `src/styles/` — `tokens.css` (the design language), `base.css`, `ui.css`,
   `shell.css`, `pages.css`, and `desk.css` which ships with the console chunk.
 
 ## Design
-Dark by commitment, not as a mode: warm near-black surfaces, one hot colour,
-Anton for display type, Karla for the interface, DM Mono for anything a person
-reads aloud (codes, prices, times). Full reasoning is at the top of
-`src/styles/tokens.css`.
+Black, white and one red. Committed to dark rather than offering a light mode:
+it is the brand, and one well made theme beats two half checked ones.
+
+- Ground `#0A0A0A`, panels a measured amount of white mixed back in.
+- Red `#E31C23`, and it is an instruction. If it is not a button, an active
+  state or a price about to be paid, it is not red. That rule is why the menu
+  rows use a neutral Add button that only turns red once the dish is in the
+  order.
+- Plus Jakarta Sans for headings, Inter for the interface and every figure in
+  it, with tabular numerals doing the job a second mono face used to. Both are
+  variable, self hosted and subset by unicode range.
+- Space and hairlines before borders, borders before boxes. Menu rows, basket
+  lines, reviews and the "three ways in" are rows on the page, not cards
+  floating on it. A card is kept for something you can pick up and carry: a
+  booking pass, an order receipt.
+- Motion is transform and opacity only, so it stays on the compositor on a mid
+  range Android. Sections arrive on scroll through `ui/Reveal.tsx`, one
+  observer per element, disconnected as soon as it fires. Everything collapses
+  under `prefers-reduced-motion`.
+
+Full reasoning is at the top of `src/styles/tokens.css`.
 
 ## Voice
-Plain and direct: "the best meat in Buea", "beef, chicken and more", "order a
-takeaway meal or book a table". The site does not describe how the food is
-cooked. The word is "takeaway", never "collection".
+Plain and direct: "off the fire, every day", "chicken, goat and pork grilled
+fresh", "order for takeaway or book your table". The word is "takeaway", never
+"collection". The payment button says "Pay Now" and nothing else.
+
+No em dashes or en dashes anywhere a customer can read. `stampLabel` returns
+"Not yet" rather than a dash, and the console's empty table cells say what is
+missing instead of drawing one.
 
 ## State awareness
 The site shows different things to a visitor and to a customer.
 
 - Signed out: the hero, the pitch, and one prompt explaining what an account is
-  for. Tabs are Home, Menu, Book, Takeaway, Sign in.
+  for. Tabs are Home, Menu, Order, Book, Find us.
 - Signed in: `features/home/YourStuff.tsx` replaces the hero with their next
   table and their live order, and the account prompt disappears. Tabs are Home,
   Menu, Book, Mine, You.

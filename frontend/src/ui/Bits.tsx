@@ -29,7 +29,7 @@ export function Stars({ value, size = 16, showValue = true }: { value: number; s
     <span className="row" style={{ gap: "0.5rem" }}>
       <span className="stars" role="img" aria-label={`${value.toFixed(1)} out of 5`}>
         {[1, 2, 3, 4, 5].map((n) => (
-          <span key={n} style={{ color: n <= rounded ? "var(--gold)" : "var(--coal-700)" }}>
+          <span key={n} style={{ color: n <= rounded ? "var(--warn)" : "var(--ink-600)" }}>
             <Icon name="star" size={size} />
           </span>
         ))}

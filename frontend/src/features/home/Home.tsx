@@ -1,12 +1,13 @@
 import { Link } from "react-router-dom";
 import { api } from "~/lib/api";
 import { useResource } from "~/lib/useResource";
-import { money } from "~/lib/format";
+import { money, phoneLabel } from "~/lib/format";
 import { Icon } from "~/ui/Icon";
 import { Photo } from "~/ui/Photo";
 import { LinkButton } from "~/ui/Button";
 import { Money, Stars } from "~/ui/Bits";
 import { Skeleton } from "~/ui/Feedback";
+import { Reveal } from "~/ui/Reveal";
 import { useSession } from "~/state/session";
 import { useVenue } from "~/state/venue";
 import { YourStuff } from "./YourStuff";
@@ -14,18 +15,24 @@ import { YourStuff } from "./YourStuff";
 /**
  * The home page, which is two pages wearing one route.
  *
- * A stranger needs to know what this place is and be given the two ways in.
- * Somebody with an account has already decided all that and came back to check
- * one thing, so they get their next table and their live order first, and none
- * of the pitch. The parts that are useful to both — what people order, what
- * people said, where we are — are shared underneath.
+ * A stranger needs to know what this place is and be handed the two ways in.
+ * Somebody with an account decided all that long ago and came back to check
+ * one thing, so they get their next table and their live order first and none
+ * of the pitch. What is useful to both, what people order and where we are,
+ * sits underneath.
  */
 
 function Hero({ images }: { images: string[] }) {
-  const { address, hours } = useVenue();
+  const { hours, phone, phoneHref } = useVenue();
 
   return (
     <section className="hero">
+      {/*
+        The restaurant's own photographs, crossfading. They are the whole
+        argument for eating here, so they get the screen rather than a strip of
+        thumbnails, and the first is loaded eagerly because it is the largest
+        thing above the fold.
+      */}
       <div className="hero__frames" aria-hidden="true">
         {images.slice(0, 3).map((src, index) => (
           <div key={src} className={`hero__frame hero__frame--${index + 1}`}>
@@ -41,40 +48,46 @@ function Hero({ images }: { images: string[] }) {
         </p>
 
         <h1 className="display display--hero hero__title">
-          The best meat
+          Off the fire,
           <br />
-          <span className="hero__hot">in Buea</span>
+          <span className="hero__hot">every day</span>
         </h1>
 
         <p className="hero__blurb">
-          Beef, chicken and more, cooked fresh every day at Cam Chop Meat. Order a takeaway meal or book a table, both
-          from your phone.
+          Chicken, goat and pork grilled fresh at Cam Chop Meat. Order for takeaway or book your table, straight from
+          your phone.
         </p>
 
         <div className="hero__actions">
-          <LinkButton to="/book" tone="primary" size="lg" icon="calendar">
-            Book a table
+          <LinkButton to="/menu" tone="primary" size="lg" icon="list">
+            See the menu
           </LinkButton>
           <LinkButton to="/order" tone="ghost" size="lg" icon="bag">
-            Order takeaway
+            Order now
           </LinkButton>
         </div>
 
+        {/*
+          Three facts, and each one is short enough to hold a column on a
+          360px screen. The address is not among them: the line above already
+          says where this is, and repeating it here wraps to five lines and
+          throws the row out.
+        */}
         <dl className="hero__facts">
           <div>
             <dt className="label">Open</dt>
             <dd>{hours}</dd>
           </div>
           <div>
-            <dt className="label">Find us</dt>
-            <dd>{address}</dd>
+            {/* The cheapest thing on the menu, not the table deposit, which
+                happens to be the same figure today and would otherwise start
+                claiming food costs whatever the owner sets a table at. */}
+            <dt className="label">Plates from</dt>
+            <dd className="mono">2,500 FCFA</dd>
           </div>
           <div>
-            {/* What the cheapest thing on the menu costs — not the deposit,
-                which happens to be the same figure today and would otherwise
-                start claiming food costs whatever the owner sets a table at. */}
-            <dt className="label">From</dt>
-            <dd className="mono">2,500 FCFA</dd>
+            <dt className="label">Call us</dt>
+            <dd>{phoneHref ? <a href={phoneHref}>{phoneLabel(phone ?? "")}</a> : "At the counter"}</dd>
           </div>
         </dl>
       </div>
@@ -88,22 +101,22 @@ function Favourites() {
 
   return (
     <section className="section page">
-      <div className="section-head">
+      <Reveal className="section-head">
         <hr className="heat-rule" />
         <h2 className="display display--xl">What people order</h2>
         <p className="lead">
-          Everything is cooked fresh when you order it, so give it a little time. The price here is the price you pay.
+          Everything goes on the fire when you order it, so give it a little time. The price here is the price you pay.
         </p>
-      </div>
+      </Reveal>
 
       {loading ? (
         <div className="dish-grid">
           {[0, 1, 2, 3].map((n) => (
-            <Skeleton key={n} height="12rem" radius="var(--r-lg)" />
+            <Skeleton key={n} height="12rem" radius="var(--r-md)" />
           ))}
         </div>
       ) : (
-        <div className="dish-grid">
+        <Reveal className="dish-grid">
           {items.map((item) => (
             <article key={item.id} className="dish">
               <div className="dish__photo">
@@ -118,11 +131,11 @@ function Favourites() {
               </div>
             </article>
           ))}
-        </div>
+        </Reveal>
       )}
 
       <div className="row" style={{ marginTop: "var(--s-5)" }}>
-        <LinkButton to="/menu" iconEnd="arrow-right">
+        <LinkButton to="/menu" tone="ghost" iconEnd="arrow-right">
           See the whole menu
         </LinkButton>
       </div>
@@ -137,47 +150,46 @@ function Ways() {
 
   return (
     <section className="section page">
-      <div className="ways">
-        <Link to="/book" className="way card card--action">
+      <Reveal className="ways">
+        <Link to="/order" className="way">
+          <span className="way__icon">
+            <Icon name="bag" size={22} />
+          </span>
+          <h3 className="card__title">Order takeaway</h3>
+          <p className="fine">
+            Pay ahead with Mobile Money, pick your collection time, then show your code at the counter. No queue.
+          </p>
+          <span className="way__go">
+            Start an order <Icon name="arrow-right" size={16} />
+          </span>
+        </Link>
+
+        <Link to="/book" className="way">
           <span className="way__icon">
             <Icon name="calendar" size={22} />
           </span>
           <h3 className="card__title">Hold a table</h3>
-          <p className="fine muted">
-            Pick a time and a table. A {money(depositFcfa)} FCFA deposit through MTN Mobile Money holds it, and it comes off
-            your bill.
+          <p className="fine">
+            Pick a time and a table off the plan. A {money(depositFcfa)} FCFA deposit holds it and comes off your bill.
           </p>
           <span className="way__go">
-            Book <Icon name="arrow-right" size={16} />
+            Book a table <Icon name="arrow-right" size={16} />
           </span>
         </Link>
 
-        <Link to="/order" className="way card card--action">
-          <span className="way__icon">
-            <Icon name="bag" size={22} />
-          </span>
-          <h3 className="card__title">Takeaway</h3>
-          <p className="fine muted">
-            Order and pay ahead, choose your pickup time, then show your code at the counter. Nothing to queue for.
-          </p>
-          <span className="way__go">
-            Order <Icon name="arrow-right" size={16} />
-          </span>
-        </Link>
-
-        <Link to="/waitlist" className="way card card--action">
+        <Link to="/waitlist" className="way">
           <span className="way__icon">
             <Icon name="users" size={22} />
           </span>
-          <h3 className="card__title">Already here</h3>
-          <p className="fine muted">
+          <h3 className="card__title">Already outside</h3>
+          <p className="fine">
             Full house on a Friday. Put your name down from your phone and we will call you when a table clears.
           </p>
           <span className="way__go">
             Join the queue <Icon name="arrow-right" size={16} />
           </span>
         </Link>
-      </div>
+      </Reveal>
     </section>
   );
 }
@@ -191,7 +203,7 @@ function Ways() {
 function WhyAnAccount() {
   return (
     <section className="section page">
-      <div className="join-strip">
+      <Reveal className="join-strip">
         <div className="stack stack--tight">
           <h2 className="display display--lg">Eating with us often?</h2>
           <p className="muted">
@@ -207,7 +219,7 @@ function WhyAnAccount() {
             I already have one
           </LinkButton>
         </div>
-      </div>
+      </Reveal>
     </section>
   );
 }
@@ -219,7 +231,7 @@ function WordOfMouth() {
 
   return (
     <section className="section page">
-      <figure className="quote">
+      <Reveal as="figure" className="quote">
         <Stars value={review.rating} size={18} showValue={false} />
         <blockquote className="quote__text">{review.text}</blockquote>
         <figcaption className="quote__by">
@@ -228,30 +240,27 @@ function WordOfMouth() {
             Read the rest <Icon name="arrow-right" size={15} />
           </Link>
         </figcaption>
-      </figure>
+      </Reveal>
     </section>
   );
 }
 
 function FindUs() {
-  const { address, hours, phone, phoneHref, socials } = useVenue();
-  const mapHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`Cam Chop Meat ${address}`)}`;
+  const { address, hours, phone, phoneHref, whatsappHref } = useVenue();
 
   return (
     <section className="section page">
-      <div className="section-head">
+      <Reveal className="section-head">
         <hr className="heat-rule" />
         <h2 className="display display--xl">Where we are</h2>
-      </div>
+      </Reveal>
 
-      <div className="find">
+      <Reveal className="find">
         <div className="find__row">
           <Icon name="pin" size={20} />
           <div>
             <p>{address}</p>
-            <a href={mapHref} target="_blank" rel="noreferrer noopener" className="fine hot">
-              Open in Maps
-            </a>
+            <p className="fine faint">Look for the grill on the corner.</p>
           </div>
         </div>
 
@@ -263,22 +272,27 @@ function FindUs() {
         {phone && phoneHref ? (
           <div className="find__row">
             <Icon name="phone" size={20} />
-            <a href={phoneHref}>{phone}</a>
+            <a href={phoneHref}>{phoneLabel(phone)}</a>
           </div>
         ) : null}
 
-        {socials.length > 0 ? (
+        {whatsappHref ? (
           <div className="find__row">
-            <Icon name="sparkle" size={20} />
-            <p className="row row--wrap">
-              {socials.map((social) => (
-                <a key={social.label} href={social.url} target="_blank" rel="noreferrer noopener" className="hot">
-                  {social.label}
-                </a>
-              ))}
-            </p>
+            <Icon name="message" size={20} />
+            <a href={whatsappHref} target="_blank" rel="noreferrer noopener">
+              Message us on WhatsApp
+            </a>
           </div>
         ) : null}
+      </Reveal>
+
+      <div className="row row--wrap" style={{ marginTop: "var(--s-5)" }}>
+        <LinkButton to="/find" tone="primary" icon="pin">
+          Directions and map
+        </LinkButton>
+        <LinkButton to="/story" tone="ghost">
+          Our story
+        </LinkButton>
       </div>
     </section>
   );

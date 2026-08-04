@@ -72,7 +72,9 @@ export function timeLabel(value: string): string {
 
 export function stampLabel(value: string | null | undefined): string {
   const date = parseStamp(value);
-  if (!date) return "—";
+  /* No timestamp is not the same as a broken one, and neither is a dash a
+     word. Anything reading this out loud gets something it can say. */
+  if (!date) return "Not yet";
   const day = toISODate(date);
   const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
   return `${dayLabel(day)}, ${time}`;

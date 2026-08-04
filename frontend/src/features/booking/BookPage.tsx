@@ -54,16 +54,19 @@ export function BookPage() {
           <hr className="heat-rule" />
           <h1 className="display display--xl">Book a table</h1>
         </div>
-        <div className="card stack" style={{ maxWidth: "32rem" }}>
-          <p className="muted">
+        {/* Not a card. There is nothing else on this screen for a panel to
+            separate it from, and a box around the only thing on the page is
+            the clearest sign a layout was assembled rather than designed. */}
+        <div className="stack stack--loose" style={{ maxWidth: "32rem" }}>
+          <p className="lead">
             Booking needs an account, so your table, your code and your receipt stay in one place and you can change or
             cancel without calling anybody.
           </p>
-          <div className="row row--wrap">
-            <LinkButton to="/join" tone="primary">
+          <div className="actions">
+            <LinkButton to="/join" tone="primary" size="lg">
               Create an account
             </LinkButton>
-            <LinkButton to="/signin" tone="ghost">
+            <LinkButton to="/signin" tone="ghost" size="lg">
               I already have one
             </LinkButton>
           </div>
