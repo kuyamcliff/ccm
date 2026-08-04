@@ -734,3 +734,204 @@
   box-shadow: var(--glow);
   z-index: 2;
 }
+
+/* ── The console on a phone ──────────────────────────────────────────────
+ *
+ * Everything below here exists because the console was drawn for a desk and
+ * then carried into a restaurant, where it is read one-handed beside a grill.
+ */
+
+/*
+ * Tables become cards.
+ *
+ * A seven-column table on a 390px screen scrolls sideways, and what sits off
+ * the right-hand edge is the status and the buttons — so the row could be read
+ * but not acted on. Each row stacks instead, and every value keeps the name of
+ * its column beside it (written on by `TableWrap`), which is what makes a
+ * stacked row readable rather than a list of loose facts.
+ */
+@media (max-width: 60rem) {
+  .desk-table {
+    max-height: none;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+
+  .desk-table .table,
+  .desk-table .table tbody,
+  .desk-table .table tr,
+  .desk-table .table td {
+    display: block;
+    width: 100%;
+  }
+
+  /* The headings are on the cells now. Kept in the document for screen
+     readers, which still announce the table properly. */
+  .desk-table .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .desk-table .table tbody tr {
+    margin-bottom: var(--s-3);
+    padding: var(--s-2) var(--s-4) var(--s-3);
+    background: var(--coal-900);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+  }
+
+  .desk-table .table tbody tr:hover td {
+    background: transparent;
+  }
+
+  /* A label column and a value column, rather than one pushed to each end.
+     Several of these cells hold more than a word — a guest's name, number and
+     the note about their table — and `space-between` squeezed all of it into
+     the right-hand half where it wrapped to five lines. */
+  .desk-table .table td {
+    display: grid;
+    grid-template-columns: 6.5rem 1fr;
+    align-items: baseline;
+    gap: var(--s-3);
+    padding: var(--s-2) 0;
+    border-bottom: 1px solid var(--line);
+    text-align: start;
+  }
+
+  .desk-table .table td:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .desk-table .table td::before {
+    content: attr(data-label);
+    flex: none;
+    font-size: var(--t-label);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  /* A cell with nothing in it is noise once it has a label beside it. */
+  .desk-table .table td:empty {
+    display: none;
+  }
+
+  /* Numbers stop being a column to scan down and become one value on a card,
+     so the right alignment that made the column readable now just looks lost. */
+  .desk-table .table .table__num {
+    text-align: start;
+  }
+
+  /* The actions are the reason this change exists. They get the full width of
+     the card and sit at the end of it, where a thumb already is. */
+  .desk-table .table td:not([data-label]) {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: var(--s-3);
+  }
+
+  .desk-table .table td:not([data-label]) .table__actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  /* A badge is a word with a shape around it, so it has to size to the word.
+     As the only child of a grid cell it stretched to the full column and read
+     as a bar rather than as a status. Text is deliberately left to stretch —
+     it needs the width to wrap in. */
+  .desk-table .table td > .badge,
+  .desk-table .table td > .mono {
+    justify-self: start;
+  }
+
+  /* Cells that hold a control rather than a fact — a switch, a select — read
+     better with the control against the right edge. */
+  .desk-table .table td > .switch,
+  .desk-table .table td > .select {
+    justify-self: end;
+  }
+
+  /* Buttons in a card wrap rather than squeeze, and the row keeps them
+     together instead of leaving one stranded on a line of its own. */
+  .desk-table .table .table__actions {
+    gap: var(--s-2);
+    align-items: center;
+  }
+}
+
+/*
+ * Stat cards, two to a row.
+ *
+ * At an 11rem minimum they fell to a single column on a phone, so three
+ * numbers took four hundred pixels and pushed the thing you came to read off
+ * the bottom of the screen.
+ */
+@media (max-width: 48rem) {
+  .stat-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(8.5rem, 100%), 1fr));
+  }
+
+  .stat {
+    padding: var(--s-3);
+    gap: var(--s-1);
+  }
+
+  .stat__value {
+    font-size: 1.375rem;
+  }
+}
+
+/* Filters are a stack of full-width fields on a phone, which is a screenful
+   before any data. Two to a row, and the search keeps its own line. */
+@media (max-width: 48rem) {
+  .desk-field {
+    min-width: 0;
+    flex: 1 1 8rem;
+  }
+
+  .desk-field--grow {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+}
+
+/* Touch targets in the console chrome. The rail is the console's whole
+   navigation and every item in it was drawn at 40px; the brand at 32px. */
+@media (pointer: coarse) {
+  .desk__link,
+  .desk__bar a,
+  .desk__bar .btn--sm {
+    min-height: var(--tap);
+  }
+
+  .desk-table .table__actions .btn {
+    min-height: var(--tap);
+    min-width: var(--tap);
+  }
+}
+
+/* A guest's note about their table: worth noticing, not worth shouting. In the
+   accent colour it was the loudest thing in the row — louder than the guest's
+   name and louder than whether they had paid. A rule and a warmer grey say
+   "read this" without taking over. */
+.desk-note {
+  margin-top: var(--s-1);
+  padding-left: var(--s-2);
+  border-left: 2px solid var(--line-hot);
+  color: var(--text-2);
+}
+
+/* A booking code is one token — breaking "CCM-2026-00001" over three lines at
+   its hyphens makes it unreadable at exactly the moment somebody is comparing
+   it against a phone screen at the door. */
+.desk-table .table td.mono {
+  white-space: nowrap;
+}
