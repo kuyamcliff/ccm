@@ -1696,12 +1696,20 @@
 
 @media (pointer: coarse) {
   .find__row a,
-  .quote__more {
+  .quote__more,
+  /* "Reach us" on the help page: a phone number and a WhatsApp link, drawn at
+     the height of their own text (26px). These are the two things somebody
+     with a problem actually presses. */
+  .card > a.row {
     display: inline-flex;
     align-items: center;
     min-height: var(--tap);
   }
 }
+
+/* Deliberately not raised: a link inside a sentence. Giving it a 44px box
+   would open up the line spacing of every paragraph that contains one, and
+   WCAG 2.5.8 exempts targets in a block of text for exactly that reason. */
 
 /* A step already answered. Distinct from both the current one and the ones
    still ahead, so the row reads as progress rather than as four equal tabs. */
@@ -1771,4 +1779,59 @@
   padding-top: var(--s-3);
   border-top: 1px solid var(--line-2);
   font-size: var(--t-lead);
+}
+
+/* ── The booking route behind its dialog ─────────────────────────────────
+   What a table costs and how holding one works. It exists so closing the
+   dialog lands somebody somewhere that makes sense rather than on a blank
+   screen, and so /book is still worth linking to. */
+
+.book-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-5);
+  max-width: 34rem;
+}
+
+.book-how {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  counter-reset: step;
+}
+
+.book-how li {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  color: var(--text-2);
+}
+
+.book-how svg {
+  flex: none;
+  color: var(--ember-hi);
+}
+
+/* Progress inside the dialog. A bar rather than four chips: in a panel this
+   narrow the chips wrapped to two lines and took the room the question needs. */
+.book-progress {
+  margin-bottom: var(--s-1);
+}
+
+/* The plan is the widest thing that ever goes in a sheet, and the tallest.
+   Letting it run to the panel's edges buys back the gutters, which is most of
+   a table; capping the height stops a tall room filling the whole dialog and
+   burying the question underneath it. It scrolls both ways inside the cap, and
+   `contain` keeps that scroll from chaining out into the sheet body. */
+.sheet__body .plan-frame {
+  margin-inline: calc(var(--s-5) * -1);
+  max-height: 42vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.sheet__body .plan-frame .plan {
+  border-radius: 0;
+  border-inline: 0;
 }

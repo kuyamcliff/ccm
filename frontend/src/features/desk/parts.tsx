@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { Icon, type IconName } from "~/ui/Icon";
 import { Money } from "~/ui/Bits";
@@ -62,10 +63,46 @@ export function Toolbar({ children }: { children: ReactNode }) {
   return <div className="desk-toolbar">{children}</div>;
 }
 
-/** Wide tables scroll inside themselves rather than widening the page. */
+/**
+ * A console table that becomes a list of cards on a phone.
+ *
+ * These tables carry six or seven columns because that is what reading a
+ * hundred bookings at a glance needs. On a phone that same table scrolled
+ * sideways, and the columns that ended up off the right-hand edge were the
+ * status and the actions — so a booking could not be cancelled, and a guest
+ * could not be blocked, without dragging the table across first. The most
+ * important columns were the least reachable.
+ *
+ * Below the breakpoint each row stacks into a card. That only reads if every
+ * value still says what it is, so the header text is copied onto each cell as
+ * `data-label` and the CSS prints it beside the value. Doing it here rather
+ * than by hand means the twenty screens that already exist need no changes and
+ * a twenty-first gets it for free.
+ *
+ * It runs on every render, not once: the rows are replaced whenever the data
+ * reloads, and the labels have to follow them.
+ */
 export function TableWrap({ children }: { children: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const table = box.current?.querySelector("table");
+    if (!table) return;
+
+    const headings = [...table.querySelectorAll("thead th")].map((th) => th.textContent?.trim() ?? "");
+    for (const row of table.querySelectorAll("tbody tr")) {
+      [...row.children].forEach((cell, index) => {
+        const heading = headings[index];
+        /* An unnamed column is the actions column. Labelling it would print an
+           empty prefix before the buttons. */
+        if (heading) cell.setAttribute("data-label", heading);
+        else cell.removeAttribute("data-label");
+      });
+    }
+  });
+
   return (
-    <div className="scroll-x desk-table">
+    <div ref={box} className="scroll-x desk-table">
       <table className="table">{children}</table>
     </div>
   );

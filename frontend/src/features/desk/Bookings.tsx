@@ -111,7 +111,7 @@ export function Bookings() {
                     <td>
                       {booking.user_name}
                       <span className="fine faint"> {booking.phone}</span>
-                      {booking.note ? <p className="fine hot">{booking.note}</p> : null}
+                      {booking.note ? <p className="fine desk-note">{booking.note}</p> : null}
                     </td>
                     <td className="table__num">{booking.party_size}</td>
                     <td>{booking.table_label ?? "Any"}</td>
