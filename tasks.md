@@ -111,8 +111,10 @@
       tabs with a fifty character address: clean.
 - [x] Overflow safety is now systemic rather than per component: long words
       break, and flex and grid children are allowed to shrink.
-- [x] Takeaway is back on the select it had. The booking flow keeps the slot
-      grid. They no longer share a picker.
+- [x] Both flows ask for a time with the same plain select. Takeaway went back
+      to the one it had, and booking was moved onto it too once the owner
+      showed which control they meant. The grid of twenty eight buttons is
+      gone, along with its styles.
 - [x] Cards down again everywhere: the shared card, the console's stacked rows,
       the empty states, the account. The console's row cards were the worst,
       being one line per column.

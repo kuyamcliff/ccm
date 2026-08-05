@@ -95,6 +95,20 @@ export function timeAgo(value: string | null | undefined): string {
   return stampLabel(value);
 }
 
+/**
+ * Whether a slot has already gone, and only ever for today.
+ *
+ * A booking form that offers half past six at seven o'clock is one somebody
+ * fills in and then gets turned away over, so the times that have passed are
+ * never listed.
+ */
+export function isPastSlot(date: string, slot: string): boolean {
+  if (date !== todayISO()) return false;
+  const now = new Date();
+  const [hour, minute] = slot.split(":").map(Number);
+  return (hour ?? 0) * 60 + (minute ?? 0) <= now.getHours() * 60 + now.getMinutes();
+}
+
 export function money(value: number): string {
   return value.toLocaleString("en-US");
 }

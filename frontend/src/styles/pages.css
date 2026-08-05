@@ -1641,42 +1641,6 @@ body:has(.booking__foot) .shell__main {
   opacity: 0.7;
 }
 
-.slots {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
-  gap: var(--s-2);
-}
-
-.slot {
-  min-height: var(--tap);
-  border-radius: var(--r-md);
-  border: 1px solid var(--line-2);
-  background: transparent;
-  color: var(--text-2);
-  font-size: var(--t-small);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  transition:
-    background-color var(--dur-2) var(--ease),
-    color var(--dur-2) var(--ease),
-    border-color var(--dur-2) var(--ease),
-    transform var(--dur-1) var(--ease);
-}
-
-.slot:active:not(:disabled) {
-  transform: scale(0.95);
-}
-
-.slot:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.slot[aria-pressed="true"] {
-  background: var(--red);
-  border-color: var(--red);
-  color: var(--on-red);
-}
 
 /* Party size, given the room to be the only thing on the screen. */
 .party {

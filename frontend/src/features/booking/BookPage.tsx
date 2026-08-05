@@ -1,9 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api } from "~/lib/api";
+import { api, SLOTS } from "~/lib/api";
 import type { Booking, MenuItem } from "~/lib/api";
 import { ApiError } from "~/lib/http";
-import { addDays, dayLabel, longDate, money, normalisePhone, timeLabel, todayISO, toISODate } from "~/lib/format";
+import {
+  addDays,
+  dayLabel,
+  isPastSlot,
+  longDate,
+  money,
+  normalisePhone,
+  timeLabel,
+  todayISO,
+  toISODate,
+} from "~/lib/format";
 import { useAction, useResource } from "~/lib/useResource";
 import { Button, LinkButton } from "~/ui/Button";
 import { Icon } from "~/ui/Icon";
@@ -53,6 +63,12 @@ function isStep(value: string | null): value is Step {
   return value !== null && (ORDER as string[]).includes(value);
 }
 
+/** The earliest time still bookable on a given day, or null once the day has
+    run out. */
+function firstOpenSlot(date: string): string | null {
+  return SLOTS.find((slot) => !isPastSlot(date, slot)) ?? null;
+}
+
 export function BookPage() {
   const { user, ready } = useSession();
   const { depositFcfa } = useVenue();
@@ -61,7 +77,11 @@ export function BookPage() {
   const [params, setParams] = useSearchParams();
 
   const [date, setDate] = useState(todayISO());
-  const [time, setTime] = useState<string | null>(null);
+  /* The time control is a select, so it always shows something. It starts on
+     the first slot still to come rather than on nothing, or the screen would
+     display a time while the state behind it was empty and the button to carry
+     on stayed dead. */
+  const [time, setTime] = useState<string | null>(() => firstOpenSlot(todayISO()));
   const [party, setParty] = useState(2);
   const [tableId, setTableId] = useState<number | null>(null);
   const [phone, setPhone] = useState("");
@@ -284,7 +304,9 @@ export function BookPage() {
             time={time}
             onDate={(next) => {
               setDate(next);
-              setTime(null);
+              /* A time carried over from another day may already have gone on
+                 this one, so it is re-picked rather than kept. */
+              setTime(firstOpenSlot(next));
               setTableId(null);
             }}
             onTime={(next) => {

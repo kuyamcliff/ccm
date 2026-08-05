@@ -1,13 +1,12 @@
 import { Link } from "react-router-dom";
 import { api, MAX_PARTY, SLOTS } from "~/lib/api";
 import type { DiningTable, MenuItem } from "~/lib/api";
-import { longDate, money, relativeDay, shortDate, timeLabel } from "~/lib/format";
+import { isPastSlot, longDate, money, relativeDay, shortDate, timeLabel } from "~/lib/format";
 import { useResource } from "~/lib/useResource";
-import { Counter, PhoneField, TextAreaField } from "~/ui/Field";
+import { Counter, PhoneField, SelectField, TextAreaField } from "~/ui/Field";
 import { Money } from "~/ui/Bits";
 import { Icon } from "~/ui/Icon";
 import { Notice, Skeleton } from "~/ui/Feedback";
-import { SlotPicker, isPastSlot } from "~/ui/SlotPicker";
 import { FloorPlan } from "./FloorPlan";
 import { OrderStep, basketCount } from "./OrderStep";
 import type { Basket } from "./OrderStep";
@@ -38,7 +37,9 @@ export function WhenStep({
   onDate: (next: string) => void;
   onTime: (next: string) => void;
 }) {
-  const allGone = SLOTS.every((slot) => isPastSlot(date, slot));
+  /* Only the times still to come on the chosen day. Offering half past six at
+     seven is how somebody turns up to a booking that was never possible. */
+  const open = SLOTS.filter((slot) => !isPastSlot(date, slot));
 
   return (
     <div className="stack stack--loose">
@@ -62,13 +63,26 @@ export function WhenStep({
         </div>
       </section>
 
-      {allGone ? (
+      {open.length === 0 ? (
         <Notice tone="warn">
           Tonight is finished. Pick tomorrow, or <Link to="/waitlist">join the queue</Link> if you are already outside.
         </Notice>
       ) : (
-        /* The same picker the takeaway checkout uses. See ui/SlotPicker. */
-        <SlotPicker date={date} value={time} onChange={onTime} />
+        /* The same control the takeaway checkout uses. A grid of twenty eight
+           buttons was tried here and is not what the owner wants: one compact
+           row that opens the phone's own picker is less to read and less to
+           scroll past. */
+        <SelectField
+          label="What time"
+          value={time ?? open[0]}
+          onChange={(e) => onTime(e.target.value)}
+        >
+          {open.map((slot) => (
+            <option key={slot} value={slot}>
+              {slot}
+            </option>
+          ))}
+        </SelectField>
       )}
     </div>
   );
