@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db.js";
-import { requireAdmin } from "../auth.js";
+import { requireAdmin, requireScope } from "../auth.js";
 import { audit } from "../lib/audit.js";
 import { rateLimit } from "../middleware/security.js";
 import { notify } from "../lib/notify.js";
@@ -326,7 +326,7 @@ takeawayRouter.get("/my-orders", async (req, res) => {
 
 // ── Admin ────────────────────────────────────────────────
 
-takeawayRouter.get("/", requireAdmin, async (_req, res) => {
+takeawayRouter.get("/", requireAdmin, requireScope("takeaway"), async (_req, res) => {
   /* Orders abandoned at the payment step are excluded. They are not orders
      the kitchen can act on, and showing them would bury the real queue under
      everyone who changed their mind at the MoMo prompt. */
@@ -342,7 +342,7 @@ takeawayRouter.get("/", requireAdmin, async (_req, res) => {
   res.json({ orders });
 });
 
-takeawayRouter.patch("/:id/status", requireAdmin, async (req, res) => {
+takeawayRouter.patch("/:id/status", requireAdmin, requireScope("takeaway"), async (req, res) => {
   const id = Number(req.params.id);
   const status = String(req.body?.status ?? "");
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad order id." }); return; }

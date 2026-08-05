@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db.js";
-import { requireAuth, requireAdmin } from "../auth.js";
+import { requireAuth, requireAdmin, requireScope } from "../auth.js";
 import { audit } from "../lib/audit.js";
 
 export const legalRouter = Router();
@@ -36,14 +36,14 @@ legalRouter.get("/:slug", async (req, res) => {
 
 /* ── Admin ───────────────────────────────────────────────────────────────── */
 
-legalRouter.get("/", requireAuth, requireAdmin, async (_req, res) => {
+legalRouter.get("/", requireAuth, requireAdmin, requireScope("legal"), async (_req, res) => {
   const pages = await db
     .prepare("SELECT slug, title, body, updated_at FROM legal_pages ORDER BY slug")
     .all();
   res.json({ pages });
 });
 
-legalRouter.put("/:slug", requireAuth, requireAdmin, async (req, res) => {
+legalRouter.put("/:slug", requireAuth, requireAdmin, requireScope("legal"), async (req, res) => {
   const slug = String(req.params.slug);
   if (!isSlug(slug)) { res.status(404).json({ error: "No such page." }); return; }
 

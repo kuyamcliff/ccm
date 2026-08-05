@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db.js";
-import { requireAuth, requireAdmin } from "../auth.js";
+import { requireAuth, requireAdmin, requireScope } from "../auth.js";
 import { audit } from "../lib/audit.js";
 import { rateLimit } from "../middleware/security.js";
 
@@ -85,11 +85,11 @@ promosRouter.post("/validate", requireAuth, validateLimit, async (req, res) => {
 
 // ── Admin ────────────────────────────────────────────────
 
-promosRouter.get("/", requireAdmin, async (_req, res) => {
+promosRouter.get("/", requireAdmin, requireScope("promos"), async (_req, res) => {
   res.json({ codes: await db.prepare("SELECT * FROM promo_codes ORDER BY created_at DESC LIMIT 500").all() });
 });
 
-promosRouter.post("/", requireAdmin, async (req, res) => {
+promosRouter.post("/", requireAdmin, requireScope("promos"), async (req, res) => {
   const code = String(req.body?.code ?? "").trim().toUpperCase();
   const type = String(req.body?.type ?? "");
   const value = Number(req.body?.value);
@@ -137,7 +137,7 @@ promosRouter.post("/", requireAdmin, async (req, res) => {
   res.status(201).json({ ok: true });
 });
 
-promosRouter.patch("/:id", requireAdmin, async (req, res) => {
+promosRouter.patch("/:id", requireAdmin, requireScope("promos"), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad code id." }); return; }
 
@@ -157,7 +157,7 @@ promosRouter.patch("/:id", requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
-promosRouter.delete("/:id", requireAdmin, async (req, res) => {
+promosRouter.delete("/:id", requireAdmin, requireScope("promos"), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad code id." }); return; }
 

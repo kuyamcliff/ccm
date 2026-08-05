@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { Icon, type IconName } from "~/ui/Icon";
+import type { AdminScope } from "~/lib/api";
 import { Avatar } from "~/ui/Bits";
 import { IconButton } from "~/ui/Button";
 import { useSession } from "~/state/session";
@@ -18,8 +19,12 @@ interface Item {
   to: string;
   label: string;
   icon: IconName;
-  /** Only the owner sees these. */
+  /** Only the owner and super admins see these. */
   owner?: boolean;
+  /** Only the true owner sees this — above even a super admin. */
+  topOwner?: boolean;
+  /** A plain admin the owner has locked out of this scope does not see it. */
+  scope?: AdminScope;
 }
 
 const GROUPS: { title: string; items: Item[] }[] = [
@@ -27,51 +32,52 @@ const GROUPS: { title: string; items: Item[] }[] = [
     title: "Tonight",
     items: [
       { to: "/desk", label: "Overview", icon: "chart" },
-      { to: "/desk/door", label: "Door", icon: "scan" },
-      { to: "/desk/bookings", label: "Bookings", icon: "calendar" },
-      { to: "/desk/orders", label: "Takeaway", icon: "bag" },
-      { to: "/desk/queue", label: "Queue", icon: "users" },
-      { to: "/desk/floor", label: "Floor", icon: "grid" },
+      { to: "/desk/door", label: "Door", icon: "scan", scope: "door" },
+      { to: "/desk/bookings", label: "Bookings", icon: "calendar", scope: "bookings" },
+      { to: "/desk/orders", label: "Takeaway", icon: "bag", scope: "takeaway" },
+      { to: "/desk/queue", label: "Queue", icon: "users", scope: "queue" },
+      { to: "/desk/floor", label: "Floor", icon: "grid", scope: "floor" },
     ],
   },
   {
     title: "The place",
     items: [
-      { to: "/desk/menu", label: "Menu", icon: "list" },
-      { to: "/desk/offers", label: "Offers", icon: "flame" },
-      { to: "/desk/gallery", label: "Photos", icon: "image" },
-      { to: "/desk/reviews", label: "Reviews", icon: "star" },
-      { to: "/desk/events", label: "Events", icon: "sparkle" },
+      { to: "/desk/menu", label: "Menu", icon: "list", scope: "menu" },
+      { to: "/desk/offers", label: "Offers", icon: "flame", scope: "offers" },
+      { to: "/desk/gallery", label: "Photos", icon: "image", scope: "gallery" },
+      { to: "/desk/reviews", label: "Reviews", icon: "star", scope: "reviews" },
+      { to: "/desk/events", label: "Events", icon: "sparkle", scope: "events" },
     ],
   },
   {
     title: "Money",
     items: [
-      { to: "/desk/money", label: "Payments", icon: "wallet" },
-      { to: "/desk/promos", label: "Promo codes", icon: "tag" },
-      { to: "/desk/cards", label: "Gift cards", icon: "gift" },
+      { to: "/desk/money", label: "Payments", icon: "wallet", scope: "payments" },
+      { to: "/desk/promos", label: "Promo codes", icon: "tag", scope: "promos" },
+      { to: "/desk/cards", label: "Gift cards", icon: "gift", scope: "giftcards" },
     ],
   },
   {
     title: "People",
     items: [
-      { to: "/desk/inbox", label: "Messages", icon: "message" },
-      { to: "/desk/guests", label: "Guests", icon: "user" },
+      { to: "/desk/inbox", label: "Messages", icon: "message", scope: "messages" },
+      { to: "/desk/guests", label: "Guests", icon: "user", scope: "guests" },
     ],
   },
   {
     title: "Settings",
     items: [
-      { to: "/desk/insights", label: "Insights", icon: "chart" },
-      { to: "/desk/settings", label: "Details", icon: "settings" },
-      { to: "/desk/legal", label: "Terms and privacy", icon: "receipt" },
+      { to: "/desk/insights", label: "Insights", icon: "chart", scope: "insights" },
+      { to: "/desk/settings", label: "Details", icon: "settings", scope: "settings" },
+      { to: "/desk/legal", label: "Terms and privacy", icon: "receipt", scope: "legal" },
       { to: "/desk/log", label: "Audit log", icon: "shield", owner: true },
+      { to: "/desk/access", label: "Access", icon: "lock", topOwner: true },
     ],
   },
 ];
 
 export function DeskShell() {
-  const { user, isOwner, signOut } = useSession();
+  const { user, isOwner, isTopOwner, can, signOut } = useSession();
   const [drawer, setDrawer] = useState(false);
   const { pathname } = useLocation();
 
@@ -108,7 +114,7 @@ export function DeskShell() {
             <Avatar name={user?.name ?? ""} />
             <span className="fine">
               {user?.name}
-              <span className="faint"> {isOwner ? "owner" : "staff"}</span>
+              <span className="faint"> {isTopOwner ? "owner" : isOwner ? "super admin" : "staff"}</span>
             </span>
           </span>
           <IconButton name="logout" label="Sign out" onClick={() => void signOut()} />
@@ -118,7 +124,12 @@ export function DeskShell() {
       <div className="desk__body">
         <nav className={`desk__rail${drawer ? " desk__rail--open" : ""}`} aria-label="Console">
           {GROUPS.map((group) => {
-            const items = group.items.filter((item) => !item.owner || isOwner);
+            const items = group.items.filter(
+              (item) =>
+                (!item.topOwner || isTopOwner) &&
+                (!item.owner || isOwner) &&
+                (!item.scope || can(item.scope))
+            );
             if (items.length === 0) return null;
             return (
               <div key={group.title} className="desk__group">

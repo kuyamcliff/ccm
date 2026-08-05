@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { db } from "../db.js";
-import { requireAuth, requireAdmin, revokeSessions } from "../auth.js";
+import { requireAuth, requireAdmin, requireScope, revokeSessions } from "../auth.js";
 import { audit } from "../lib/audit.js";
 import { emailAvailable, sendMail } from "../lib/mailer.js";
 import {
@@ -161,7 +161,7 @@ recoveryRouter.post("/redeem", redeemLimit, async (req, res) => {
  * broken setup is found before a customer needs a reset. This does not issue or
  * reveal reset codes; recovery is entirely self-service.
  */
-recoveryRouter.post("/admin/test-email", requireAuth, requireAdmin, async (req, res) => {
+recoveryRouter.post("/admin/test-email", requireAuth, requireAdmin, requireScope("settings"), async (req, res) => {
   const to = String(req.body?.to ?? "").trim() || req.user!.email;
 
   if (!EMAIL_RE.test(to)) {

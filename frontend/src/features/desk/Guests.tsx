@@ -92,8 +92,10 @@ export function Guests() {
                         </span>
                       </td>
                       <td>
-                        {row.role === "super_admin" ? (
+                        {row.role === "owner" ? (
                           <Badge tone="hot">Owner</Badge>
+                        ) : row.role === "super_admin" ? (
+                          <Badge tone="hot">Super admin</Badge>
                         ) : row.role === "admin" ? (
                           <Badge tone="good">Staff</Badge>
                         ) : row.banned_at ? (
@@ -104,7 +106,7 @@ export function Guests() {
                       </td>
                       <td className="fine faint">{stampLabel(row.created_at)}</td>
                       <td>
-                        {isMe || row.role === "super_admin" ? (
+                        {isMe || row.role === "super_admin" || row.role === "owner" ? (
                           <span className="fine faint">No actions</span>
                         ) : (
                           <div className="table__actions">

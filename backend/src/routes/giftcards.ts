@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { randomBytes } from "node:crypto";
 import { db, transaction } from "../db.js";
-import { requireAuth, requireAdmin } from "../auth.js";
+import { requireAuth, requireAdmin, requireScope } from "../auth.js";
 import { audit } from "../lib/audit.js";
 import { rateLimit } from "../middleware/security.js";
 
@@ -58,7 +58,7 @@ giftCardsRouter.post("/validate", requireAuth, validateLimit, async (req, res) =
 
 // ── Admin ────────────────────────────────────────────────
 
-giftCardsRouter.post("/", requireAdmin, async (req, res) => {
+giftCardsRouter.post("/", requireAdmin, requireScope("giftcards"), async (req, res) => {
   const value = Number(req.body?.value_fcfa);
   if (!Number.isInteger(value) || value < 500 || value > 1_000_000) {
     res.status(400).json({ error: "Value must be between 500 and 1,000,000 FCFA." });
@@ -74,14 +74,14 @@ giftCardsRouter.post("/", requireAdmin, async (req, res) => {
   res.status(201).json({ code, value_fcfa: value });
 });
 
-giftCardsRouter.get("/", requireAdmin, async (_req, res) => {
+giftCardsRouter.get("/", requireAdmin, requireScope("giftcards"), async (_req, res) => {
   res.json({
     cards: await db.prepare("SELECT * FROM gift_cards ORDER BY created_at DESC LIMIT 500").all(),
   });
 });
 
 /** Balance history for one card. */
-giftCardsRouter.get("/:id/ledger", requireAdmin, async (req, res) => {
+giftCardsRouter.get("/:id/ledger", requireAdmin, requireScope("giftcards"), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad card id." }); return; }
   const entries = await db
@@ -92,7 +92,7 @@ giftCardsRouter.get("/:id/ledger", requireAdmin, async (req, res) => {
   res.json({ entries });
 });
 
-giftCardsRouter.patch("/:id", requireAdmin, async (req, res) => {
+giftCardsRouter.patch("/:id", requireAdmin, requireScope("giftcards"), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad card id." }); return; }
 
@@ -112,7 +112,7 @@ giftCardsRouter.patch("/:id", requireAdmin, async (req, res) => {
   res.json({ ok: true, is_active: !!next });
 });
 
-giftCardsRouter.delete("/:id", requireAdmin, async (req, res) => {
+giftCardsRouter.delete("/:id", requireAdmin, requireScope("giftcards"), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad card id." }); return; }
   await db.prepare("UPDATE gift_cards SET is_active = 0 WHERE id = ?").run(id);

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { applyUpdate, db } from "../db.js";
 import type { SqlValue } from "../db.js";
-import { requireAuth, requireAdmin, requireSuperAdmin, revokeSessions } from "../auth.js";
+import { requireAuth, requireAdmin, requireScope, requireSuperAdmin, revokeSessions } from "../auth.js";
 import { audit } from "../lib/audit.js";
 import { MediaError, storeOrValidateUrl } from "../lib/media.js";
 import { awardPoints } from "./loyalty.js";
@@ -11,6 +11,23 @@ import { FIXTURE_KINDS, FLOOR_CANVAS, clampFixture, isFixtureKind, readFixtures 
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireAdmin);
+
+/* `/stats` (the Overview dashboard) and `/audit` (already its own
+   requireSuperAdmin gate) are deliberately not listed here — Overview is a
+   at-a-glance summary with nothing to restrict, and the audit trail was never
+   meant to be grantable to a plain admin at all. Everything else this router
+   serves maps to one destination in the console nav, and one scope an owner
+   can lock a plain admin out of. */
+adminRouter.use("/reservations", requireScope("bookings"));
+adminRouter.use("/receipts", requireScope("payments"));
+adminRouter.use("/tables", requireScope("floor"));
+adminRouter.use("/fixtures", requireScope("floor"));
+adminRouter.use("/users", requireScope("guests"));
+adminRouter.use("/menu", requireScope("menu"));
+adminRouter.use("/payments", requireScope("payments"));
+adminRouter.use("/notifications", requireScope("messages"));
+adminRouter.use("/reviews", requireScope("reviews"));
+adminRouter.use("/analytics", requireScope("insights"));
 
 const UNDO_WINDOW_MS = 30 * 60 * 1000;
 
@@ -205,7 +222,7 @@ adminRouter.patch("/users/:id/ban", async (req, res) => {
 
   const target = (await db.prepare("SELECT role FROM users WHERE id = ?").get(id)) as { role: string } | undefined;
   if (!target) { res.status(404).json({ error: "User not found." }); return; }
-  if (target.role === "super_admin") { res.status(403).json({ error: "Cannot ban a super admin." }); return; }
+  if (target.role === "super_admin" || target.role === "owner") { res.status(403).json({ error: "Cannot ban a super admin." }); return; }
 
   await db.prepare("UPDATE users SET banned_at = now_text() WHERE id = ?").run(id);
   // A ban that leaves the existing session working is not a ban.
@@ -234,7 +251,7 @@ adminRouter.patch("/users/:id/role", requireSuperAdmin, async (req, res) => {
 
   const target = (await db.prepare("SELECT role FROM users WHERE id = ?").get(id)) as { role: string } | undefined;
   if (!target) { res.status(404).json({ error: "User not found." }); return; }
-  if (target.role === "super_admin") { res.status(403).json({ error: "Cannot change a super admin role." }); return; }
+  if (target.role === "super_admin" || target.role === "owner") { res.status(403).json({ error: "Cannot change a super admin role." }); return; }
 
   await db.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, id);
   // Force a fresh sign-in so the new permission level is picked up everywhere.
@@ -250,7 +267,7 @@ adminRouter.delete("/users/:id", async (req, res) => {
 
   const target = (await db.prepare("SELECT role FROM users WHERE id = ?").get(id)) as { role: string } | undefined;
   if (!target) { res.status(404).json({ error: "User not found." }); return; }
-  if (target.role === "super_admin") { res.status(403).json({ error: "Cannot delete a super admin." }); return; }
+  if (target.role === "super_admin" || target.role === "owner") { res.status(403).json({ error: "Cannot delete a super admin." }); return; }
 
   await db.prepare("DELETE FROM users WHERE id = ?").run(id);
   audit(req, { action: "user.delete", targetType: "user", targetId: id });

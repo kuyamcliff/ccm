@@ -20,6 +20,7 @@ import { Insights } from "./Insights";
 import { Settings } from "./Settings";
 import { LegalAdmin } from "./LegalAdmin";
 import { AuditLog } from "./AuditLog";
+import { Access } from "./Access";
 import { NotFound } from "~/features/misc/NotFound";
 
 import "~/styles/desk.css";
@@ -56,6 +57,7 @@ export function DeskRoutes() {
         <Route path="settings" element={<Settings />} />
         <Route path="legal" element={<LegalAdmin />} />
         <Route path="log" element={<AuditLog />} />
+        <Route path="access" element={<Access />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

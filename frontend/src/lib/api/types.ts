@@ -6,13 +6,52 @@
  * prettied up here — the display layer does that, once, on the way to a screen.
  */
 
-export type Role = "user" | "admin" | "super_admin";
+export type Role = "user" | "admin" | "super_admin" | "owner";
 
 export interface User {
   id: number;
   name: string;
   email: string;
   role: Role;
+}
+
+/** One page or capability a plain admin can be locked out of. Mirrors
+    `ADMIN_SCOPES` in the server's `auth.ts` — the server is the source of
+    truth; this list is what the console reads to build the Access grid. */
+export type AdminScope =
+  | "door"
+  | "bookings"
+  | "takeaway"
+  | "queue"
+  | "floor"
+  | "menu"
+  | "offers"
+  | "gallery"
+  | "reviews"
+  | "events"
+  | "payments"
+  | "promos"
+  | "giftcards"
+  | "messages"
+  | "guests"
+  | "insights"
+  | "settings"
+  | "legal";
+
+export interface ScopeInfo {
+  key: AdminScope;
+  label: string;
+  hint: string;
+}
+
+export interface StaffAccess {
+  id: number;
+  name: string;
+  email: string;
+  role: "admin" | "super_admin";
+  banned_at: string | null;
+  created_at: string;
+  scopes: Record<AdminScope, boolean>;
 }
 
 /** A correct password does not always mean a session: 2FA can intervene. */

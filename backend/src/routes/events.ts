@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db.js";
-import { requireAdmin } from "../auth.js";
+import { requireAdmin, requireScope } from "../auth.js";
 import { audit } from "../lib/audit.js";
 import { rateLimit } from "../middleware/security.js";
 
@@ -78,7 +78,7 @@ eventsRouter.post("/", enquiryLimit, async (req, res) => {
 // ── Admin ────────────────────────────────────────────────
 
 /** Lets an admin book an event directly, with the status set at creation. */
-eventsRouter.post("/admin-create", requireAdmin, async (req, res) => {
+eventsRouter.post("/admin-create", requireAdmin, requireScope("events"), async (req, res) => {
   const parsed = parseEvent(req.body);
   if (typeof parsed === "string") { res.status(400).json({ error: parsed }); return; }
 
@@ -105,7 +105,7 @@ eventsRouter.post("/admin-create", requireAdmin, async (req, res) => {
   res.status(201).json({ ok: true });
 });
 
-eventsRouter.get("/", requireAdmin, async (_req, res) => {
+eventsRouter.get("/", requireAdmin, requireScope("events"), async (_req, res) => {
   res.json({
     bookings: await db
       .prepare("SELECT * FROM event_bookings ORDER BY date ASC, created_at DESC LIMIT 500")
@@ -113,7 +113,7 @@ eventsRouter.get("/", requireAdmin, async (_req, res) => {
   });
 });
 
-eventsRouter.patch("/:id", requireAdmin, async (req, res) => {
+eventsRouter.patch("/:id", requireAdmin, requireScope("events"), async (req, res) => {
   const id = Number(req.params.id);
   const status = String(req.body?.status ?? "");
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad booking id." }); return; }
@@ -126,7 +126,7 @@ eventsRouter.patch("/:id", requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
-eventsRouter.delete("/:id", requireAdmin, async (req, res) => {
+eventsRouter.delete("/:id", requireAdmin, requireScope("events"), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad booking id." }); return; }
   await db.prepare("DELETE FROM event_bookings WHERE id = ?").run(id);

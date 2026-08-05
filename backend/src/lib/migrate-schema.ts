@@ -139,6 +139,31 @@ const STEPS: Step[] = [
     name: "user_passkeys.credential_id unique",
     sql: "CREATE UNIQUE INDEX IF NOT EXISTS user_passkeys_credential_idx ON user_passkeys (credential_id)",
   },
+
+  /* Per-admin restrictions, set by the owner on the Access page. A missing row
+     means "never restricted" — every admin account that existed before this
+     table did loses nothing until the owner deliberately locks a scope. */
+  {
+    name: "admin_permissions",
+    sql: `CREATE TABLE IF NOT EXISTS admin_permissions (
+            user_id integer NOT NULL,
+            scope text NOT NULL,
+            granted integer NOT NULL DEFAULT 1,
+            updated_at text NOT NULL DEFAULT now_text(),
+            updated_by integer,
+            PRIMARY KEY (user_id, scope)
+          )`,
+  },
+  /* One tier above super admin. There was no such role before this feature,
+     so the first boot after it ships has to create one: whoever has been
+     `super_admin` the longest becomes the `owner`, once, and only if nobody
+     already holds that role. Every boot after that is a no-op. */
+  {
+    name: "owner bootstrap",
+    sql: `UPDATE users SET role = 'owner'
+          WHERE id = (SELECT id FROM users WHERE role = 'super_admin' ORDER BY created_at ASC, id ASC LIMIT 1)
+          AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'owner')`,
+  },
 ];
 
 export async function migrateSchema(): Promise<void> {

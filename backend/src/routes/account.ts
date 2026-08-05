@@ -366,7 +366,7 @@ accountRouter.delete("/", credentialLimit, async (req, res) => {
   const user = req.user!;
   const password = String(req.body?.password ?? "");
 
-  if (user.role === "admin" || user.role === "super_admin") {
+  if (user.role === "admin" || user.role === "super_admin" || user.role === "owner") {
     res.status(400).json({ error: "Admin accounts cannot be self-deleted. Contact the super admin." });
     return;
   }

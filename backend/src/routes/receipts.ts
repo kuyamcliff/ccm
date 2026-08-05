@@ -116,7 +116,7 @@ receiptsRouter.get("/takeaway/:orderNo", requireAuth, async (req, res) => {
 
   if (!row) { res.status(404).json({ error: "Receipt not found." }); return; }
 
-  const isAdmin = req.user!.role === "admin" || req.user!.role === "super_admin";
+  const isAdmin = req.user!.role === "admin" || req.user!.role === "super_admin" || req.user!.role === "owner";
   if (row.user_id !== req.user!.id && !isAdmin) {
     res.status(403).json({ error: "Not your receipt." });
     return;
@@ -325,7 +325,7 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
 
   if (!row) { res.status(404).json({ error: "Receipt not found." }); return; }
 
-  const isAdmin = req.user!.role === "admin" || req.user!.role === "super_admin";
+  const isAdmin = req.user!.role === "admin" || req.user!.role === "super_admin" || req.user!.role === "owner";
   if (row.user_id !== req.user!.id && !isAdmin) {
     res.status(403).json({ error: "Not your receipt." });
     return;
