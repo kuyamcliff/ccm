@@ -339,14 +339,29 @@
 .dish-grid {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: 68vw;
-  gap: var(--s-4);
+  /* Down from 68vw. At that width a card was most of the phone and the next
+     one barely peeked past the edge, which read as one big photo rather than
+     as a rail with more to scroll to. */
+  grid-auto-columns: 54vw;
+  gap: var(--s-3);
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   margin-inline: calc(var(--gutter) * -1);
   padding-inline: var(--gutter);
+  /*
+   * Scroll snap ignores a container's own padding when it lines an item up:
+   * `scroll-snap-align: start` on the first dish ("start" = the scrollport's
+   * bare edge, not its padded content edge) pulled the container's own
+   * scrollLeft to the padding value on load, which slid the padding out of
+   * view entirely — the first photo sat flush at the screen edge with no
+   * gutter, even though the padding was there in the computed style the whole
+   * time. `scroll-padding` is the property that actually controls snap
+   * targets, so it has to repeat the padding for the snap to land where the
+   * padding visually is.
+   */
+  scroll-padding-inline: var(--gutter);
   padding-bottom: var(--s-2);
   scrollbar-width: none;
 }
@@ -1631,8 +1646,9 @@ body:has(.booking__foot) .shell__main {
   gap: 0;
   align-items: flex-start;
   justify-content: center;
-  min-height: 3.25rem;
-  padding-block: var(--s-2);
+  min-height: var(--tap);
+  padding-inline: var(--s-3);
+  padding-block: var(--s-1);
 }
 
 .chip__sub {

@@ -123,6 +123,25 @@
       do, edit, delete and mark a table bookable, moved onto the panel that
       opens when a table is selected.
 
+## Done (2026-08-05, the scroll-snap gutter bug)
+- [x] Found the real cause of "the container is overflowing to the left" on
+      the booking day rail and the home page dish rail: `scroll-snap-align:
+      start` snaps to a container's bare scrollport, not its padded content
+      edge, so on load both rails silently scrolled themselves forward by
+      exactly the gutter width, sliding the padding out of view. The first
+      item then sat flush against the screen edge with zero visible margin,
+      even though the computed padding was correct the whole time. Fixed by
+      adding `scroll-padding-inline` (the property scroll snap actually
+      reads) alongside the existing `padding-inline` on both `.chip-rail` and
+      `.dish-grid`. Confirmed with `scrollLeft` measurements before and after:
+      16px stray offset on load, now 0.
+      Swept every other `overflow-x: auto` container in the stylesheets;
+      only these two combine snapping with a gutter bleed, so nothing else
+      had the same bug.
+- [x] Both rails also sized down: day chips lost about a third of their
+      padding and height, and home page dish cards went from 68vw to 54vw so
+      a third card now peeks into view as an invitation to keep scrolling.
+
 ## Waiting on the owner
 - [ ] **Set FRONTEND_URL on the API to the address people actually use.**
       Passkeys are bound for life to the domain they were created under, and

@@ -471,6 +471,13 @@
      the last one can still scroll clear of it. */
   margin-inline: calc(var(--gutter) * -1);
   padding-inline: var(--gutter);
+  /* Scroll snap reads the padding box as its target, not the padded content
+     edge, so without this the first chip's own `scroll-snap-align: start`
+     pulled the rail's scroll position forward by exactly the gutter on load —
+     it snapped the padding itself out of view, and the first chip sat flush
+     against the screen edge with no gutter, no matter what the padding said.
+     `scroll-padding` is the property scroll snap actually consults. */
+  scroll-padding-inline: var(--gutter);
   scrollbar-width: none;
 }
 
