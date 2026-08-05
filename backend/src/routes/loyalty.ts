@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db.js";
-import { requireAuth, requireAdmin } from "../auth.js";
+import { requireAuth, requireAdmin, requireScope } from "../auth.js";
 
 export const loyaltyRouter = Router();
 
@@ -13,7 +13,7 @@ loyaltyRouter.get("/", requireAuth, async (req, res) => {
 });
 
 // Admin: adjust points for a user
-loyaltyRouter.post("/adjust", requireAdmin, async (req, res) => {
+loyaltyRouter.post("/adjust", requireAdmin, requireScope("guests"), async (req, res) => {
   const userId = Number(req.body?.user_id);
   const amount = Number(req.body?.amount);
   const reason = String(req.body?.reason ?? "Admin adjustment").trim();

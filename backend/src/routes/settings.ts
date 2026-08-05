@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, transaction } from "../db.js";
-import { requireAuth, requireAdmin } from "../auth.js";
+import { requireAuth, requireAdmin, requireScope } from "../auth.js";
 import { DEPOSIT_KEY, LATE_CANCEL_KEY, MAX_PRICE_FCFA } from "../lib/pricing.js";
 
 export const settingsRouter = Router();
@@ -34,7 +34,7 @@ const MONEY_KEYS = new Set<string>([DEPOSIT_KEY, LATE_CANCEL_KEY]);
 
 const MAX_VALUE_LENGTH = 400;
 
-settingsRouter.patch("/", requireAuth, requireAdmin, async (req, res) => {
+settingsRouter.patch("/", requireAuth, requireAdmin, requireScope("settings"), async (req, res) => {
   const updates = req.body as Record<string, unknown>;
   if (!updates || typeof updates !== "object" || Array.isArray(updates)) {
     res.status(400).json({ error: "Expected an object of settings." });

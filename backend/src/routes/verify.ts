@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db.js";
-import { requireAuth, requireAdmin } from "../auth.js";
+import { requireAuth, requireAdmin, requireScope } from "../auth.js";
 import { audit } from "../lib/audit.js";
 import { rateLimit } from "../middleware/security.js";
 import { normaliseBookingCode, normaliseOrderCode } from "../lib/bookingCode.js";
@@ -11,7 +11,7 @@ import { verifyQrToken } from "../lib/qrToken.js";
  * reference by hand; both land here and get the same answer.
  */
 export const verifyRouter = Router();
-verifyRouter.use(requireAuth, requireAdmin);
+verifyRouter.use(requireAuth, requireAdmin, requireScope("door"));
 
 /**
  * Typing references by hand is a guessing oracle if left unbounded. The

@@ -55,6 +55,37 @@ function methodLabel(method: string | null): string {
   return method || "—";
 }
 
+/**
+ * The masthead line, read fresh on every request.
+ *
+ * A receipt used to be generated once and this line was typed into the source
+ * alongside it, which is exactly backwards: the address on a receipt is a fact
+ * about the restaurant, not about the code, and it has to track what the owner
+ * has set whenever the PDF is actually built. Nothing here is cached and
+ * nothing here is stored — every download, including one for a booking from
+ * last month, renders this line from whatever `site_settings` says right now.
+ * That is also what makes an "old" receipt current: there is no old file
+ * sitting on disk to go stale, only a fresh render on request.
+ */
+async function venueMasthead(): Promise<{ addressLine: string; phone: string | null }> {
+  const rows = (await db.prepare("SELECT key, value FROM site_settings").all()) as { key: string; value: string }[];
+  const settings: Record<string, string> = {};
+  for (const r of rows) settings[r.key] = r.value;
+
+  const street = settings.address?.trim() || "Razel Street, opposite P and T school";
+  const city = settings.city?.trim() || "Buea";
+  // Owners usually type the town into the street line already; appending it
+  // again is how a receipt ends up reading "Buea, Buea". Mirrors the join the
+  // customer site does in state/venue.tsx, so the two never disagree.
+  const joined = street.toLowerCase().includes(city.toLowerCase()) ? street : `${street}, ${city}`;
+
+  const rawPhone = settings.phone?.trim() || null;
+  const digits = rawPhone ? rawPhone.replace(/\D/g, "") : "";
+  const phone = digits.length === 9 ? `${digits[0]} ${digits.slice(1, 3)} ${digits.slice(3, 5)} ${digits.slice(5, 7)} ${digits.slice(7)}` : rawPhone;
+
+  return { addressLine: `${joined}, Cameroon`, phone };
+}
+
 function longDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
@@ -85,7 +116,7 @@ receiptsRouter.get("/takeaway/:orderNo", requireAuth, async (req, res) => {
 
   if (!row) { res.status(404).json({ error: "Receipt not found." }); return; }
 
-  const isAdmin = req.user!.role === "admin" || req.user!.role === "super_admin";
+  const isAdmin = req.user!.role === "admin" || req.user!.role === "super_admin" || req.user!.role === "owner";
   if (row.user_id !== req.user!.id && !isAdmin) {
     res.status(403).json({ error: "Not your receipt." });
     return;
@@ -108,6 +139,8 @@ receiptsRouter.get("/takeaway/:orderNo", requireAuth, async (req, res) => {
       color: { dark: "#14100f", light: "#ffffff" },
     });
   } catch { /* a missing QR is not worth failing the receipt over */ }
+
+  const venue = await venueMasthead();
 
   const chunks: Buffer[] = [];
   const doc = new PDFDocument({ size: "A4", margin: PAGE_MARGIN, info: { Title: `${code} receipt` } });
@@ -143,7 +176,7 @@ receiptsRouter.get("/takeaway/:orderNo", requireAuth, async (req, res) => {
   doc.fontSize(19).font("Helvetica-Bold").fillColor(INK)
     .text("CAM CHOP MEAT", L, PAGE_MARGIN, { characterSpacing: 1.2 });
   doc.fontSize(8.5).font("Helvetica").fillColor(MUTED)
-    .text("Razel Street, opposite P and T school, Buea, Cameroon", { characterSpacing: 0.3 });
+    .text(venue.addressLine, { characterSpacing: 0.3 });
 
   const badge = isPaid ? "PAID" : "UNPAID";
   const badgeColor = isPaid ? GREEN : BRAND;
@@ -253,7 +286,9 @@ receiptsRouter.get("/takeaway/:orderNo", requireAuth, async (req, res) => {
   rule(footTop);
   doc.fontSize(8.5).font("Helvetica").fillColor(MUTED)
     .text(
-      "Takeaway is paid before it is cooked. Bring this code to the counter at your collection time.",
+      venue.phone
+        ? `Takeaway is paid before it is cooked. Bring this code to the counter, or call ${venue.phone}.`
+        : "Takeaway is paid before it is cooked. Bring this code to the counter at your collection time.",
       L, footTop + 12, { width: CONTENT_WIDTH, align: "center" }
     );
   doc.fontSize(7.5).fillColor(FAINT)
@@ -290,7 +325,7 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
 
   if (!row) { res.status(404).json({ error: "Receipt not found." }); return; }
 
-  const isAdmin = req.user!.role === "admin" || req.user!.role === "super_admin";
+  const isAdmin = req.user!.role === "admin" || req.user!.role === "super_admin" || req.user!.role === "owner";
   if (row.user_id !== req.user!.id && !isAdmin) {
     res.status(403).json({ error: "Not your receipt." });
     return;
@@ -326,6 +361,8 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
   } catch {
     // A missing QR is not worth failing the whole receipt over.
   }
+
+  const venue = await venueMasthead();
 
   const chunks: Buffer[] = [];
   const doc = new PDFDocument({ size: "A4", margin: PAGE_MARGIN, info: { Title: `${code} receipt` } });
@@ -365,7 +402,7 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
   doc.fontSize(19).font("Helvetica-Bold").fillColor(INK)
     .text("CAM CHOP MEAT", L, PAGE_MARGIN, { characterSpacing: 1.2 });
   doc.fontSize(8.5).font("Helvetica").fillColor(MUTED)
-    .text("Razel Street, opposite P and T school, Buea, Cameroon", { characterSpacing: 0.3 });
+    .text(venue.addressLine, { characterSpacing: 0.3 });
 
   // Status badge, right-aligned against the masthead.
   const badge = isPaid ? "PAID" : "UNPAID";

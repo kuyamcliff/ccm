@@ -187,7 +187,7 @@ reviewsRouter.delete("/replies/:replyId", requireAuth, async (req, res) => {
   if (!reply) { res.status(404).json({ error: "Reply not found." }); return; }
 
   const u = req.user!;
-  if (reply.user_id !== u.id && u.role !== "admin" && u.role !== "super_admin") {
+  if (reply.user_id !== u.id && u.role !== "admin" && u.role !== "super_admin" && u.role !== "owner") {
     res.status(403).json({ error: "You can only delete your own replies." });
     return;
   }

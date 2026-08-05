@@ -1,9 +1,13 @@
 import { fetchFile, http } from "../http";
-import type { LoginOutcome, LoyaltyLedgerEntry, ReceiptSummary, User } from "./types";
+import type { AdminScope, LoginOutcome, LoyaltyLedgerEntry, ReceiptSummary, Role, User } from "./types";
 
 /** Sessions, the account, and everything filed under it. */
 export const meApi = {
   current: () => http.get<{ user: User }>("/api/auth/me").then((r) => r.user),
+
+  /** What the signed-in admin can still reach — used to grey out a locked nav
+      item, never to enforce anything. Every route behind it checks for itself. */
+  permissions: () => http.get<{ role: Role; scopes: Partial<Record<AdminScope, boolean>> }>("/api/access/mine"),
 
   /** Signing in with a passkey, in the same two steps as registering one. */
   passkeyLoginOptions: () => http.post<{ options: unknown; token: string }>("/api/auth/passkey/options", {}),

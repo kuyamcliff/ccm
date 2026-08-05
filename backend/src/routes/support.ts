@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { db } from "../db.js";
-import { requireAuth, requireAdmin } from "../auth.js";
+import { requireAuth, requireAdmin, requireScope } from "../auth.js";
 import { audit } from "../lib/audit.js";
 import { clientIp, rateLimit } from "../middleware/security.js";
 import {
@@ -243,7 +243,7 @@ supportRouter.get("/stream", async (req, res) => {
 });
 
 /** The admin's stream: every thread. */
-supportRouter.get("/admin/stream", requireAuth, requireAdmin, async (req, res) => {
+supportRouter.get("/admin/stream", requireAuth, requireAdmin, requireScope("messages"), async (req, res) => {
   const admin = { id: req.user!.id, name: req.user!.name };
   openStream(req, res);
 
@@ -405,7 +405,7 @@ supportRouter.post("/threads/:id/typing", typingLimit, async (req, res) => {
 
 /* ── Admin side ──────────────────────────────────────────────────────────── */
 
-supportRouter.get("/threads", requireAuth, requireAdmin, async (req, res) => {
+supportRouter.get("/threads", requireAuth, requireAdmin, requireScope("messages"), async (req, res) => {
   const status = String(req.query.status ?? "");
   const mine = req.query.mine === "1";
 
@@ -436,7 +436,7 @@ supportRouter.get("/threads", requireAuth, requireAdmin, async (req, res) => {
   });
 });
 
-supportRouter.get("/threads/:id", requireAuth, requireAdmin, async (req, res) => {
+supportRouter.get("/threads/:id", requireAuth, requireAdmin, requireScope("messages"), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad conversation id." }); return; }
 
@@ -473,7 +473,7 @@ supportRouter.get("/threads/:id", requireAuth, requireAdmin, async (req, res) =>
   });
 });
 
-supportRouter.post("/threads/:id/reply", requireAuth, requireAdmin, sendLimit, async (req, res) => {
+supportRouter.post("/threads/:id/reply", requireAuth, requireAdmin, requireScope("messages"), sendLimit, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad conversation id." }); return; }
 
@@ -517,7 +517,7 @@ supportRouter.post("/threads/:id/reply", requireAuth, requireAdmin, sendLimit, a
   res.status(201).json({ ok: true, message, messages: await messagesFor(id) });
 });
 
-supportRouter.post("/threads/:id/typing", requireAuth, requireAdmin, typingLimit, (req, res) => {
+supportRouter.post("/threads/:id/typing", requireAuth, requireAdmin, requireScope("messages"), typingLimit, (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad conversation id." }); return; }
 
@@ -528,7 +528,7 @@ supportRouter.post("/threads/:id/typing", requireAuth, requireAdmin, typingLimit
 });
 
 /** Who a thread can be handed to. */
-supportRouter.get("/admins", requireAuth, requireAdmin, async (req, res) => {
+supportRouter.get("/admins", requireAuth, requireAdmin, requireScope("messages"), async (req, res) => {
   const rows = (await db
     .prepare(
       `SELECT id, name, email, role FROM users
@@ -549,7 +549,7 @@ supportRouter.get("/admins", requireAuth, requireAdmin, async (req, res) => {
  * written into the transcript as a system line, visible to staff and to the
  * customer — a handover the customer cannot see reads as being ignored.
  */
-supportRouter.post("/threads/:id/forward", requireAuth, requireAdmin, async (req, res) => {
+supportRouter.post("/threads/:id/forward", requireAuth, requireAdmin, requireScope("messages"), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad conversation id." }); return; }
 
@@ -584,7 +584,7 @@ supportRouter.post("/threads/:id/forward", requireAuth, requireAdmin, async (req
   res.json({ ok: true, assigned_admin_id: target.id, assigned_admin_name: target.name });
 });
 
-supportRouter.patch("/threads/:id", requireAuth, requireAdmin, async (req, res) => {
+supportRouter.patch("/threads/:id", requireAuth, requireAdmin, requireScope("messages"), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad conversation id." }); return; }
 
@@ -602,7 +602,7 @@ supportRouter.patch("/threads/:id", requireAuth, requireAdmin, async (req, res) 
   res.json({ ok: true });
 });
 
-supportRouter.delete("/threads/:id", requireAuth, requireAdmin, async (req, res) => {
+supportRouter.delete("/threads/:id", requireAuth, requireAdmin, requireScope("messages"), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad conversation id." }); return; }
   await db.prepare("DELETE FROM support_threads WHERE id = ?").run(id);

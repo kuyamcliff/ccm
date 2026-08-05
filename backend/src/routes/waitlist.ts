@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db.js";
-import { requireAdmin } from "../auth.js";
+import { requireAdmin, requireScope } from "../auth.js";
 import { audit } from "../lib/audit.js";
 import { rateLimit } from "../middleware/security.js";
 import { notify } from "../lib/notify.js";
@@ -67,7 +67,7 @@ waitlistRouter.post("/", joinLimit, async (req, res) => {
 
 // ── Admin ────────────────────────────────────────────────
 
-waitlistRouter.get("/all", requireAdmin, async (_req, res) => {
+waitlistRouter.get("/all", requireAdmin, requireScope("queue"), async (_req, res) => {
   const entries = await db
     .prepare(
       "SELECT * FROM waitlist_entries WHERE joined_at >= now_text_offset(interval '-12 hours') ORDER BY joined_at ASC"
@@ -76,7 +76,7 @@ waitlistRouter.get("/all", requireAdmin, async (_req, res) => {
   res.json({ entries });
 });
 
-waitlistRouter.patch("/:id", requireAdmin, async (req, res) => {
+waitlistRouter.patch("/:id", requireAdmin, requireScope("queue"), async (req, res) => {
   const id = Number(req.params.id);
   const status = String(req.body?.status ?? "");
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad entry id." }); return; }
@@ -118,7 +118,7 @@ waitlistRouter.patch("/:id", requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
-waitlistRouter.delete("/clear", requireAdmin, async (req, res) => {
+waitlistRouter.delete("/clear", requireAdmin, requireScope("queue"), async (req, res) => {
   const info = await db
     .prepare("DELETE FROM waitlist_entries WHERE joined_at < now_text_offset(interval '-24 hours')")
     .run();

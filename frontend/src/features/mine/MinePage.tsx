@@ -108,6 +108,7 @@ function Bookings({ bookings }: { bookings: Resource<Booking[]> }) {
         <BookingPass
           key={booking.id}
           booking={booking}
+          compact
           actions={
             <>
               {booking.status === "pending_payment" ? (
@@ -314,17 +315,22 @@ export function MinePage() {
         <h1 className="display display--xl">Mine</h1>
       </div>
 
-      <div className="tabs" role="tablist" aria-label="What you have with us">
-        <button type="button" role="tab" className="tab" aria-selected={tab === "tables"} onClick={() => setTab("tables")}>
-          <Icon name="calendar" size={16} />
-          Tables
-          {tableCount > 0 ? <span className="tab__count">{tableCount}</span> : null}
-        </button>
-        <button type="button" role="tab" className="tab" aria-selected={tab === "orders"} onClick={() => setTab("orders")}>
-          <Icon name="bag" size={16} />
-          Takeaway orders
-          {orderCount > 0 ? <span className="tab__count">{orderCount}</span> : null}
-        </button>
+      <div className="row row--between row--wrap">
+        <div className="tabs" role="tablist" aria-label="What you have with us">
+          <button type="button" role="tab" className="tab" aria-selected={tab === "tables"} onClick={() => setTab("tables")}>
+            <Icon name="calendar" size={16} />
+            Tables
+            {tableCount > 0 ? <span className="tab__count">{tableCount}</span> : null}
+          </button>
+          <button type="button" role="tab" className="tab" aria-selected={tab === "orders"} onClick={() => setTab("orders")}>
+            <Icon name="bag" size={16} />
+            Takeaway orders
+            {orderCount > 0 ? <span className="tab__count">{orderCount}</span> : null}
+          </button>
+        </div>
+        <LinkButton to="/book" tone="primary" size="sm" icon="plus">
+          Book a table
+        </LinkButton>
       </div>
 
       <div style={{ marginTop: "var(--s-5)" }}>

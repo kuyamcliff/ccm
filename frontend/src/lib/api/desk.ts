@@ -1,5 +1,6 @@
 import { http } from "../http";
 import type {
+  AdminScope,
   AuditEntry,
   DeskAnalytics,
   DeskBooking,
@@ -22,7 +23,9 @@ import type {
   Offer,
   PromoCode,
   Review,
+  ScopeInfo,
   SiteSettings,
+  StaffAccess,
   VerifiedBooking,
   VerifiedOrder,
   VerifyResult,
@@ -197,5 +200,14 @@ export const deskApi = {
     list: () => http.get<{ pages: LegalPage[] }>("/api/legal").then((r) => r.pages),
     save: (slug: "terms" | "privacy", input: { title: string; body: string }) =>
       http.put<{ ok: true; page: LegalPage }>(`/api/legal/${slug}`, input),
+  },
+
+  /** Owner only. Who can reach what, and who answers only to the owner. */
+  access: {
+    list: () => http.get<{ scopes: ScopeInfo[]; staff: StaffAccess[] }>("/api/access"),
+    setScope: (id: number, scope: AdminScope, granted: boolean) =>
+      http.patch<{ ok: true }>(`/api/access/${id}/scope`, { scope, granted }),
+    setRole: (id: number, role: "admin" | "super_admin") =>
+      http.patch<{ ok: true }>(`/api/access/${id}/role`, { role }),
   },
 };

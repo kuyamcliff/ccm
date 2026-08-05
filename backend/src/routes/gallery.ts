@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db.js";
-import { requireAuth, requireAdmin } from "../auth.js";
+import { requireAuth, requireAdmin, requireScope } from "../auth.js";
 import { MediaError, storeOrValidateUrl } from "../lib/media.js";
 import { audit } from "../lib/audit.js";
 import { rateLimit } from "../middleware/security.js";
@@ -49,7 +49,7 @@ galleryRouter.post("/", requireAuth, uploadLimit, async (req, res) => {
 
 // ── Admin ────────────────────────────────────────────────
 
-galleryRouter.get("/pending", requireAdmin, async (_req, res) => {
+galleryRouter.get("/pending", requireAdmin, requireScope("gallery"), async (_req, res) => {
   const photos = await db
     .prepare(
       `SELECT g.*, u.name AS user_name
@@ -63,7 +63,7 @@ galleryRouter.get("/pending", requireAdmin, async (_req, res) => {
   res.json({ photos });
 });
 
-galleryRouter.get("/all", requireAdmin, async (_req, res) => {
+galleryRouter.get("/all", requireAdmin, requireScope("gallery"), async (_req, res) => {
   const photos = await db
     .prepare(
       `SELECT g.*, u.name AS user_name
@@ -76,7 +76,7 @@ galleryRouter.get("/all", requireAdmin, async (_req, res) => {
 });
 
 /** Admin uploads skip the approval queue and publish immediately. */
-galleryRouter.post("/admin-upload", requireAdmin, async (req, res) => {
+galleryRouter.post("/admin-upload", requireAdmin, requireScope("gallery"), async (req, res) => {
   const caption = String(req.body?.caption ?? "").trim().slice(0, 200);
 
   let image_url: string;
@@ -98,7 +98,7 @@ galleryRouter.post("/admin-upload", requireAdmin, async (req, res) => {
   res.status(201).json({ ok: true, photo });
 });
 
-galleryRouter.patch("/:id", requireAdmin, async (req, res) => {
+galleryRouter.patch("/:id", requireAdmin, requireScope("gallery"), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad photo id." }); return; }
 
@@ -121,7 +121,7 @@ galleryRouter.patch("/:id", requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
-galleryRouter.delete("/:id", requireAdmin, async (req, res) => {
+galleryRouter.delete("/:id", requireAdmin, requireScope("gallery"), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad photo id." }); return; }
   await db.prepare("DELETE FROM gallery_photos WHERE id = ?").run(id);

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { applyUpdate, db } from "../db.js";
 import type { SqlValue } from "../db.js";
-import { requireAdmin } from "../auth.js";
+import { requireAdmin, requireScope } from "../auth.js";
 
 export const offersRouter = Router();
 
@@ -12,7 +12,7 @@ offersRouter.get("/", async (_req, res) => {
   res.json({ offers });
 });
 
-offersRouter.get("/all", requireAdmin, async (_req, res) => {
+offersRouter.get("/all", requireAdmin, requireScope("offers"), async (_req, res) => {
   res.json({ offers: await db.prepare("SELECT * FROM offers ORDER BY sort_order, created_at DESC").all() });
 });
 
@@ -29,7 +29,7 @@ function safeIcon(raw: unknown): string {
   return (OFFER_ICONS as readonly string[]).includes(value) ? value : "flame";
 }
 
-offersRouter.post("/", requireAdmin, async (req, res) => {
+offersRouter.post("/", requireAdmin, requireScope("offers"), async (req, res) => {
   const { title, description, badge, icon, valid_until, sort_order } = req.body ?? {};
   if (!title) { res.status(400).json({ error: "Title required." }); return; }
   await db.prepare(
@@ -45,7 +45,7 @@ offersRouter.post("/", requireAdmin, async (req, res) => {
   res.status(201).json({ ok: true });
 });
 
-offersRouter.patch("/:id", requireAdmin, async (req, res) => {
+offersRouter.patch("/:id", requireAdmin, requireScope("offers"), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad offer id." }); return; }
 
@@ -66,7 +66,7 @@ offersRouter.patch("/:id", requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
-offersRouter.delete("/:id", requireAdmin, async (req, res) => {
+offersRouter.delete("/:id", requireAdmin, requireScope("offers"), async (req, res) => {
   await db.prepare("DELETE FROM offers WHERE id = ?").run(Number(req.params.id));
   res.json({ ok: true });
 });
