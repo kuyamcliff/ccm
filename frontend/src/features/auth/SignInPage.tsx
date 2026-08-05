@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { isTwoFactorChallenge } from "~/lib/api";
 import { ApiError } from "~/lib/http";
@@ -7,6 +7,8 @@ import { Button } from "~/ui/Button";
 import { TextField } from "~/ui/Field";
 import { Notice } from "~/ui/Feedback";
 import { useSession } from "~/state/session";
+import { Icon } from "~/ui/Icon";
+import { PasskeyError, passkeysSupported, platformAuthenticatorAvailable, signInWithPasskey } from "~/lib/passkey";
 
 /**
  * Signing in.
@@ -16,7 +18,7 @@ import { useSession } from "~/state/session";
  * short-lived and would be lost by a navigation.
  */
 export function SignInPage() {
-  const { user, signIn, completeTwoFactor } = useSession();
+  const { user, signIn, completeTwoFactor, refresh } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from ?? "/mine";
@@ -26,6 +28,30 @@ export function SignInPage() {
   const [challenge, setChallenge] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
+
+  /*
+   * The passkey button is only offered where it can work. A browser with no
+   * WebAuthn at all never sees it; one that has WebAuthn but no built-in
+   * authenticator still does, because a laptop can use the phone in your
+   * pocket over hybrid.
+   */
+  const [canPasskey, setCanPasskey] = useState(false);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+
+  useEffect(() => {
+    if (!passkeysSupported()) return;
+    let alive = true;
+    setCanPasskey(true);
+    void platformAuthenticatorAvailable().then((ok) => {
+      if (alive && !ok) {
+        /* Still offered, just not led with. Nothing to change today, but this
+           is where a quieter treatment would go. */
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const attempt = useAction(async () => {
     const outcome = await signIn(email.trim(), password);
@@ -120,6 +146,37 @@ export function SignInPage() {
               <Button type="submit" tone="primary" block size="lg" busy={attempt.busy}>
                 Sign in
               </Button>
+
+              {canPasskey ? (
+                <>
+                  <p className="auth__or">
+                    <span>or</span>
+                  </p>
+                  <Button
+                    type="button"
+                    tone="ghost"
+                    block
+                    busy={passkeyBusy}
+                    onClick={async () => {
+                      setProblem(null);
+                      setPasskeyBusy(true);
+                      try {
+                        await signInWithPasskey();
+                        await refresh();
+                        navigate(from, { replace: true });
+                      } catch (err) {
+                        if (err instanceof PasskeyError && err.cancelled) return;
+                        setProblem(err instanceof Error ? err.message : "That did not work.");
+                      } finally {
+                        setPasskeyBusy(false);
+                      }
+                    }}
+                  >
+                    <Icon name="key" size={18} />
+                    Use a passkey
+                  </Button>
+                </>
+              ) : null}
 
               <p className="auth__fine">
                 <Link to="/reset">Forgotten your password</Link>

@@ -86,6 +86,59 @@ const STEPS: Step[] = [
     name: "notifications.created_at index",
     sql: "CREATE INDEX IF NOT EXISTS notifications_created_idx ON notifications (created_at DESC)",
   },
+
+  /*
+   * Passkeys.
+   *
+   * The table already existed with somewhere to hang a name and a date, from
+   * when the account page could list and remove keys that nothing could yet
+   * create. What it never had was the credential itself. Every column below is
+   * added rather than assumed, and every one is nullable, because ALTER cannot
+   * add a NOT NULL column to a table that already has rows in it. The routes
+   * treat a row with no credential_id as unusable, which is what those rows
+   * always were.
+   */
+  {
+    name: "user_passkeys table",
+    sql: `CREATE TABLE IF NOT EXISTS user_passkeys (
+            id serial PRIMARY KEY,
+            user_id integer NOT NULL,
+            display_name text NOT NULL DEFAULT 'Passkey',
+            created_at text NOT NULL DEFAULT now_text()
+          )`,
+  },
+  {
+    name: "user_passkeys.credential_id",
+    sql: "ALTER TABLE user_passkeys ADD COLUMN IF NOT EXISTS credential_id text",
+  },
+  {
+    name: "user_passkeys.public_key",
+    sql: "ALTER TABLE user_passkeys ADD COLUMN IF NOT EXISTS public_key text",
+  },
+  /* The authenticator's own use count. A value that goes backwards is the
+     signature of a cloned key, which is the one thing this column is for. */
+  {
+    name: "user_passkeys.counter",
+    sql: "ALTER TABLE user_passkeys ADD COLUMN IF NOT EXISTS counter bigint NOT NULL DEFAULT 0",
+  },
+  /* How the browser reached the authenticator: internal, hybrid, usb. Passing
+     it back on the next sign-in is what lets a phone offer the right prompt
+     rather than asking which kind of key this is. */
+  {
+    name: "user_passkeys.transports",
+    sql: "ALTER TABLE user_passkeys ADD COLUMN IF NOT EXISTS transports text",
+  },
+  {
+    name: "user_passkeys.last_used_at",
+    sql: "ALTER TABLE user_passkeys ADD COLUMN IF NOT EXISTS last_used_at text",
+  },
+  /* A credential may exist once across the whole system. Sign-in looks a key up
+     by this alone, because a discoverable credential arrives with no hint of
+     who it belongs to. */
+  {
+    name: "user_passkeys.credential_id unique",
+    sql: "CREATE UNIQUE INDEX IF NOT EXISTS user_passkeys_credential_idx ON user_passkeys (credential_id)",
+  },
 ];
 
 export async function migrateSchema(): Promise<void> {

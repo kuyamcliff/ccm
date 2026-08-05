@@ -13,6 +13,28 @@ import {
 import { generateSecret, otpauthUri, verifyTotp } from "../lib/totp.js";
 import { rateLimit } from "../middleware/security.js";
 
+import { generateRegistrationOptions, verifyRegistrationResponse } from "@simplewebauthn/server";
+import type { AuthenticatorTransportFuture } from "@simplewebauthn/server";
+import {
+  PASSKEY_RP_NAME,
+  guessPasskeyName,
+  openCeremony,
+  passkeyOrigin,
+  passkeyRpId,
+  sealCeremony,
+} from "../lib/passkeys.js";
+
+/** Stored as JSON; a malformed value must not stop somebody signing in. */
+function parseTransports(raw: string | null): AuthenticatorTransportFuture[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as AuthenticatorTransportFuture[]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const accountRouter = Router();
 accountRouter.use(requireAuth);
 
@@ -229,10 +251,103 @@ accountRouter.post("/2fa/disable", credentialLimit, async (req, res) => {
 
 // ── Sessions ──────────────────────────────────────────────
 
+/*
+ * Adding a passkey, in two requests.
+ *
+ * The first hands the browser a challenge and the list of keys this account
+ * already has, so an authenticator that is already enrolled says so instead of
+ * quietly making a second credential for the same device. The second takes what
+ * the authenticator produced and checks it against the challenge we issued,
+ * the origin we expect and the RP ID the credential is bound to.
+ *
+ * `residentKey: required` is what makes these discoverable, which is the whole
+ * point: at the sign-in screen the browser can offer the key without anybody
+ * typing an email address first.
+ */
+accountRouter.post("/passkeys/options", async (req, res) => {
+  const existing = (await db
+    .prepare("SELECT credential_id, transports FROM user_passkeys WHERE user_id = ? AND credential_id IS NOT NULL")
+    .all(req.user!.id)) as { credential_id: string; transports: string | null }[];
+
+  const options = await generateRegistrationOptions({
+    rpName: PASSKEY_RP_NAME,
+    rpID: passkeyRpId,
+    userID: new TextEncoder().encode(String(req.user!.id)),
+    userName: req.user!.email,
+    userDisplayName: req.user!.name,
+    attestationType: "none",
+    excludeCredentials: existing.map((row) => ({
+      id: row.credential_id,
+      transports: parseTransports(row.transports),
+    })),
+    authenticatorSelection: {
+      residentKey: "required",
+      userVerification: "preferred",
+    },
+  });
+
+  res.json({ options, token: sealCeremony("register", options.challenge, req.user!.id) });
+});
+
+accountRouter.post("/passkeys/verify", async (req, res) => {
+  const token = String(req.body?.token ?? "");
+  const claims = openCeremony(token, "register");
+
+  if (!claims || claims.userId !== req.user!.id) {
+    res.status(400).json({ error: "That took too long. Try adding the passkey again." });
+    return;
+  }
+
+  let verification;
+  try {
+    verification = await verifyRegistrationResponse({
+      response: req.body?.response,
+      expectedChallenge: claims.challenge,
+      expectedOrigin: passkeyOrigin,
+      expectedRPID: passkeyRpId,
+      requireUserVerification: false,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "That passkey could not be checked." });
+    return;
+  }
+
+  if (!verification.verified || !verification.registrationInfo) {
+    res.status(400).json({ error: "That passkey could not be checked." });
+    return;
+  }
+
+  const { credential } = verification.registrationInfo;
+  const name = guessPasskeyName(req.get("user-agent"));
+
+  try {
+    await db
+      .prepare(
+        `INSERT INTO user_passkeys (user_id, credential_id, public_key, counter, transports, display_name)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        req.user!.id,
+        credential.id,
+        Buffer.from(credential.publicKey).toString("base64"),
+        credential.counter,
+        credential.transports ? JSON.stringify(credential.transports) : null,
+        name
+      );
+  } catch {
+    // The unique index caught a key that is already on an account.
+    res.status(409).json({ error: "That passkey is already saved." });
+    return;
+  }
+
+  res.json({ ok: true, display_name: name });
+});
+
 accountRouter.get("/passkeys", async (req, res) => {
   const passkeys = await db
     .prepare(
-      "SELECT id, display_name, created_at FROM user_passkeys WHERE user_id = ? ORDER BY created_at DESC"
+      `SELECT id, display_name, created_at, last_used_at FROM user_passkeys
+       WHERE user_id = ? AND credential_id IS NOT NULL ORDER BY created_at DESC`
     )
     .all(req.user!.id);
   res.json({ passkeys });

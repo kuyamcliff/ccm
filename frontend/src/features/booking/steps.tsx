@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { api, MAX_PARTY, SLOTS } from "~/lib/api";
 import type { DiningTable, MenuItem } from "~/lib/api";
@@ -9,7 +8,7 @@ import { Money } from "~/ui/Bits";
 import { Icon } from "~/ui/Icon";
 import { Notice, Skeleton } from "~/ui/Feedback";
 import { SlotPicker, isPastSlot } from "~/ui/SlotPicker";
-import { FloorPlan, tableState } from "./FloorPlan";
+import { FloorPlan } from "./FloorPlan";
 import { OrderStep, basketCount } from "./OrderStep";
 import type { Basket } from "./OrderStep";
 
@@ -137,13 +136,6 @@ export function WhoStep({
 
 /* ── 3. Where ──────────────────────────────────────────────────────────── */
 
-const ZONE_WORDS: Record<string, string> = {
-  inside: "Inside",
-  outside: "Outside",
-  terrace: "Terrace",
-  bar: "By the bar",
-};
-
 export function WhereStep({
   date,
   time,
@@ -163,25 +155,6 @@ export function WhereStep({
   tableId: number | null;
   onSelect: (id: number | null) => void;
 }) {
-  /* Grouped the way the room is talked about, and inside each group the free
-     tables come first so a guest is not scrolling past four they cannot have. */
-  const zones = useMemo(() => {
-    const map = new Map<string, DiningTable[]>();
-    for (const table of tables) {
-      const zone = table.zone || "inside";
-      const bucket = map.get(zone);
-      if (bucket) bucket.push(table);
-      else map.set(zone, [table]);
-    }
-    for (const bucket of map.values()) {
-      bucket.sort((a, b) => {
-        const rank = (t: DiningTable) => (tableState(t, null, party) === "free" ? 0 : 1);
-        return rank(a) - rank(b) || a.label.localeCompare(b.label, undefined, { numeric: true });
-      });
-    }
-    return [...map.entries()];
-  }, [tables, party]);
-
   if (loading) {
     return (
       <div className="stack">
@@ -198,6 +171,12 @@ export function WhereStep({
         Free for {longDate(date)} at {timeLabel(time)}, for {party}.
       </p>
 
+      {/*
+        The plan and nothing else. There was a list of tables under it as a
+        second way to choose; the owner wants the room shown as a room. Every
+        table on the plan is still a real button with a full accessible name
+        ("Table T4, seats 4, free"), so a screen reader walks the same set.
+      */}
       <div>
         <FloorPlan
           tables={tables}
@@ -214,58 +193,6 @@ export function WhereStep({
         </p>
       </div>
 
-      {/*
-        The reliable way to choose. The plan says where a table is; these rows
-        say which one, at a size a thumb cannot miss, and they are what a
-        screen reader walks through.
-      */}
-      <section className="stack stack--tight">
-        <h2 className="label">Or pick from the list</h2>
-
-        <button type="button" className="table-opt" aria-pressed={tableId === null} onClick={() => onSelect(null)}>
-          <span className="table-opt__mark">
-            <Icon name="users" size={18} />
-          </span>
-          <span className="table-opt__body">
-            <span className="table-opt__name">Any table</span>
-            <span className="fine muted">We will seat you where there is room on the night</span>
-          </span>
-          {tableId === null ? <Icon name="check" size={18} className="table-opt__tick" /> : null}
-        </button>
-
-        {zones.map(([zone, rows]) => (
-          <section key={zone} className="stack stack--tight">
-            <h3 className="fine faint" style={{ marginTop: "var(--s-3)" }}>
-              {ZONE_WORDS[zone] ?? zone}
-            </h3>
-            {rows.map((table) => {
-              const state = tableState(table, tableId, party);
-              const pickable = state === "free" || state === "picked";
-              return (
-                <button
-                  key={table.id}
-                  type="button"
-                  className="table-opt"
-                  data-state={state}
-                  disabled={!pickable}
-                  aria-pressed={state === "picked"}
-                  onClick={() => onSelect(state === "picked" ? null : table.id)}
-                >
-                  <span className="table-opt__mark mono">{table.label}</span>
-                  <span className="table-opt__body">
-                    <span className="table-opt__name">Table {table.label}</span>
-                    <span className="fine muted">
-                      Seats {table.capacity}
-                      {state === "taken" ? ", already taken" : state === "small" ? ", too small for your party" : ""}
-                    </span>
-                  </span>
-                  {state === "picked" ? <Icon name="check" size={18} className="table-opt__tick" /> : null}
-                </button>
-              );
-            })}
-          </section>
-        ))}
-      </section>
     </div>
   );
 }

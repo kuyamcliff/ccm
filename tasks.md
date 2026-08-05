@@ -96,7 +96,37 @@
 - [x] Swept all 23 customer and console pages at 320px and 390px: nothing
       overflows.
 
+## Done (2026-08-05, passkeys, density and the account page)
+- [x] **Passkeys work.** They could be listed and removed but never created:
+      there was no registration endpoint and no library. Added the WebAuthn
+      ceremonies on both sides. Credentials are discoverable, so signing in
+      needs no email first. The challenge is a short-lived signed token rather
+      than a server-side row, which is what makes it safe behind a host running
+      more than one instance. Driven in a real browser against a real Postgres
+      with a virtual authenticator: enrol, sign out, sign back in with the key
+      alone, session confirmed.
+- [x] The account page no longer overflows. It was a flex row of avatar, name,
+      email and a button with nothing allowed to shrink, and an email address
+      is one long unbreakable word. Checked at 320, 390 and 430 on all three
+      tabs with a fifty character address: clean.
+- [x] Overflow safety is now systemic rather than per component: long words
+      break, and flex and grid children are allowed to shrink.
+- [x] Takeaway is back on the select it had. The booking flow keeps the slot
+      grid. They no longer share a picker.
+- [x] Cards down again everywhere: the shared card, the console's stacked rows,
+      the empty states, the account. The console's row cards were the worst,
+      being one line per column.
+- [x] Both floor plans show the room and nothing else. The customer's table
+      list is gone; the console's table listing is gone and everything it could
+      do, edit, delete and mark a table bookable, moved onto the panel that
+      opens when a table is selected.
+
 ## Waiting on the owner
+- [ ] **Set FRONTEND_URL on the API to the address people actually use.**
+      Passkeys are bound for life to the domain they were created under, and
+      that domain is read from this variable. If it does not match the address
+      in the URL bar, no passkey will work and fixing it later will not rescue
+      the keys already made.
 - [ ] Real photographs of the food, uploaded in Desk > Menu.
       Everything else on the site is now real; the pictures are the last thing
       standing in for something. The redesign leans on them harder than v3 did:

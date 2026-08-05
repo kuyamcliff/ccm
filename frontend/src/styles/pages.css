@@ -2381,6 +2381,24 @@ body:has(.booking__foot) .shell__main {
   color: var(--red-hi);
 }
 
+/* A hairline with a word sitting in it, parting the password from the passkey.
+   Cheaper and quieter than two headings. */
+.auth__or {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  font-size: var(--t-fine);
+  color: var(--text-3);
+}
+
+.auth__or::before,
+.auth__or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
 .auth__switch {
   font-size: var(--t-small);
   color: var(--text-2);
@@ -2397,16 +2415,69 @@ body:has(.booking__foot) .shell__main {
 
 /* ══ Account ════════════════════════════════════════════════════════════════ */
 
+/*
+ * Who is signed in.
+ *
+ * This was a flex row of avatar, name, email and a sign out button, and an
+ * email address is one long unbreakable word. With nothing allowed to shrink,
+ * kuyamcliff@gmail.com pushed the row wider than a 320px screen and took the
+ * whole page sideways with it. The name and address now share a column that is
+ * allowed to shrink, and the address truncates rather than breaking the page.
+ */
 .account-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: var(--s-4);
-  margin-bottom: var(--s-6);
+  gap: var(--s-3);
+  margin-bottom: var(--s-4);
+}
+
+.account-head > div {
+  min-width: 0;
+}
+
+.account-head h1 {
+  font-size: var(--t-head);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-head p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The avatar does not need to be four rems to say whose account this is. */
+.account-head .avatar--lg {
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: var(--t-fine);
+}
+
+/*
+ * Anything a person is asked to copy out: an authenticator secret, a booking
+ * code in prose. Base32 has no spaces in it, so without this it is one word
+ * thirty two characters long.
+ */
+.secret {
+  display: block;
+  margin-top: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-sm);
+  background: var(--ink-850);
+  border: 1px solid var(--line);
+  font-family: var(--font-num);
+  font-size: var(--t-fine);
+  letter-spacing: 0.06em;
+  word-break: break-all;
+  color: var(--white);
 }
 
 .points {
   font-family: var(--font-display);
-  font-size: var(--t-display);
+  font-size: var(--t-title);
   font-weight: 800;
   letter-spacing: var(--track-display);
   line-height: 1;
@@ -2415,7 +2486,7 @@ body:has(.booking__foot) .shell__main {
 
 .qr {
   width: 100%;
-  max-width: 14rem;
+  max-width: 11rem;
   border-radius: var(--r-md);
   background: var(--white);
   padding: var(--s-3);

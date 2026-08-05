@@ -5,6 +5,12 @@ import type { LoginOutcome, LoyaltyLedgerEntry, ReceiptSummary, User } from "./t
 export const meApi = {
   current: () => http.get<{ user: User }>("/api/auth/me").then((r) => r.user),
 
+  /** Signing in with a passkey, in the same two steps as registering one. */
+  passkeyLoginOptions: () => http.post<{ options: unknown; token: string }>("/api/auth/passkey/options", {}),
+
+  passkeyLogin: (token: string, response: unknown) =>
+    http.post<{ user: User }>("/api/auth/passkey/verify", { token, response }).then((r) => r.user),
+
   register: (name: string, email: string, password: string) =>
     http.post<{ user: User }>("/api/auth/register", { name, email, password }).then((r) => r.user),
 
@@ -48,10 +54,19 @@ export const meApi = {
 
   passkeys: () =>
     http
-      .get<{ passkeys: { id: number; display_name: string; created_at: string }[] }>("/api/account/passkeys")
+      .get<{ passkeys: { id: number; display_name: string; created_at: string; last_used_at: string | null }[] }>(
+        "/api/account/passkeys"
+      )
       .then((r) => r.passkeys),
 
   removePasskey: (id: number) => http.del<{ ok: true }>(`/api/account/passkeys/${id}`),
+
+  /** Step one of adding a passkey: the challenge and what the browser needs. */
+  passkeyOptions: () => http.post<{ options: unknown; token: string }>("/api/account/passkeys/options", {}),
+
+  /** Step two: what the authenticator produced, checked against step one. */
+  passkeyVerify: (token: string, response: unknown) =>
+    http.post<{ ok: true; display_name: string }>("/api/account/passkeys/verify", { token, response }),
 
   receipts: () => http.get<{ receipts: ReceiptSummary[] }>("/api/account/receipts").then((r) => r.receipts),
 

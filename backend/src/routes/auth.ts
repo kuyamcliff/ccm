@@ -14,6 +14,10 @@ import {
 import { verifyTotp } from "../lib/totp.js";
 import { clientIp, rateLimit, resetLimit } from "../middleware/security.js";
 
+import { generateAuthenticationOptions, verifyAuthenticationResponse } from "@simplewebauthn/server";
+import type { AuthenticatorTransportFuture } from "@simplewebauthn/server";
+import { openCeremony, passkeyOrigin, passkeyRpId, sealCeremony } from "../lib/passkeys.js";
+
 export const authRouter = Router();
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -25,6 +29,17 @@ const BCRYPT_ROUNDS = 12;
  * cannot be distinguished by response timing.
  */
 const DUMMY_HASH = bcrypt.hashSync("password-that-matches-no-account", BCRYPT_ROUNDS);
+
+/** Stored as JSON; a malformed value must not stop somebody signing in. */
+function readTransports(raw: string | null): AuthenticatorTransportFuture[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as AuthenticatorTransportFuture[]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 type UserRow = {
   id: number;
@@ -177,6 +192,115 @@ authRouter.post("/login/2fa", twoFactorLimit, async (req, res) => {
   }
 
   resetLimit("login-2fa", clientIp(req));
+  res.cookie(COOKIE_NAME, signSession(row.id, row.session_version), sessionCookieOptions());
+  res.json({ user: publicUser(row) });
+});
+
+/*
+ * Signing in with a passkey.
+ *
+ * No email, no password, and deliberately no `allowCredentials`. The keys are
+ * discoverable, so the browser knows which ones belong to this site and offers
+ * them itself; sending a list would mean asking who the visitor is before they
+ * have proved anything, which is both a worse flow and a way of telling a
+ * stranger whether an address has an account.
+ *
+ * The credential arrives with its own ID and that is what identifies the
+ * account. Everything else is verified against the challenge we signed a moment
+ * earlier.
+ */
+authRouter.post("/passkey/options", async (_req, res) => {
+  const options = await generateAuthenticationOptions({
+    rpID: passkeyRpId,
+    userVerification: "preferred",
+  });
+
+  res.json({ options, token: sealCeremony("login", options.challenge) });
+});
+
+authRouter.post("/passkey/verify", loginIpLimit, async (req, res) => {
+  const claims = openCeremony(String(req.body?.token ?? ""), "login");
+  if (!claims) {
+    res.status(400).json({ error: "That took too long. Try again." });
+    return;
+  }
+
+  const credentialId = String(req.body?.response?.id ?? "");
+  if (!credentialId) {
+    res.status(400).json({ error: "That passkey could not be read." });
+    return;
+  }
+
+  const key = (await db
+    .prepare(
+      `SELECT k.id, k.user_id, k.credential_id, k.public_key, k.counter, k.transports
+       FROM user_passkeys k WHERE k.credential_id = ?`
+    )
+    .get(credentialId)) as
+    | { id: number; user_id: number; credential_id: string; public_key: string; counter: string | number; transports: string | null }
+    | undefined;
+
+  if (!key) {
+    res.status(401).json({ error: "That passkey is not on any account here." });
+    return;
+  }
+
+  let verification;
+  try {
+    verification = await verifyAuthenticationResponse({
+      response: req.body?.response,
+      expectedChallenge: claims.challenge,
+      expectedOrigin: passkeyOrigin,
+      expectedRPID: passkeyRpId,
+      requireUserVerification: false,
+      credential: {
+        id: key.credential_id,
+        publicKey: new Uint8Array(Buffer.from(key.public_key, "base64")),
+        counter: Number(key.counter) || 0,
+        transports: readTransports(key.transports),
+      },
+    });
+  } catch (err) {
+    res.status(401).json({ error: err instanceof Error ? err.message : "That passkey was not accepted." });
+    return;
+  }
+
+  if (!verification.verified) {
+    res.status(401).json({ error: "That passkey was not accepted." });
+    return;
+  }
+
+  const row = (await db
+    .prepare(
+      `SELECT id, name, email, role, banned_at, session_version, totp_enabled, totp_secret
+       FROM users WHERE id = ?`
+    )
+    .get(key.user_id)) as UserRow | undefined;
+
+  if (!row) {
+    res.status(401).json({ error: "That account no longer exists." });
+    return;
+  }
+  if (row.banned_at) {
+    res.status(403).json({ error: "Your account has been suspended." });
+    return;
+  }
+
+  /* The counter is the only defence against a cloned authenticator, and it is
+     only meaningful when the device actually keeps one. Plenty report zero
+     forever, so it is stored rather than enforced. */
+  await db
+    .prepare("UPDATE user_passkeys SET counter = ?, last_used_at = now_text() WHERE id = ?")
+    .run(verification.authenticationInfo.newCounter, key.id);
+
+  resetLimit("login-ip", clientIp(req));
+
+  /*
+   * A passkey is already two factors: something you have, and the fingerprint
+   * or PIN that unlocked it. It satisfies the second step rather than being
+   * sent round it, so an account with two step sign in on is not asked for a
+   * code it does not need.
+   */
   res.cookie(COOKIE_NAME, signSession(row.id, row.session_version), sessionCookieOptions());
   res.json({ user: publicUser(row) });
 });

@@ -161,8 +161,8 @@
    product is a list on the page itself, not a grid of boxes. */
 
 .card {
-  padding: var(--s-5);
-  border-radius: var(--r-lg);
+  padding: var(--s-4);
+  border-radius: var(--r-md);
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -173,7 +173,7 @@
 }
 
 .card--tight {
-  padding: var(--s-4);
+  padding: var(--s-3);
 }
 
 .card--hot {
@@ -202,9 +202,15 @@
 
 .card__title {
   font-family: var(--font-display);
-  font-size: var(--t-head);
+  font-size: var(--t-small);
   font-weight: 700;
   letter-spacing: var(--track-head);
+}
+
+/* A card is a container, not a paragraph. Its own stack runs tighter than the
+   page's so a section of five fields is not five screens tall. */
+.card.stack {
+  gap: var(--s-3);
 }
 
 /* ── Fields ───────────────────────────────────────────────────────────────
@@ -810,15 +816,15 @@
   flex-direction: column;
   align-items: center;
   gap: var(--s-3);
-  padding: var(--s-8) var(--s-5);
+  padding: var(--s-6) var(--s-4);
   text-align: center;
 }
 
 .empty__icon {
   display: grid;
   place-items: center;
-  width: 3.5rem;
-  height: 3.5rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: 50%;
   background: var(--ink-850);
   border: 1px solid var(--line);

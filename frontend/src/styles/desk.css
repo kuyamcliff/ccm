@@ -851,8 +851,8 @@
   }
 
   .desk-table .table tbody tr {
-    margin-bottom: var(--s-3);
-    padding: var(--s-2) var(--s-4) var(--s-3);
+    margin-bottom: var(--s-2);
+    padding: var(--s-2) var(--s-3);
     background: var(--ink-900);
     border: 1px solid var(--line);
     border-radius: var(--r-md);
@@ -868,12 +868,13 @@
      the right-hand half where it wrapped to five lines. */
   .desk-table .table td {
     display: grid;
-    grid-template-columns: 6.5rem 1fr;
+    grid-template-columns: 5rem 1fr;
     align-items: baseline;
-    gap: var(--s-3);
-    padding: var(--s-2) 0;
+    gap: var(--s-2);
+    padding: 0.2rem 0;
     border-bottom: 1px solid var(--line);
     text-align: start;
+    font-size: var(--t-fine);
   }
 
   .desk-table .table td:last-child {
@@ -884,7 +885,7 @@
   .desk-table .table td::before {
     content: attr(data-label);
     flex: none;
-    font-size: var(--t-label);
+    font-size: var(--t-micro);
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -907,7 +908,7 @@
   .desk-table .table td:not([data-label]) {
     display: flex;
     justify-content: flex-end;
-    padding-top: var(--s-3);
+    padding-top: var(--s-2);
   }
 
   .desk-table .table td:not([data-label]) .table__actions {

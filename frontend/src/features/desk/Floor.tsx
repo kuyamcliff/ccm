@@ -7,7 +7,7 @@ import { Icon } from "~/ui/Icon";
 import { SelectField, TextField } from "~/ui/Field";
 import { Sheet, useConfirm } from "~/ui/Sheet";
 import { useToast } from "~/state/toast";
-import { DeskPage, Loaded, Nothing, TableWrap, Toolbar } from "./parts";
+import { DeskPage, Loaded, Nothing } from "./parts";
 
 /**
  * The floor plan, as the owner arranges it.
@@ -18,10 +18,15 @@ import { DeskPage, Loaded, Nothing, TableWrap, Toolbar } from "./parts";
  * for scrolling, and a double tap is a zoom. On a phone the plan simply slid
  * about under the finger while nothing moved.
  *
- * So there are now three ways to move a table, and they suit different hands:
- * drag it, press the arrows under the plan, or use the arrow keys once it has
- * focus. The table below the plan remains the full keyboard route to
- * everything, which is what makes this screen usable without a steady hand.
+ * So there are three ways to move a table, and they suit different hands: drag
+ * it, press the arrows under the plan, or use the arrow keys once it has focus.
+ * The arrows are the route for anyone without a steady hand, and every table on
+ * the plan is a real button with a full accessible name.
+ *
+ * The view is the plan and nothing else. There used to be a table listing under
+ * it, which on a phone was six stacked cards under a picture of the same six
+ * tables. Everything it could do, edit, delete and mark a table bookable, is on
+ * the panel that opens when a table is selected.
  */
 
 const CANVAS = { width: 640, height: 560 };
@@ -326,8 +331,51 @@ export function Floor() {
                     />
                   </div>
 
+                  {/* Bookable or not, and delete. These lived in the table
+                      list under the plan; the list is gone, so they moved onto
+                      the table you have actually picked. */}
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={current.active === 1}
+                      onChange={async (event) => {
+                        try {
+                          await api.desk.tables.update(current.id, { active: event.target.checked });
+                          tables.reload();
+                        } catch (err) {
+                          toast.failed(err);
+                        }
+                      }}
+                    />
+                    <span className="switch__track" aria-hidden="true" />
+                    <span className="check__text fine">Bookable</span>
+                  </label>
+
                   <Button icon="edit" onClick={() => setEditing(current)}>
                     Edit
+                  </Button>
+                  <Button
+                    tone="danger"
+                    icon="trash"
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: `Delete table ${current.label}?`,
+                        body: "Bookings already on it keep their record, but nobody can book it again.",
+                        confirmLabel: "Delete",
+                      });
+                      if (!ok) return;
+                      try {
+                        await api.desk.tables.remove(current.id);
+                        setPicked(null);
+                        tables.reload();
+                        toast.done("Table deleted.");
+                      } catch (err) {
+                        toast.failed(err);
+                      }
+                    }}
+                  >
+                    Delete
                   </Button>
                   <Button tone="ghost" onClick={() => setPicked(null)}>
                     Done
@@ -400,84 +448,14 @@ export function Floor() {
 
               {rows.length === 0 ? <Nothing>No tables yet. Add the first one.</Nothing> : null}
 
-              <Toolbar>
-                <p className="fine faint">
-                  {rows.length} tables, {rows.reduce((sum, table) => sum + table.capacity, 0)} seats
-                </p>
-              </Toolbar>
-
-              <TableWrap>
-                <thead>
-                  <tr>
-                    <th>Table</th>
-                    <th className="table__num">Seats</th>
-                    <th>Area</th>
-                    <th className="table__num">Booked today</th>
-                    <th>In use</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((table) => (
-                    <tr key={table.id}>
-                      <td className="mono">{table.label}</td>
-                      <td className="table__num">{table.capacity}</td>
-                      <td>{table.zone}</td>
-                      <td className="table__num">{table.today_count}</td>
-                      <td>
-                        <label className="switch">
-                          <input
-                            type="checkbox"
-                            role="switch"
-                            checked={table.active === 1}
-                            onChange={async (event) => {
-                              try {
-                                await api.desk.tables.update(table.id, { active: event.target.checked });
-                                tables.reload();
-                              } catch (err) {
-                                toast.failed(err);
-                              }
-                            }}
-                          />
-                          <span className="switch__track" aria-hidden="true" />
-                          <span className="sr-only">Table {table.label} bookable</span>
-                        </label>
-                      </td>
-                      <td>
-                        <div className="table__actions">
-                          <IconButton
-                            name="edit"
-                            label={`Edit table ${table.label}`}
-                            size="sm"
-                            onClick={() => setEditing(table)}
-                          />
-                          <IconButton
-                            name="trash"
-                            label={`Delete table ${table.label}`}
-                            size="sm"
-                            onClick={async () => {
-                              const ok = await confirm({
-                                title: `Delete table ${table.label}?`,
-                                body: "Bookings already on it keep their record, but nobody can book it again.",
-                                confirmLabel: "Delete",
-                              });
-                              if (!ok) return;
-                              try {
-                                await api.desk.tables.remove(table.id);
-                                if (picked === table.id) setPicked(null);
-                                tables.reload();
-                                toast.done("Table deleted.");
-                              } catch (err) {
-                                toast.failed(err);
-                              }
-                            }}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </TableWrap>
+              {/* The plan is the whole view now. The table listing that used
+                  to sit here duplicated it, and on a phone it was six stacked
+                  cards under a picture of the same six tables. Selecting a
+                  table on the plan opens the controls above, which is where
+                  edit, delete and bookable now live. */}
+              <p className="plan-hint fine faint">
+                {rows.length} tables, {rows.reduce((sum, table) => sum + table.capacity, 0)} seats. Tap one to edit it.
+              </p>
             </>
           );
         }}

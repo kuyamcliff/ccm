@@ -1,16 +1,15 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "~/lib/api";
+import { api, SLOTS } from "~/lib/api";
 import { ApiError } from "~/lib/http";
-import { money, normalisePhone, timeLabel, todayISO } from "~/lib/format";
+import { money, normalisePhone, timeLabel } from "~/lib/format";
 import { useAction, useResource } from "~/lib/useResource";
 import { Button, IconButton, LinkButton } from "~/ui/Button";
-import { PhoneField, TextAreaField, TextField } from "~/ui/Field";
+import { PhoneField, SelectField, TextAreaField, TextField } from "~/ui/Field";
 import { Icon } from "~/ui/Icon";
 import { Photo } from "~/ui/Photo";
 import { Money } from "~/ui/Bits";
 import { EmptyState, ErrorState, Notice, SkeletonCards } from "~/ui/Feedback";
-import { SlotPicker, firstBookableSlot } from "~/ui/SlotPicker";
 import { useBasket } from "~/state/basket";
 import { useSession } from "~/state/session";
 import { useToast } from "~/state/toast";
@@ -31,9 +30,6 @@ import { MomoDialog } from "~/features/pay/MomoDialog";
  * more thing to lose on a dropped connection.
  */
 
-/** What the grill needs between an order landing and somebody arriving. */
-const PICKUP_LEAD_MINUTES = 30;
-
 interface Placed {
   order_no: string;
   total_fcfa: number;
@@ -49,11 +45,7 @@ export function OrderPage() {
 
   const [name, setName] = useState(user?.name ?? "");
   const [phone, setPhone] = useState("");
-  /* Collection is today, and the kitchen wants half an hour. Start on the
-     first slot that actually satisfies both rather than on a fixed one that
-     may already have gone. */
-  const today = todayISO();
-  const [pickup, setPickup] = useState<string | null>(() => firstBookableSlot(today, PICKUP_LEAD_MINUTES));
+  const [pickup, setPickup] = useState(SLOTS[8] ?? "13:00");
   const [note, setNote] = useState("");
   const [promo, setPromo] = useState("");
   const [gift, setGift] = useState("");
@@ -99,7 +91,7 @@ export function OrderPage() {
           <header className="pass__head">
             <span className="badge badge--good">Sent to the kitchen</span>
             <span className="pass__table">
-              Collect at <strong>{pickup ? timeLabel(pickup) : "the time you chose"}</strong>
+              Collect at <strong>{timeLabel(pickup)}</strong>
             </span>
           </header>
 
@@ -188,10 +180,6 @@ export function OrderPage() {
     }
     if (digits.length < 8) {
       setProblem("Enter a phone number we can reach you on.");
-      return;
-    }
-    if (!pickup) {
-      setProblem("Pick a collection time.");
       return;
     }
 
@@ -303,28 +291,22 @@ export function OrderPage() {
               required
             />
             {/*
-              The same picker the booking flow uses, not a native select. A
-              select holding twenty eight times is a spinning wheel on a phone
-              that you cannot scan, and it happily offered a slot that had
-              already gone.
+              A select, deliberately. The booking flow uses a grid of slots and
+              this does not: takeaway is one short errand and the owner asked
+              for the compact control back here.
             */}
-            <div className="field">
-              <span className="field__label">Collection time</span>
-              <span className="field__hint">
-                Give us at least half an hour. Everything is grilled fresh when you order it.
-              </span>
-              <SlotPicker
-                date={today}
-                value={pickup}
-                onChange={setPickup}
-                leadMinutes={PICKUP_LEAD_MINUTES}
-                emptyMessage={
-                  <Notice tone="warn">
-                    The kitchen has closed for today. Come back tomorrow, or call us to ask.
-                  </Notice>
-                }
-              />
-            </div>
+            <SelectField
+              label="Collection time"
+              hint="Give us at least half an hour. Everything is grilled fresh when you order it."
+              value={pickup}
+              onChange={(e) => setPickup(e.target.value)}
+            >
+              {SLOTS.map((slot) => (
+                <option key={slot} value={slot}>
+                  {slot}
+                </option>
+              ))}
+            </SelectField>
             <TextAreaField
               label="Anything to add"
               placeholder="Optional. Extra pepper, no onions, that sort of thing."
@@ -426,7 +408,7 @@ export function OrderPage() {
           open={paying}
           amountFcfa={placed.total_fcfa}
           title="Pay for your order"
-          what={`Order ${placed.order_no}, collect at ${pickup ? timeLabel(pickup) : ""}`.trim()}
+          what={`Order ${placed.order_no}, collect at ${timeLabel(pickup)}`}
           driver={{
             start: (input) =>
               api.orders.pay(placed.order_no, input.momoPhone).then((prompt) => ({

@@ -8,6 +8,7 @@ import { TextField } from "~/ui/Field";
 import { Avatar, Badge, Money } from "~/ui/Bits";
 import { EmptyState, ErrorState, Notice, Skeleton, SkeletonCards } from "~/ui/Feedback";
 import { Sheet, useConfirm } from "~/ui/Sheet";
+import { PasskeyError, addPasskey, passkeysSupported } from "~/lib/passkey";
 import { Icon } from "~/ui/Icon";
 import { useSession } from "~/state/session";
 import { useToast } from "~/state/toast";
@@ -157,6 +158,10 @@ function Security() {
   const [closing, setClosing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
+  const [addingKey, setAddingKey] = useState(false);
+  const [keyProblem, setKeyProblem] = useState<string | null>(null);
+  const canUsePasskeys = passkeysSupported();
+
   const begin = useAction(api.me.beginTwoFactor);
   const confirmCode = useAction(api.me.confirmTwoFactor);
   const disable = useAction(api.me.disableTwoFactor);
@@ -227,18 +232,54 @@ function Security() {
       </section>
 
       <section className="card stack">
-        <h2 className="card__title">Passkeys</h2>
+        <div className="row row--between">
+          <h2 className="card__title">Passkeys</h2>
+          {canUsePasskeys ? (
+            <Button
+              size="sm"
+              icon="key"
+              busy={addingKey}
+              onClick={async () => {
+                setAddingKey(true);
+                setKeyProblem(null);
+                try {
+                  const name = await addPasskey();
+                  passkeys.reload();
+                  toast.done(`${name} can now sign you in.`);
+                } catch (err) {
+                  /* Cancelling the fingerprint prompt is a decision, not an
+                     error, and it should not paint the screen red. */
+                  if (err instanceof PasskeyError && err.cancelled) return;
+                  setKeyProblem(err instanceof Error ? err.message : "That did not work.");
+                } finally {
+                  setAddingKey(false);
+                }
+              }}
+            >
+              Add
+            </Button>
+          ) : null}
+        </div>
+
+        <p className="fine muted">
+          Sign in with your fingerprint, your face or your screen lock instead of a password. The key stays on this
+          device.
+        </p>
+
+        {keyProblem ? <Notice tone="bad">{keyProblem}</Notice> : null}
+        {!canUsePasskeys ? <p className="fine faint">This browser does not support passkeys.</p> : null}
+
         {passkeys.loading ? (
           <Skeleton height="3rem" />
         ) : (passkeys.data ?? []).length === 0 ? (
-          <p className="fine muted">No passkeys on this account.</p>
+          <p className="fine muted">No passkeys on this account yet.</p>
         ) : (
           <ul className="stack stack--tight">
             {(passkeys.data ?? []).map((key) => (
               <li key={key.id} className="row row--between">
-                <span>
-                  <Icon name="key" size={16} /> {key.display_name}
-                  <span className="fine faint"> added {stampLabel(key.created_at)}</span>
+                <span className="fine">
+                  <Icon name="key" size={15} /> {key.display_name}
+                  <span className="faint"> added {stampLabel(key.created_at)}</span>
                 </span>
                 <Button
                   size="sm"
@@ -352,9 +393,10 @@ function Security() {
         {setup ? (
           <>
             <img className="qr" src={setup.qrDataUrl} alt="" width={200} height={200} />
-            <p className="fine faint">
-              Cannot scan? Type this key instead: <code className="mono">{setup.secret}</code>
-            </p>
+            <div className="fine faint">
+              Cannot scan? Type this key instead:
+              <code className="secret">{setup.secret}</code>
+            </div>
             <TextField
               label="Code from the app"
               value={code}

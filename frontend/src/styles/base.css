@@ -42,6 +42,29 @@ body {
   /* Stops the sideways wobble a phone gets when one element overshoots by a
      pixel. Genuinely wide content scrolls inside its own container instead. */
   overflow-x: hidden;
+  /*
+   * A long unbroken string is the single most common way a mobile layout ends
+   * up scrolling sideways, and this product is full of them: email addresses,
+   * order numbers, booking codes, a base32 authenticator secret. `break-word`
+   * only breaks a word that has nowhere else to go, so ordinary prose still
+   * wraps at spaces.
+   */
+  overflow-wrap: break-word;
+}
+
+/*
+ * The other half of the same problem.
+ *
+ * A flex or grid child defaults to `min-width: auto`, which means it refuses
+ * to shrink below its own content. One long word in a row of three therefore
+ * pushes the row wider than the screen instead of wrapping inside it. Every
+ * layout primitive here opts out.
+ */
+.row > *,
+.stack > *,
+.grid > *,
+.actions > * {
+  min-width: 0;
 }
 
 img,

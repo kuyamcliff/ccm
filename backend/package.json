@@ -11,6 +11,7 @@
     "momo:provision": "tsx scripts/momo-provision.ts"
   },
   "dependencies": {
+    "@simplewebauthn/server": "^13.3.2",
     "@types/compression": "^1.8.1",
     "@types/qrcode": "^1.5.6",
     "bcryptjs": "^3.0.2",

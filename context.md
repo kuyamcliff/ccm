@@ -88,6 +88,12 @@ flashes the wrong state at somebody.
 Navigation is a bottom tab bar on phones and a top bar from 60rem up. The staff
 console has its own chrome: a rail that becomes a drawer, denser type, tables.
 
+## Passkeys
+Real WebAuthn, `backend/src/lib/passkeys.ts` and `frontend/src/lib/passkey.ts`.
+Discoverable credentials, so the sign-in screen offers the key without an email
+being typed first. The relying party ID comes from `FRONTEND_URL` and must be
+the domain in the URL bar: a credential is bound to it permanently.
+
 ## Placeholders still in the code
 None. Every fact on the site (phone, address, hours, socials) comes from
 site_settings and is edited in the console under Details.
