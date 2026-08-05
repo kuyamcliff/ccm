@@ -21,12 +21,22 @@ const STATUS: Record<Booking["status"], { label: string; tone: string }> = {
   completed: { label: "Done", tone: "neutral" },
 };
 
-export function BookingPass({ booking, actions }: { booking: Booking; actions?: ReactNode }) {
+export function BookingPass({
+  booking,
+  actions,
+  compact,
+}: {
+  booking: Booking;
+  actions?: ReactNode;
+  /** The tighter cut used for the guest's own list, where several passes sit
+      one under the other and the full ticket size is more than the page needs. */
+  compact?: boolean;
+}) {
   const status = STATUS[booking.status];
   const dead = booking.status === "cancelled";
 
   return (
-    <article className={`pass${dead ? " pass--void" : ""}`}>
+    <article className={`pass${dead ? " pass--void" : ""}${compact ? " pass--compact" : ""}`}>
       <header className="pass__head">
         <span className={`badge badge--${status.tone}`}>{status.label}</span>
         {booking.table_label ? (

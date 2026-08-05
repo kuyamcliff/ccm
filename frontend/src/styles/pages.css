@@ -1373,6 +1373,37 @@
   background: var(--ink-600);
 }
 
+/* The guest's own list, where several of these sit stacked in a row and the
+   full ticket size is more page than the page needs. */
+.pass--compact {
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
+}
+
+.pass--compact .pass__when {
+  font-size: var(--t-small);
+}
+
+.pass--compact .pass__facts {
+  gap: var(--s-4);
+}
+
+.pass--compact .pass__big {
+  font-size: var(--t-small);
+}
+
+.pass--compact .pass__tear {
+  margin-inline: calc(var(--s-3) * -1);
+}
+
+.pass--compact .pass__code {
+  font-size: clamp(0.9375rem, 3.8vw, 1.0625rem);
+}
+
+.pass--compact .pass__actions {
+  padding-top: var(--s-2);
+}
+
 .pass__head {
   display: flex;
   align-items: center;
@@ -1649,6 +1680,10 @@ body:has(.booking__foot) .shell__main {
   min-height: var(--tap);
   padding-inline: var(--s-3);
   padding-block: var(--s-1);
+  /* The base chip is a full pill, right for one word. Two stacked lines of
+     text read oddly inside a pill, so this cuts the corner back to a curve
+     instead of a half-circle, without going as far as a square card. */
+  border-radius: var(--r-md);
 }
 
 .chip__sub {

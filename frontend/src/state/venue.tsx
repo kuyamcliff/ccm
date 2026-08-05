@@ -41,6 +41,13 @@ interface VenueValue {
   /** Charged for cancelling inside the hour, once a deposit has been paid. */
   lateCancelFcfa: number;
   loading: boolean;
+  /**
+   * Re-fetches from the server. The admin console and the public site share
+   * this one provider instance, so saving a change in the console does
+   * nothing on screen until whoever is looking at the site calls this —
+   * a client-side route change alone does not re-fetch anything.
+   */
+  refresh: () => void;
 }
 
 /**
@@ -56,7 +63,7 @@ function readMoney(raw: string | undefined, fallback: number): number {
 const VenueContext = createContext<VenueValue | null>(null);
 
 export function VenueProvider({ children }: { children: ReactNode }) {
-  const { data, loading } = useResource(() => api.site.settings(), []);
+  const { data, loading, reload } = useResource(() => api.site.settings(), []);
 
   const value = useMemo<VenueValue>(() => {
     const settings = data ?? {};
@@ -81,8 +88,9 @@ export function VenueProvider({ children }: { children: ReactNode }) {
       depositFcfa: readMoney(settings.booking_deposit_fcfa, DEFAULT_DEPOSIT_FCFA),
       lateCancelFcfa: readMoney(settings.late_cancel_fee_fcfa, DEFAULT_LATE_CANCEL_FCFA),
       loading,
+      refresh: reload,
     };
-  }, [data, loading]);
+  }, [data, loading, reload]);
 
   return <VenueContext.Provider value={value}>{children}</VenueContext.Provider>;
 }

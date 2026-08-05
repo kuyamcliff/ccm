@@ -6,6 +6,7 @@ import { Button } from "~/ui/Button";
 import { TextField } from "~/ui/Field";
 import { Notice } from "~/ui/Feedback";
 import { useToast } from "~/state/toast";
+import { useVenue } from "~/state/venue";
 import { DeskPage, Loaded } from "./parts";
 
 /**
@@ -42,6 +43,7 @@ const FIELDS: { key: keyof SiteSettings; label: string; hint?: string; type?: st
 
 export function Settings() {
   const settings = useResource(() => api.site.settings(), []);
+  const venue = useVenue();
   const toast = useToast();
   const [draft, setDraft] = useState<SiteSettings>({});
   const [busy, setBusy] = useState(false);
@@ -71,6 +73,7 @@ export function Settings() {
                 }
                 await api.desk.settings.update(changed);
                 settings.reload();
+                venue.refresh();
                 toast.done("Saved. The site shows it now.");
               } catch (err) {
                 toast.failed(err);
