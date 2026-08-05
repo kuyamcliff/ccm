@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { api } from "~/lib/api";
 import type { DeskTable, FixtureKind, FloorFixture } from "~/lib/api";
+import { timeLabel } from "~/lib/format";
 import { useResource } from "~/lib/useResource";
 import { Button, IconButton } from "~/ui/Button";
 import { Icon } from "~/ui/Icon";
@@ -10,23 +11,24 @@ import { useToast } from "~/state/toast";
 import { DeskPage, Loaded, Nothing } from "./parts";
 
 /**
- * The floor plan, as the owner arranges it.
+ * The floor, in two modes that are never both on.
  *
- * A table is selected first, then acted on. That order matters: dragging used
- * to be the only way to move one and a double click the only way to open it,
- * and a touchscreen has neither gesture to give — the browser claims a drag
- * for scrolling, and a double tap is a zoom. On a phone the plan simply slid
- * about under the finger while nothing moved.
+ * Looking is the default and it is the mode staff are in during service: the
+ * room as it stands tonight, every table carrying whoever booked it, and
+ * nothing on screen that can move a table by accident. A plan that rearranged
+ * itself under a thumb while somebody was checking who was on table four was
+ * the old design's real fault — arranging the room and reading the room are
+ * different jobs, minutes apart at most, and one of them happens while the
+ * restaurant is full.
  *
- * So there are three ways to move a table, and they suit different hands: drag
- * it, press the arrows under the plan, or use the arrow keys once it has focus.
- * The arrows are the route for anyone without a steady hand, and every table on
- * the plan is a real button with a full accessible name.
+ * Arranging is deliberate: press Edit layout, and only then does anything drag,
+ * nudge, delete or get added. The banner across the top is there so nobody is
+ * ever in that mode without knowing it.
  *
- * The view is the plan and nothing else. There used to be a table listing under
- * it, which on a phone was six stacked cards under a picture of the same six
- * tables. Everything it could do, edit, delete and mark a table bookable, is on
- * the panel that opens when a table is selected.
+ * It is built for a phone first. The plan fits the width it is given rather
+ * than scrolling sideways — a table off the edge is a table nobody checks —
+ * and every gesture has a button beside it, because a double tap is a zoom on
+ * a touchscreen and a drag is a scroll.
  */
 
 const CANVAS = { width: 640, height: 560 };
@@ -48,11 +50,37 @@ const FIXTURE_KINDS: { kind: FixtureKind; word: string }[] = [
 /** How far one press of an arrow moves a table, in canvas units. */
 const NUDGE = 12;
 
+/**
+ * What colour a table is, and why.
+ *
+ * Red is taken, here and on the guest's plan both, so the two pictures of one
+ * room can never disagree. A table nobody can book is grey rather than red:
+ * it is not spoken for, it is out of service, and telling staff otherwise
+ * sends them looking for a guest who does not exist.
+ */
+function tableState(table: DeskTable): "free" | "taken" | "blocked" {
+  if (!table.active) return "blocked";
+  return table.booking_id ? "taken" : "free";
+}
+
+/** The one line a table is worth when you are hovering over it. */
+function summarise(table: DeskTable): string {
+  if (!table.active) return "Not bookable";
+  if (!table.booking_id) return `Free · seats ${table.capacity}`;
+  const who = table.booking_name || "Guest";
+  return `${who} · ${timeLabel(table.booking_time ?? "")} · ${table.booking_party} people`;
+}
+
 export function Floor() {
   const tables = useResource(() => api.desk.tables.list(), []);
+  const fixtures = useResource(() => api.desk.fixtures.list(), []);
   const toast = useToast();
   const { confirm, confirmElement } = useConfirm();
   const plan = useRef<HTMLDivElement>(null);
+
+  /* Nothing on the plan moves until this says so. It is the whole point of the
+     redesign, so it is the first thing every handler checks. */
+  const [mode, setMode] = useState<"view" | "edit">("view");
 
   /* The drag lives in a ref as well as in state: the ref is what the pointer
      handlers read mid-gesture, where a state value would still be the one from
@@ -65,10 +93,15 @@ export function Floor() {
   /* Fixtures live beside the tables rather than in the same list: they are not
      bookable, they have a width and a height rather than a capacity, and the
      one thing that must never happen is a guest being offered the grill. */
-  const fixtures = useResource(() => api.desk.fixtures.list(), []);
   const [pickedFixture, setPickedFixture] = useState<number | null>(null);
   const fixtureDragRef = useRef<number | null>(null);
   const [addingFixture, setAddingFixture] = useState(false);
+
+  /* What the little card over the plan is describing. A mouse sets it by
+     hovering; a thumb sets it by tapping, which is the only reason it is state
+     rather than a CSS :hover rule. */
+  const [peek, setPeek] = useState<number | null>(null);
+  const [details, setDetails] = useState<number | null>(null);
 
   const [editing, setEditing] = useState<DeskTable | null>(null);
   const [adding, setAdding] = useState(false);
@@ -126,45 +159,123 @@ export function Floor() {
     void savePosition(table.id, next);
   }
 
+  function leaveEditing() {
+    setMode("view");
+    setPicked(null);
+    setPickedFixture(null);
+  }
+
+  const editingLayout = mode === "edit";
+
   return (
     <DeskPage
       title="Floor"
-      lead="Tap anything to pick it up, then drag it or use the arrows. Add the grill, the screen and the bar so guests can see the real room. This is the plan they book from."
+      lead={
+        editingLayout
+          ? "Drag anything to move it, or pick it up and use the arrows. Guests book from this plan."
+          : "The room as it stands tonight. Red is taken — tap a table to see who has it."
+      }
       actions={
-        <>
-          <Button icon="plus" onClick={() => setAddingFixture(true)}>
-            Add a fixture
+        editingLayout ? (
+          <Button tone="primary" icon="check" onClick={leaveEditing}>
+            Done
           </Button>
-          <Button
-            tone="primary"
-            icon="plus"
-            onClick={() => {
-              setDraft({ label: "", capacity: 4, zone: "main" });
-              setAdding(true);
-            }}
-          >
-            Add a table
-          </Button>
-        </>
+        ) : (
+          <>
+            <Button icon="refresh" tone="ghost" onClick={() => { tables.reload(); fixtures.reload(); }}>
+              Refresh
+            </Button>
+            <Button
+              icon="edit"
+              onClick={() => {
+                setMode("edit");
+                setPeek(null);
+              }}
+            >
+              Edit layout
+            </Button>
+          </>
+        )
       }
     >
       {confirmElement}
 
+      {editingLayout ? (
+        <div className="floor-banner" role="status">
+          <Icon name="edit" size={16} />
+          <span>
+            <strong>Editing the layout.</strong> Changes save as you make them.
+          </span>
+          <Button size="sm" tone="ghost" onClick={leaveEditing}>
+            Finish
+          </Button>
+        </div>
+      ) : null}
+
       <Loaded resource={tables} skeletonHeight="20rem">
         {(rows) => {
           const current = rows.find((row) => row.id === picked) ?? null;
+          const peeked = rows.find((row) => row.id === peek) ?? null;
+          const shown = rows.find((row) => row.id === details) ?? null;
+          const booked = rows.filter((row) => row.booking_id).length;
+          const seats = rows.reduce((sum, table) => sum + table.capacity, 0);
 
           return (
             <>
+              {!editingLayout ? (
+                <div className="floor-stats">
+                  <span>
+                    <strong>{rows.length}</strong> tables
+                  </span>
+                  <span>
+                    <strong>{seats}</strong> seats
+                  </span>
+                  <span data-hot={booked > 0}>
+                    <strong>{booked}</strong> booked tonight
+                  </span>
+                </div>
+              ) : null}
+
               <div className="plan-frame">
                 <div
                   ref={plan}
-                  className="plan plan--edit"
+                  className={`plan${editingLayout ? " plan--edit" : ""}`}
                   style={{ aspectRatio: `${CANVAS.width} / ${CANVAS.height}` }}
+                  onPointerDown={(event) => {
+                    // A press on bare floor clears whatever was selected.
+                    if (event.target === event.currentTarget) {
+                      setPeek(null);
+                      setPicked(null);
+                      setPickedFixture(null);
+                    }
+                  }}
                 >
                   {(fixtures.data?.fixtures ?? []).map((fixture) => {
                     const word =
                       fixture.label || FIXTURE_KINDS.find((k) => k.kind === fixture.kind)?.word || fixture.kind;
+
+                    /* Scenery when nobody is arranging the room: it takes no
+                       pointer and no tab stop, so it cannot swallow a tap meant
+                       for the table behind it. */
+                    if (!editingLayout) {
+                      return (
+                        <div
+                          key={`f${fixture.id}`}
+                          className="plan__fixture"
+                          data-kind={fixture.kind}
+                          aria-hidden="true"
+                          style={{
+                            left: `${(fixture.pos_x / CANVAS.width) * 100}%`,
+                            top: `${(fixture.pos_y / CANVAS.height) * 100}%`,
+                            width: `${(fixture.width / CANVAS.width) * 100}%`,
+                            height: `${(fixture.height / CANVAS.height) * 100}%`,
+                          }}
+                        >
+                          <span className="plan__fixture-word">{word}</span>
+                        </div>
+                      );
+                    }
+
                     return (
                       <button
                         key={`f${fixture.id}`}
@@ -231,231 +342,342 @@ export function Floor() {
                     );
                   })}
 
-                  {rows.map((table) => (
-                    <button
-                      key={table.id}
-                      type="button"
-                      className="plan__table"
-                      data-state={table.active ? "free" : "blocked"}
-                      data-zone={table.zone}
-                      data-picked={picked === table.id}
-                      data-dragging={dragging === table.id}
-                      aria-pressed={picked === table.id}
+                  {rows.map((table) => {
+                    const state = tableState(table);
+                    return (
+                      <button
+                        key={table.id}
+                        type="button"
+                        className="plan__table"
+                        data-state={state}
+                        data-zone={table.zone}
+                        data-picked={editingLayout ? picked === table.id : peek === table.id}
+                        data-dragging={dragging === table.id}
+                        aria-pressed={editingLayout ? picked === table.id : peek === table.id}
+                        style={{
+                          left: `${(table.pos_x / CANVAS.width) * 100}%`,
+                          top: `${(table.pos_y / CANVAS.height) * 100}%`,
+                          width: `${Math.min(18, 8 + table.capacity * 1.6)}%`,
+                        }}
+                        /* A mouse gets the card by hovering. A thumb has no
+                           hover to give, so a tap does the same thing below. */
+                        onPointerEnter={(event) => {
+                          if (event.pointerType === "mouse" && !editingLayout) setPeek(table.id);
+                        }}
+                        onPointerLeave={(event) => {
+                          if (event.pointerType === "mouse" && !editingLayout) {
+                            setPeek((now) => (now === table.id ? null : now));
+                          }
+                        }}
+                        onPointerDown={(event) => {
+                          if (!editingLayout) return;
+                          event.currentTarget.setPointerCapture(event.pointerId);
+                          dragRef.current = table.id;
+                          movedRef.current = false;
+                          setDragging(table.id);
+                          setPicked(table.id);
+                          setPickedFixture(null);
+                        }}
+                        onPointerMove={(event) => {
+                          if (!editingLayout || dragRef.current !== table.id) return;
+                          const position = toPlan(event.clientX, event.clientY);
+                          if (!position) return;
+                          movedRef.current = true;
+                          tables.set((rowsNow) =>
+                            (rowsNow ?? []).map((row) => (row.id === table.id ? { ...row, ...position } : row))
+                          );
+                        }}
+                        onPointerUp={(event) => {
+                          if (!editingLayout || dragRef.current !== table.id) return;
+                          dragRef.current = null;
+                          setDragging(null);
+                          /* A press that never moved is a selection, not a move —
+                             saving here would write the position it already had. */
+                          if (!movedRef.current) return;
+                          const position = toPlan(event.clientX, event.clientY);
+                          if (position) void savePosition(table.id, position);
+                        }}
+                        onPointerCancel={() => {
+                          dragRef.current = null;
+                          setDragging(null);
+                        }}
+                        onClick={() => {
+                          if (editingLayout) return;
+                          setPeek((now) => (now === table.id ? null : table.id));
+                        }}
+                        onDoubleClick={() => {
+                          if (editingLayout) return;
+                          setDetails(table.id);
+                        }}
+                        onKeyDown={(event) => {
+                          if (!editingLayout) {
+                            if (event.key === "Enter" || event.key === " ") return;
+                            return;
+                          }
+                          const step: Record<string, [number, number]> = {
+                            ArrowUp: [0, -NUDGE],
+                            ArrowDown: [0, NUDGE],
+                            ArrowLeft: [-NUDGE, 0],
+                            ArrowRight: [NUDGE, 0],
+                          };
+                          const move = step[event.key];
+                          if (!move) return;
+                          event.preventDefault();
+                          setPicked(table.id);
+                          nudge(table, move[0], move[1]);
+                        }}
+                        aria-label={
+                          editingLayout
+                            ? `Table ${table.label}, seats ${table.capacity}, ${table.zone}. Selected tables move with the arrow keys.`
+                            : `Table ${table.label}, ${summarise(table)}`
+                        }
+                      >
+                        <span className="plan__label">{table.label}</span>
+                        <span className="plan__seats mono">{table.capacity}</span>
+                      </button>
+                    );
+                  })}
+
+                  {/* The card. Sits above the table it describes, or below it
+                      when the table is near the top and there is no room. */}
+                  {peeked && !editingLayout ? (
+                    <div
+                      className="plan-peek"
+                      data-below={peeked.pos_y < CANVAS.height * 0.28}
                       style={{
-                        left: `${(table.pos_x / CANVAS.width) * 100}%`,
-                        top: `${(table.pos_y / CANVAS.height) * 100}%`,
-                        width: `${Math.min(18, 8 + table.capacity * 1.6)}%`,
+                        left: `${(peeked.pos_x / CANVAS.width) * 100}%`,
+                        top: `${(peeked.pos_y / CANVAS.height) * 100}%`,
                       }}
-                      onPointerDown={(event) => {
-                        event.currentTarget.setPointerCapture(event.pointerId);
-                        dragRef.current = table.id;
-                        movedRef.current = false;
-                        setDragging(table.id);
-                        setPicked(table.id);
-                        setPickedFixture(null);
-                      }}
-                      onPointerMove={(event) => {
-                        if (dragRef.current !== table.id) return;
-                        const position = toPlan(event.clientX, event.clientY);
-                        if (!position) return;
-                        movedRef.current = true;
-                        tables.set((rowsNow) =>
-                          (rowsNow ?? []).map((row) => (row.id === table.id ? { ...row, ...position } : row))
-                        );
-                      }}
-                      onPointerUp={(event) => {
-                        if (dragRef.current !== table.id) return;
-                        dragRef.current = null;
-                        setDragging(null);
-                        /* A press that never moved is a selection, not a move —
-                           saving here would write the position it already had. */
-                        if (!movedRef.current) return;
-                        const position = toPlan(event.clientX, event.clientY);
-                        if (position) void savePosition(table.id, position);
-                      }}
-                      onPointerCancel={() => {
-                        dragRef.current = null;
-                        setDragging(null);
-                      }}
-                      onKeyDown={(event) => {
-                        const step: Record<string, [number, number]> = {
-                          ArrowUp: [0, -NUDGE],
-                          ArrowDown: [0, NUDGE],
-                          ArrowLeft: [-NUDGE, 0],
-                          ArrowRight: [NUDGE, 0],
-                        };
-                        const move = step[event.key];
-                        if (!move) return;
-                        event.preventDefault();
-                        setPicked(table.id);
-                        nudge(table, move[0], move[1]);
-                      }}
-                      aria-label={`Table ${table.label}, seats ${table.capacity}, ${table.zone}. Selected tables move with the arrow keys.`}
+                      role="status"
                     >
-                      <span className="plan__label">{table.label}</span>
-                      <span className="plan__seats mono">{table.capacity}</span>
-                    </button>
-                  ))}
+                      <p className="plan-peek__top">
+                        <strong className="mono">{peeked.label}</strong>
+                        <span className="plan-peek__dot" data-state={tableState(peeked)} aria-hidden="true" />
+                        <span>{peeked.active ? (peeked.booking_id ? "Taken" : "Free") : "Off"}</span>
+                      </p>
+                      {peeked.booking_id ? (
+                        <>
+                          <p className="plan-peek__who">{peeked.booking_name || "Guest"}</p>
+                          <p className="plan-peek__line">
+                            {timeLabel(peeked.booking_time ?? "")} · {peeked.booking_party} of {peeked.capacity}
+                            {peeked.booking_checked_in ? " · here" : ""}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="plan-peek__line">Seats {peeked.capacity}</p>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
-              <p className="plan-hint">
-                <Icon name="arrow-right" size={14} /> Scroll the plan sideways to see the whole room.
-              </p>
+              {/* ── Looking ──────────────────────────────────────────────── */}
+              {!editingLayout ? (
+                <>
+                  <p className="plan-legend fine">
+                    <span data-state="free" /> Free
+                    <span data-state="taken" /> Taken
+                    <span data-state="blocked" /> Not bookable
+                  </p>
 
-              {current ? (
-                <div className="plan-tools">
-                  <div className="plan-tools__who">
-                    <strong className="mono">{current.label}</strong>
-                    <span className="fine faint">
-                      seats {current.capacity} · {current.zone}
-                    </span>
-                  </div>
-
-                  <div className="plan-tools__pad">
-                    <IconButton name="arrow-up" label={`Move ${current.label} up`} onClick={() => nudge(current, 0, -NUDGE)} />
-                    <IconButton
-                      name="arrow-left"
-                      label={`Move ${current.label} left`}
-                      onClick={() => nudge(current, -NUDGE, 0)}
-                    />
-                    <IconButton
-                      name="arrow-down"
-                      label={`Move ${current.label} down`}
-                      onClick={() => nudge(current, 0, NUDGE)}
-                    />
-                    <IconButton
-                      name="arrow-right"
-                      label={`Move ${current.label} right`}
-                      onClick={() => nudge(current, NUDGE, 0)}
-                    />
-                  </div>
-
-                  {/* Bookable or not, and delete. These lived in the table
-                      list under the plan; the list is gone, so they moved onto
-                      the table you have actually picked. */}
-                  <label className="switch">
-                    <input
-                      type="checkbox"
-                      role="switch"
-                      checked={current.active === 1}
-                      onChange={async (event) => {
-                        try {
-                          await api.desk.tables.update(current.id, { active: event.target.checked });
-                          tables.reload();
-                        } catch (err) {
-                          toast.failed(err);
-                        }
-                      }}
-                    />
-                    <span className="switch__track" aria-hidden="true" />
-                    <span className="check__text fine">Bookable</span>
-                  </label>
-
-                  <Button icon="edit" onClick={() => setEditing(current)}>
-                    Edit
-                  </Button>
-                  <Button
-                    tone="danger"
-                    icon="trash"
-                    onClick={async () => {
-                      const ok = await confirm({
-                        title: `Delete table ${current.label}?`,
-                        body: "Bookings already on it keep their record, but nobody can book it again.",
-                        confirmLabel: "Delete",
-                      });
-                      if (!ok) return;
-                      try {
-                        await api.desk.tables.remove(current.id);
-                        setPicked(null);
-                        tables.reload();
-                        toast.done("Table deleted.");
-                      } catch (err) {
-                        toast.failed(err);
-                      }
-                    }}
-                  >
-                    Delete
-                  </Button>
-                  <Button tone="ghost" onClick={() => setPicked(null)}>
-                    Done
-                  </Button>
-                </div>
+                  {peeked ? (
+                    <div className="floor-bar">
+                      <div className="floor-bar__who">
+                        <strong className="mono">{peeked.label}</strong>
+                        <span className="fine faint">{summarise(peeked)}</span>
+                      </div>
+                      <Button size="sm" icon="info" onClick={() => setDetails(peeked.id)}>
+                        Details
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="plan-hint fine faint">
+                      <Icon name="info" size={14} /> Tap a table for a quick look, twice for everything.
+                    </p>
+                  )}
+                </>
               ) : null}
 
-              {(() => {
-                const fixture = (fixtures.data?.fixtures ?? []).find((f) => f.id === pickedFixture);
-                if (!fixture) return null;
-                const word =
-                  fixture.label || FIXTURE_KINDS.find((k) => k.kind === fixture.kind)?.word || fixture.kind;
-                return (
-                  <div className="plan-tools">
-                    <div className="plan-tools__who">
-                      <strong>{word}</strong>
-                      <span className="fine faint">
-                        {fixture.width} × {fixture.height}
-                      </span>
-                    </div>
-
-                    <div className="plan-tools__pad">
-                      <IconButton name="arrow-up" label={`Move ${word} up`} onClick={() => nudgeFixture(fixture, { pos_y: fixture.pos_y - NUDGE })} />
-                      <IconButton name="arrow-left" label={`Move ${word} left`} onClick={() => nudgeFixture(fixture, { pos_x: fixture.pos_x - NUDGE })} />
-                      <IconButton name="arrow-down" label={`Move ${word} down`} onClick={() => nudgeFixture(fixture, { pos_y: fixture.pos_y + NUDGE })} />
-                      <IconButton name="arrow-right" label={`Move ${word} right`} onClick={() => nudgeFixture(fixture, { pos_x: fixture.pos_x + NUDGE })} />
-                    </div>
-
-                    <div className="row" style={{ gap: "var(--s-1)" }}>
-                      <IconButton
-                        name="minus"
-                        label={`Make ${word} smaller`}
-                        onClick={() => nudgeFixture(fixture, { width: fixture.width - 20, height: fixture.height - 20 })}
-                      />
-                      <IconButton
-                        name="plus"
-                        label={`Make ${word} bigger`}
-                        onClick={() => nudgeFixture(fixture, { width: fixture.width + 20, height: fixture.height + 20 })}
-                      />
-                    </div>
-
+              {/* ── Arranging ────────────────────────────────────────────── */}
+              {editingLayout ? (
+                <>
+                  <div className="floor-add">
+                    <Button icon="plus" onClick={() => setAddingFixture(true)}>
+                      Add a fixture
+                    </Button>
                     <Button
-                      tone="danger"
-                      icon="trash"
-                      onClick={async () => {
-                        const ok = await confirm({
-                          title: `Remove the ${word.toLowerCase()}?`,
-                          body: "It only stops being drawn on the plan. No booking is affected.",
-                          confirmLabel: "Remove",
-                        });
-                        if (!ok) return;
-                        try {
-                          await api.desk.fixtures.remove(fixture.id);
-                          setPickedFixture(null);
-                          fixtures.reload();
-                          toast.done("Removed.");
-                        } catch (err) {
-                          toast.failed(err);
-                        }
+                      tone="primary"
+                      icon="plus"
+                      onClick={() => {
+                        setDraft({ label: "", capacity: 4, zone: "main" });
+                        setAdding(true);
                       }}
                     >
-                      Remove
-                    </Button>
-                    <Button tone="ghost" onClick={() => setPickedFixture(null)}>
-                      Done
+                      Add a table
                     </Button>
                   </div>
-                );
-              })()}
 
-              {rows.length === 0 ? <Nothing>No tables yet. Add the first one.</Nothing> : null}
+                  {current ? (
+                    <div className="plan-tools">
+                      <div className="plan-tools__who">
+                        <strong className="mono">{current.label}</strong>
+                        <span className="fine faint">
+                          Seats {current.capacity} · {zoneWord(current.zone)}
+                        </span>
+                      </div>
 
-              {/* The plan is the whole view now. The table listing that used
-                  to sit here duplicated it, and on a phone it was six stacked
-                  cards under a picture of the same six tables. Selecting a
-                  table on the plan opens the controls above, which is where
-                  edit, delete and bookable now live. */}
-              <p className="plan-hint fine faint">
-                {rows.length} tables, {rows.reduce((sum, table) => sum + table.capacity, 0)} seats. Tap one to edit it.
-              </p>
+                      <div className="plan-tools__pad">
+                        <IconButton name="arrow-up" label={`Move ${current.label} up`} onClick={() => nudge(current, 0, -NUDGE)} />
+                        <IconButton
+                          name="arrow-left"
+                          label={`Move ${current.label} left`}
+                          onClick={() => nudge(current, -NUDGE, 0)}
+                        />
+                        <IconButton
+                          name="arrow-down"
+                          label={`Move ${current.label} down`}
+                          onClick={() => nudge(current, 0, NUDGE)}
+                        />
+                        <IconButton
+                          name="arrow-right"
+                          label={`Move ${current.label} right`}
+                          onClick={() => nudge(current, NUDGE, 0)}
+                        />
+                      </div>
+
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          role="switch"
+                          checked={current.active === 1}
+                          onChange={async (event) => {
+                            try {
+                              await api.desk.tables.update(current.id, { active: event.target.checked });
+                              tables.reload();
+                            } catch (err) {
+                              toast.failed(err);
+                            }
+                          }}
+                        />
+                        <span className="switch__track" aria-hidden="true" />
+                        <span className="check__text fine">Bookable</span>
+                      </label>
+
+                      <Button icon="edit" onClick={() => setEditing(current)}>
+                        Edit
+                      </Button>
+                      <Button
+                        tone="danger"
+                        icon="trash"
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: `Delete table ${current.label}?`,
+                            body: "Bookings already on it keep their record, but nobody can book it again.",
+                            confirmLabel: "Delete",
+                          });
+                          if (!ok) return;
+                          try {
+                            await api.desk.tables.remove(current.id);
+                            setPicked(null);
+                            tables.reload();
+                            toast.done("Table deleted.");
+                          } catch (err) {
+                            toast.failed(err);
+                          }
+                        }}
+                      >
+                        Delete
+                      </Button>
+                      <Button tone="ghost" onClick={() => setPicked(null)}>
+                        Done
+                      </Button>
+                    </div>
+                  ) : null}
+
+                  {(() => {
+                    const fixture = (fixtures.data?.fixtures ?? []).find((f) => f.id === pickedFixture);
+                    if (!fixture) return null;
+                    const word =
+                      fixture.label || FIXTURE_KINDS.find((k) => k.kind === fixture.kind)?.word || fixture.kind;
+                    return (
+                      <div className="plan-tools">
+                        <div className="plan-tools__who">
+                          <strong>{word}</strong>
+                          <span className="fine faint">
+                            {fixture.width} × {fixture.height}
+                          </span>
+                        </div>
+
+                        <div className="plan-tools__pad">
+                          <IconButton name="arrow-up" label={`Move ${word} up`} onClick={() => nudgeFixture(fixture, { pos_y: fixture.pos_y - NUDGE })} />
+                          <IconButton name="arrow-left" label={`Move ${word} left`} onClick={() => nudgeFixture(fixture, { pos_x: fixture.pos_x - NUDGE })} />
+                          <IconButton name="arrow-down" label={`Move ${word} down`} onClick={() => nudgeFixture(fixture, { pos_y: fixture.pos_y + NUDGE })} />
+                          <IconButton name="arrow-right" label={`Move ${word} right`} onClick={() => nudgeFixture(fixture, { pos_x: fixture.pos_x + NUDGE })} />
+                        </div>
+
+                        <div className="row" style={{ gap: "var(--s-1)" }}>
+                          <IconButton
+                            name="minus"
+                            label={`Make ${word} smaller`}
+                            onClick={() => nudgeFixture(fixture, { width: fixture.width - 20, height: fixture.height - 20 })}
+                          />
+                          <IconButton
+                            name="plus"
+                            label={`Make ${word} bigger`}
+                            onClick={() => nudgeFixture(fixture, { width: fixture.width + 20, height: fixture.height + 20 })}
+                          />
+                        </div>
+
+                        <Button
+                          tone="danger"
+                          icon="trash"
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: `Remove the ${word.toLowerCase()}?`,
+                              body: "It only stops being drawn on the plan. No booking is affected.",
+                              confirmLabel: "Remove",
+                            });
+                            if (!ok) return;
+                            try {
+                              await api.desk.fixtures.remove(fixture.id);
+                              setPickedFixture(null);
+                              fixtures.reload();
+                              toast.done("Removed.");
+                            } catch (err) {
+                              toast.failed(err);
+                            }
+                          }}
+                        >
+                          Remove
+                        </Button>
+                        <Button tone="ghost" onClick={() => setPickedFixture(null)}>
+                          Done
+                        </Button>
+                      </div>
+                    );
+                  })()}
+
+                  <p className="plan-hint fine faint">
+                    {rows.length} tables, {seats} seats. Tap one to pick it up.
+                  </p>
+                </>
+              ) : null}
+
+              {rows.length === 0 ? (
+                <Nothing>
+                  {editingLayout ? "No tables yet. Add the first one." : "No tables yet. Press Edit layout to add one."}
+                </Nothing>
+              ) : null}
+
+              {/* Everything about one table, including the guest holding it. */}
+              <Sheet
+                open={shown !== null}
+                onClose={() => setDetails(null)}
+                title={shown ? `Table ${shown.label}` : ""}
+                description={shown ? `${shown.capacity} seats · ${zoneWord(shown.zone)}` : undefined}
+              >
+                {shown ? <TableDetails table={shown} /> : null}
+              </Sheet>
             </>
           );
         }}
@@ -575,5 +797,91 @@ export function Floor() {
         </SelectField>
       </Sheet>
     </DeskPage>
+  );
+}
+
+function zoneWord(zone: string): string {
+  if (zone === "outdoor") return "Outside";
+  if (zone === "bar") return "Bar";
+  return "Inside";
+}
+
+/**
+ * The long version, opened by a double click or the Details button.
+ *
+ * The guest's phone number is a link rather than text on purpose: the reason
+ * anybody opens this during service is to ring the party that has not turned
+ * up, and making that one tap is most of the value of the screen.
+ */
+function TableDetails({ table }: { table: DeskTable }) {
+  const rows: { label: string; value: string }[] = [
+    { label: "Seats", value: String(table.capacity) },
+    { label: "Area", value: zoneWord(table.zone) },
+    { label: "Bookable", value: table.active ? "Yes" : "No" },
+    { label: "Bookings today", value: String(table.today_count ?? 0) },
+  ];
+
+  return (
+    <div className="stack">
+      <dl className="detail-list">
+        {rows.map((row) => (
+          <div key={row.label}>
+            <dt className="label">{row.label}</dt>
+            <dd>{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {table.booking_id ? (
+        <section className="card stack stack--tight">
+          <div className="row row--between">
+            <h3 className="card__title">Who has it</h3>
+            <span className={`badge badge--${table.booking_status === "confirmed" ? "good" : "warn"}`}>
+              {table.booking_status === "confirmed" ? "Confirmed" : "Awaiting deposit"}
+            </span>
+          </div>
+
+          <dl className="detail-list">
+            <div>
+              <dt className="label">Name</dt>
+              <dd>{table.booking_name || "Guest"}</dd>
+            </div>
+            <div>
+              <dt className="label">Time</dt>
+              <dd>{timeLabel(table.booking_time ?? "")}</dd>
+            </div>
+            <div>
+              <dt className="label">Party</dt>
+              <dd>
+                {table.booking_party} {table.booking_party === 1 ? "person" : "people"}
+              </dd>
+            </div>
+            {table.booking_code ? (
+              <div>
+                <dt className="label">Code</dt>
+                <dd className="mono">{table.booking_code}</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="label">Arrived</dt>
+              <dd>{table.booking_checked_in ? "Yes" : "Not yet"}</dd>
+            </div>
+          </dl>
+
+          {table.booking_note ? <p className="fine muted">“{table.booking_note}”</p> : null}
+
+          {table.booking_phone ? (
+            <a className="btn btn--sm" href={`tel:${table.booking_phone.replace(/\s/g, "")}`}>
+              <Icon name="phone" size={16} />
+              Call {table.booking_phone}
+            </a>
+          ) : null}
+        </section>
+      ) : (
+        <p className="fine faint">
+          {table.active ? "Nobody has booked this table today." : "This table is not bookable, so it takes no bookings."}
+        </p>
+      )}
+    </div>
   );
 }

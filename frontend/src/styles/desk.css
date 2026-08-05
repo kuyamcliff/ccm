@@ -723,39 +723,206 @@
   background: var(--surface-2);
 }
 
-/* ── The floor editor ─────────────────────────────────────────────────────
-   The guest's plan and this one draw the same tables, and they share
-   `.plan__table` and the fixture styling in pages.css. What is different is
-   the canvas.
-
-   A guest's plan has to fit the phone it is on, because a table off the edge
-   is a table nobody books. This one is a drag surface on a desk: it holds a
-   fixed canvas and scrolls, because dropping a table precisely matters more
-   here than seeing the whole room at once, and the owner is not doing this on
-   a bike taxi. */
+/* ── The floor ────────────────────────────────────────────────────────────
+   The guest's plan and this one draw the same tables and share `.plan__table`
+   and the fixture styling in pages.css. Red means taken in both, which is the
+   point: two pictures of one room that disagree are worse than one picture. */
 
 .plan-frame {
-  overflow: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
   border-radius: var(--r-md);
   border: 1px solid var(--line);
   background: linear-gradient(160deg, var(--ink-900), var(--ink-1000));
   padding: var(--s-3);
 }
 
+/*
+ * The plan fits the width it is given, on a phone as much as on a desk.
+ *
+ * It used to hold a 34rem canvas and scroll sideways, reasoning that dropping
+ * a table precisely matters more than seeing the whole room. That is true
+ * while you are arranging it and wrong every other minute of the day: during
+ * service this is a picture staff read at a glance, and half a room off the
+ * right-hand edge is half a room nobody checks. Precision did not have to pay
+ * for it — the arrow pad under the plan places a table exactly without needing
+ * a canvas wider than the screen.
+ */
 .plan {
   position: relative;
-  min-width: 34rem;
   width: 100%;
 }
 
-.plan--edit .plan__table {
-  cursor: grab;
+/* Looking is not touching. Only the editing mode turns tables into something
+   you can pick up, which is what stops a plan sliding about under a thumb
+   while somebody is checking who is on table four. */
+.plan .plan__table[data-state] {
+  cursor: pointer;
 }
 
-.plan--edit .plan__table:active {
+.plan--edit .plan__table[data-state] {
+  cursor: grab;
+  touch-action: none;
+}
+
+.plan--edit .plan__table[data-state]:active {
   cursor: grabbing;
+}
+
+/* Out of service. Deliberately not red: it is not spoken for, it is switched
+   off, and conflating the two sends staff looking for a guest who does not
+   exist. Dashed as well as dim, so it survives a colourblind glance. */
+.plan__table[data-state="blocked"] {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+.plan__table[data-picked="true"] {
+  outline: 2px solid var(--white);
+  outline-offset: 2px;
+  z-index: 3;
+}
+
+.plan__table[data-dragging="true"] {
+  z-index: 4;
+}
+
+/* ── The card over a table ─────────────────────────────────────────────────
+   A mouse raises it by hovering. A thumb raises it by tapping, because a
+   touchscreen has no hover to give and the information is just as wanted. It
+   takes no pointer events of its own, so it can never eat the tap that would
+   dismiss it. */
+
+.plan-peek {
+  position: absolute;
+  z-index: 6;
+  transform: translate(-50%, calc(-100% - 2.1rem));
+  min-width: 8.5rem;
+  max-width: 13rem;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-2);
+  background: var(--ink-1000);
+  box-shadow: 0 12px 34px -14px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  text-align: left;
+}
+
+/* A table near the top has nothing above it to sit in, so the card drops
+   underneath rather than off the edge of the plan. */
+.plan-peek[data-below="true"] {
+  transform: translate(-50%, 2.1rem);
+}
+
+.plan-peek__top {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--t-fine);
+  color: var(--text-2);
+}
+
+.plan-peek__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--ink-700);
+  border: 1px solid var(--line-2);
+}
+
+.plan-peek__dot[data-state="taken"] {
+  background: var(--red);
+  border-color: var(--red);
+}
+
+.plan-peek__dot[data-state="free"] {
+  background: var(--good);
+  border-color: var(--good);
+}
+
+.plan-peek__who {
+  margin-top: 0.15rem;
+  font-weight: 700;
+  color: var(--white);
+  font-size: var(--t-fine);
+}
+
+.plan-peek__line {
+  font-size: var(--t-micro);
+  color: var(--text-3);
+}
+
+/* ── Around the plan ──────────────────────────────────────────────────────*/
+
+.floor-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-hot);
+  background: var(--red-wash);
+  color: var(--text-2);
+  font-size: var(--t-fine);
+}
+
+.floor-banner > span {
+  flex: 1 1 12rem;
+}
+
+.floor-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-4);
+  font-size: var(--t-fine);
+  color: var(--text-3);
+}
+
+.floor-stats strong {
+  color: var(--white);
+  font-size: var(--t-head);
+  margin-right: 0.3rem;
+}
+
+.floor-stats span[data-hot="true"] strong {
+  color: var(--red-hi);
+}
+
+.floor-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.floor-bar__who {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.floor-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+/* Label above value, so a long name never squeezes its own label off the
+   line on a narrow phone. */
+.detail-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: var(--s-3);
+}
+
+.detail-list dd {
+  color: var(--white);
+  font-weight: 600;
 }
 
 .plan-hint {
@@ -781,15 +948,41 @@
 }
 
 .plan-tools__who {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
   font-size: var(--t-fine);
   color: var(--text-2);
 }
 
+/* A proper cross rather than four buttons in reading order: up sits above
+   down, left sits left of right, and the shape itself says which is which
+   before anybody reads an arrow. */
 .plan-tools__pad {
   display: grid;
   grid-template-columns: repeat(3, 2.25rem);
   grid-template-rows: repeat(2, 2.25rem);
   gap: 2px;
+}
+
+.plan-tools__pad > *:nth-child(1) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.plan-tools__pad > *:nth-child(2) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.plan-tools__pad > *:nth-child(3) {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.plan-tools__pad > *:nth-child(4) {
+  grid-column: 3;
+  grid-row: 2;
 }
 
 /* A fixture in the console is something you can grab; on the guest plan it is

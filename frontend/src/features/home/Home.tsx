@@ -50,14 +50,14 @@ function Hero({ images }: { images: string[] }) {
 
       <div className="page hero__inner">
         <h1 className="display display--hero hero__title">
-          Off the fire,
+          The best meat
           <br />
-          <span className="hero__hot">every day</span>
+          <span className="hero__hot">in Buea</span>
         </h1>
 
         <p className="hero__blurb">
-          Chicken, goat and pork grilled fresh at Cam Chop Meat. Order for takeaway or book your table, straight from
-          your phone.
+          Pork, chicken, goat and more, grilled fresh over the fire at Cam Chop Meat. Sides like fried plantain, and
+          drinks from matango to wine. Order for takeaway or book your table, straight from your phone.
         </p>
 
         <div className="hero__actions">
