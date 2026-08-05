@@ -1759,29 +1759,36 @@ body:has(.booking__foot) .shell__main {
   transform: translate(-50%, -50%) scale(1.06);
 }
 
+/*
+ * The table you have chosen — white, not red.
+ *
+ * Red used to mean "yours" here and "taken" on the console, which is a
+ * disagreement between two pictures of the same room. Red now means taken
+ * everywhere, so the one you picked needs its own signal: the brightest thing
+ * on the plan, which is what it should have been regardless.
+ */
 .plan__table[data-state="picked"] {
-  background: var(--red);
-  border-color: var(--red);
-  color: var(--on-red);
+  background: var(--white);
+  border-color: var(--white);
+  color: var(--ink-1000);
   transform: translate(-50%, -50%) scale(1.12);
-  box-shadow: var(--shadow-red);
   z-index: 2;
 }
 
-.plan__table[data-state="taken"],
+/* Too small for this party. Still dimmed, because it is not a table that will
+   free up — it was never an option, and that is a different fact from taken. */
 .plan__table[data-state="small"] {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
+/* Taken. The same red on the guest's plan and on the console, so a full room
+   never reads as free to one of them and not the other. */
 .plan__table[data-state="taken"] {
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--ink-800),
-    var(--ink-800) 4px,
-    var(--ink-900) 4px,
-    var(--ink-900) 8px
-  );
+  background: var(--red-wash);
+  border-color: var(--red);
+  color: var(--red-hi);
+  cursor: not-allowed;
 }
 
 .plan__label {
@@ -1817,10 +1824,17 @@ body:has(.booking__foot) .shell__main {
   overflow: hidden;
 }
 
+/*
+ * The grill is the warm thing in the room, so it was drawn in the brand red.
+ * Red now means a table somebody has booked, on this plan and the console's
+ * both, and a red grill sitting among red tables reads as one more table that
+ * is gone. Ember rather than red: still the hottest thing on the plan, no
+ * longer a colour that means something else.
+ */
 .plan__fixture[data-kind="grill"] {
-  border-color: var(--red-line);
-  background: var(--red-wash);
-  color: var(--red-hi);
+  border-color: var(--warn);
+  background: var(--warn-wash);
+  color: var(--warn);
 }
 
 .plan__fixture-word {
@@ -1847,23 +1861,23 @@ body:has(.booking__foot) .shell__main {
 }
 
 .plan-legend span[data-state="picked"] {
-  background: var(--red);
-  border-color: var(--red);
+  background: var(--white);
+  border-color: var(--white);
 }
 
 .plan-legend span[data-state="taken"] {
-  opacity: 0.4;
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--ink-800),
-    var(--ink-800) 3px,
-    var(--ink-900) 3px,
-    var(--ink-900) 6px
-  );
+  background: var(--red-wash);
+  border-color: var(--red);
 }
 
 .plan-legend span[data-state="small"] {
   opacity: 0.4;
+}
+
+/* The console's third state: switched off rather than spoken for. */
+.plan-legend span[data-state="blocked"] {
+  opacity: 0.45;
+  border-style: dashed;
 }
 
 /* A table as a row: the reliable target, and what a screen reader walks. */

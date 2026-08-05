@@ -489,7 +489,25 @@ export interface AuditEntry {
 }
 
 export type DeskBooking = Booking & { user_name: string; user_email: string };
-export type DeskTable = DiningTable & { today_count: number };
+/**
+ * A table on the console's plan, carrying today's booking if it has one.
+ *
+ * Every `booking_*` field is null together or set together — they come from
+ * one lateral join on the earliest booking still standing for today — so
+ * `booking_id` alone is enough to tell whether this table is spoken for.
+ */
+export type DeskTable = DiningTable & {
+  today_count: number;
+  booking_id: number | null;
+  booking_time: string | null;
+  booking_party: number | null;
+  booking_status: "confirmed" | "pending_payment" | null;
+  booking_code: string | null;
+  booking_phone: string | null;
+  booking_note: string | null;
+  booking_checked_in: string | null;
+  booking_name: string | null;
+};
 export type DeskPayment = Payment & { res_date: string; res_time: string; user_name: string };
 export type DeskReceipt = ReceiptSummary & { user_name: string; user_email: string; pay_reference: string | null };
 export type DeskOrder = TakeawayOrder & { user_name: string | null };

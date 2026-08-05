@@ -136,14 +136,43 @@ adminRouter.post("/reservations/:id/uncancel", async (req, res) => {
 
 // ── Tables ───────────────────────────────────────────────
 
+/**
+ * The room, with tonight attached to it.
+ *
+ * The plan used to return the furniture and a count, which is why a table
+ * being spoken for could not be shown on it: staff looking at the floor could
+ * see six tables and not one word about who was coming. The lateral join below
+ * carries today's booking onto each table — the earliest one still standing,
+ * since that is the one somebody at the door is about to be asked about.
+ *
+ * Cancelled bookings are left out deliberately. A table released an hour ago
+ * is free, and colouring it as taken is how a full room gets turned away.
+ */
 adminRouter.get("/tables", async (_req, res) => {
   const today = new Date().toISOString().slice(0, 10);
   const tables = await db.prepare(`
     SELECT t.*,
-      (SELECT COUNT(*) FROM reservations r WHERE r.table_id = t.id AND r.date = ? AND r.status = 'confirmed') as today_count
+      (SELECT COUNT(*) FROM reservations r WHERE r.table_id = t.id AND r.date = ? AND r.status = 'confirmed') as today_count,
+      b.id AS booking_id,
+      b.time AS booking_time,
+      b.party_size AS booking_party,
+      b.status AS booking_status,
+      b.ccm_code AS booking_code,
+      b.phone AS booking_phone,
+      b.note AS booking_note,
+      b.checked_in_at AS booking_checked_in,
+      bu.name AS booking_name
     FROM restaurant_tables t
+    LEFT JOIN LATERAL (
+      SELECT r.id, r.time, r.party_size, r.status, r.ccm_code, r.phone, r.note, r.checked_in_at, r.user_id
+      FROM reservations r
+      WHERE r.table_id = t.id AND r.date = ? AND r.status IN ('confirmed', 'pending_payment')
+      ORDER BY r.time ASC
+      LIMIT 1
+    ) b ON true
+    LEFT JOIN users bu ON bu.id = b.user_id
     ORDER BY t.zone, t.id
-  `).all(today);
+  `).all(today, today);
   res.json({ tables });
 });
 
