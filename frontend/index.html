@@ -90,6 +90,29 @@
         animation: none;
         opacity: 1;
       }
+      #boot .retry {
+        margin-top: 1.25rem;
+        padding: 0.7rem 1.4rem;
+        font: inherit;
+        font-family: system-ui, sans-serif;
+        font-size: 0.9375rem;
+        color: #f6f6f6;
+        background: #c8102e;
+        border: 0;
+        border-radius: 999px;
+        cursor: pointer;
+      }
+      #boot .retry:disabled {
+        opacity: 0.6;
+      }
+      #boot p.why {
+        margin-top: 0.75rem;
+        font-family: ui-monospace, monospace;
+        font-size: 0.75rem;
+        line-height: 1.45;
+        color: #9a9a9a;
+        word-break: break-word;
+      }
     </style>
 
     <!--
@@ -111,6 +134,52 @@
       (function () {
         var RECOVERED = "ccm-recovery-attempted";
         var done = false;
+        var failed = [];
+
+        /*
+         * How long to wait before a fresh attempt is allowed.
+         *
+         * The first version of this recorded "recovery has been tried" once and
+         * never tried again, which turned out to be the worse failure: a tab
+         * that spent its one attempt while the server was still broken could
+         * never heal itself afterwards, no matter how many times it was
+         * reloaded or how thoroughly the underlying fault had been fixed. It
+         * just showed the apology forever.
+         *
+         * A window rather than a flag. Two failures inside twenty seconds is a
+         * loop and gets stopped; a reload a minute later is a person trying
+         * again, and deserves a real attempt.
+         */
+        var COOLDOWN = 20000;
+
+        /* window.name survives a reload even where storage is refused, so a
+           private window cannot spin. */
+        function lastAttempt() {
+          try {
+            var v = sessionStorage.getItem(RECOVERED);
+            if (v) return Number(v) || 0;
+          } catch (e) {}
+          var m = /ccm-recover:(\d+)/.exec(window.name || "");
+          return m ? Number(m[1]) : 0;
+        }
+
+        function markAttempt(at) {
+          try {
+            sessionStorage.setItem(RECOVERED, String(at));
+          } catch (e) {}
+          try {
+            window.name = "ccm-recover:" + at;
+          } catch (e) {}
+        }
+
+        function clearAttempt() {
+          try {
+            sessionStorage.removeItem(RECOVERED);
+          } catch (e) {}
+          try {
+            if (/ccm-recover:/.test(window.name || "")) window.name = "";
+          } catch (e) {}
+        }
 
         function mounted() {
           return !document.getElementById("boot");
@@ -121,30 +190,65 @@
           if (!boot) return;
           boot.setAttribute("data-stuck", "true");
           var note = document.createElement("p");
-          note.textContent =
-            "This page will not load on this connection. Try again in a moment, or call the restaurant to book.";
+          note.textContent = "This page will not load. Try again in a moment, or call the restaurant to book.";
           boot.appendChild(note);
+
+          /* Waiting out the cooldown is not something anybody should have to
+             know about, so there is a button that ignores it. */
+          var again = document.createElement("button");
+          again.type = "button";
+          again.className = "retry";
+          again.textContent = "Try again";
+          again.onclick = function () {
+            again.disabled = true;
+            again.textContent = "Trying…";
+            done = false;
+            recover(true);
+          };
+          boot.appendChild(again);
+
+          /*
+           * What actually failed, in plain sight.
+           *
+           * Guessing at this from the outside is how a fault like this survives
+           * more than one attempt to fix it. The page can see the answer, so it
+           * says it rather than leaving somebody to describe a blank screen.
+           */
+          var url = failed[0];
+          if (!url || !window.fetch) return;
+          var why = document.createElement("p");
+          why.className = "why";
+          why.textContent = "Checking what failed…";
+          boot.appendChild(why);
+
+          fetch(url, { cache: "reload" })
+            .then(function (r) {
+              return r.text().then(function (body) {
+                var isPage = body.slice(0, 60).toLowerCase().indexOf("<!doctype") !== -1;
+                why.textContent =
+                  url.split("/").pop() +
+                  " — HTTP " + r.status + ", " + (r.headers.get("content-type") || "no type") +
+                  (isPage ? " (a web page where code should be)" : "");
+              });
+            })
+            .catch(function (e) {
+              why.textContent = url.split("/").pop() + " — " + String((e && e.message) || e).slice(0, 70);
+            });
         }
 
         /* Wipes every cache and service worker this origin owns, then reloads.
            Belt and braces: either one alone can be what is holding the bad
            file, and by this point we care about getting in, not about tidiness. */
-        function recover() {
+        function recover(force) {
           if (done || mounted()) return;
           done = true;
 
-          if (sessionStorage.getItem(RECOVERED)) {
+          // Two failures in quick succession is a loop, not a person retrying.
+          if (!force && Date.now() - lastAttempt() < COOLDOWN) {
             giveUp();
             return;
           }
-          try {
-            sessionStorage.setItem(RECOVERED, "1");
-          } catch (e) {
-            /* Private mode with storage blocked. Reloading anyway risks a loop,
-               so say so instead. */
-            giveUp();
-            return;
-          }
+          markAttempt(Date.now());
 
           var jobs = [];
           if (window.caches && caches.keys) {
@@ -162,6 +266,41 @@
             );
           }
 
+          /*
+           * The browser's own HTTP cache, which is a separate store from
+           * everything above and the reason a first attempt at this fix did not
+           * work.
+           *
+           * Assets are served `immutable` for a year, which is right for a file
+           * whose name contains its hash — until the wrong body is stored under
+           * that name. `immutable` means the browser will not so much as ask
+           * whether it is still valid, so clearing the service worker changed
+           * nothing: the same bad response came straight back off the disk.
+           *
+           * `cache: "reload"` is the one way out. It ignores what is stored,
+           * goes to the network, and writes what it gets back over the entry —
+           * so the reload below starts from the real file.
+           */
+          /* Every asset the document names, whatever tag names it. The build
+             pulls the big chunks in with <link rel="modulepreload">, not
+             <script src>, so a selector that only looked for scripts and
+             stylesheets left the largest one poisoned and the page still
+             broken — with the network serving a perfectly good copy. */
+          jobs.push(
+            Promise.all(
+              [].map
+                .call(document.querySelectorAll("script[src], link[href]"), function (el) {
+                  return el.src || el.href;
+                })
+                .filter(function (u) {
+                  return u && u.indexOf("/assets/") !== -1;
+                })
+                .map(function (u) {
+                  return fetch(u, { cache: "reload", credentials: "same-origin" }).catch(function () {});
+                })
+            )
+          );
+
           Promise.all(jobs)
             .catch(function () {})
             .then(function () {
@@ -171,14 +310,21 @@
 
         /* A script or stylesheet that failed outright — the wrong MIME type, a
            404, a dead hash from an older deploy. This is the real signal, and it
-           arrives immediately rather than after a timeout. */
+           arrives immediately rather than after a timeout.
+
+           Only the app's own code counts. A manifest or an icon that fails to
+           load is not a reason to wipe storage and reload the page. */
         window.addEventListener(
           "error",
           function (event) {
             var el = event.target;
             if (!el || !el.tagName) return;
             var tag = el.tagName.toLowerCase();
-            if (tag === "script" || tag === "link") recover();
+            if (tag !== "script" && tag !== "link") return;
+            var url = el.src || el.href || "";
+            if (url.indexOf("/assets/") === -1) return;
+            if (failed.indexOf(url) === -1) failed.push(url);
+            recover();
           },
           true
         );
@@ -198,9 +344,7 @@
           window.setTimeout(function () {
             if (mounted()) {
               done = true;
-              try {
-                sessionStorage.removeItem(RECOVERED);
-              } catch (e) {}
+              clearAttempt();
             }
           }, 0);
         });
