@@ -76,7 +76,136 @@
           animation: none;
         }
       }
+      #boot p {
+        max-width: 22rem;
+        padding: 0 1.5rem;
+        margin: 1.25rem 0 0;
+        font-family: system-ui, sans-serif;
+        font-size: 0.9375rem;
+        line-height: 1.5;
+        color: #f6f6f6;
+        text-align: center;
+      }
+      #boot[data-stuck="true"] img {
+        animation: none;
+        opacity: 1;
+      }
     </style>
+
+    <!--
+      The last line of defence: getting the visitor out of a blank page.
+
+      If the app cannot start there is nothing on screen but the mark, and no
+      amount of reloading helps when the reason is a bad file being served from
+      the browser's own storage — which is exactly what a stale service worker
+      cache did here once. So the page watches for its own failure to start and
+      clears everything it can before trying again: caches, service workers, the
+      lot. That runs at most once per tab, tracked in sessionStorage, because a
+      recovery that can retrigger itself is a reload loop.
+
+      If it has already tried and the app still has not mounted, it stops and
+      says so in words, with a way to reach the restaurant. A visitor who cannot
+      book online should still be able to ring the door.
+    -->
+    <script>
+      (function () {
+        var RECOVERED = "ccm-recovery-attempted";
+        var done = false;
+
+        function mounted() {
+          return !document.getElementById("boot");
+        }
+
+        function giveUp() {
+          var boot = document.getElementById("boot");
+          if (!boot) return;
+          boot.setAttribute("data-stuck", "true");
+          var note = document.createElement("p");
+          note.textContent =
+            "This page will not load on this connection. Try again in a moment, or call the restaurant to book.";
+          boot.appendChild(note);
+        }
+
+        /* Wipes every cache and service worker this origin owns, then reloads.
+           Belt and braces: either one alone can be what is holding the bad
+           file, and by this point we care about getting in, not about tidiness. */
+        function recover() {
+          if (done || mounted()) return;
+          done = true;
+
+          if (sessionStorage.getItem(RECOVERED)) {
+            giveUp();
+            return;
+          }
+          try {
+            sessionStorage.setItem(RECOVERED, "1");
+          } catch (e) {
+            /* Private mode with storage blocked. Reloading anyway risks a loop,
+               so say so instead. */
+            giveUp();
+            return;
+          }
+
+          var jobs = [];
+          if (window.caches && caches.keys) {
+            jobs.push(
+              caches.keys().then(function (names) {
+                return Promise.all(names.map(function (n) { return caches.delete(n); }));
+              })
+            );
+          }
+          if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+            jobs.push(
+              navigator.serviceWorker.getRegistrations().then(function (regs) {
+                return Promise.all(regs.map(function (r) { return r.unregister(); }));
+              })
+            );
+          }
+
+          Promise.all(jobs)
+            .catch(function () {})
+            .then(function () {
+              location.replace(location.pathname + location.search + location.hash);
+            });
+        }
+
+        /* A script or stylesheet that failed outright — the wrong MIME type, a
+           404, a dead hash from an older deploy. This is the real signal, and it
+           arrives immediately rather than after a timeout. */
+        window.addEventListener(
+          "error",
+          function (event) {
+            var el = event.target;
+            if (!el || !el.tagName) return;
+            var tag = el.tagName.toLowerCase();
+            if (tag === "script" || tag === "link") recover();
+          },
+          true
+        );
+
+        /* Backstop, for a failure that is silent rather than noisy. Deliberately
+           generous: a slow phone on a bad connection is not a broken page, and
+           must be given time to finish rather than be reloaded out from under
+           itself. */
+        window.setTimeout(function () {
+          if (!mounted()) recover();
+        }, 25000);
+
+        /* Once the app is up none of this should ever fire again, and the flag
+           must not survive into the next visit and turn a single real failure
+           into an immediate give-up. */
+        window.addEventListener("load", function () {
+          window.setTimeout(function () {
+            if (mounted()) {
+              done = true;
+              try {
+                sessionStorage.removeItem(RECOVERED);
+              } catch (e) {}
+            }
+          }, 0);
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="root">
