@@ -150,6 +150,7 @@ function Bookings({ bookings }: { bookings: Resource<Booking[]> }) {
                   momoPhone: input.momoPhone,
                   promoCode: input.promoCode,
                   giftCardCode: input.giftCardCode,
+                  idempotencyKey: input.idempotencyKey,
                 })
                 .then((prompt) => ({
                   reference: prompt.reference,

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
 import { requireAdmin, requireScope } from "../auth.js";
 import { audit } from "../lib/audit.js";
@@ -199,16 +200,36 @@ takeawayRouter.post("/:orderNo/pay", payLimit, async (req, res) => {
     return;
   }
 
-  let reference: string;
+  /* The reference is chosen and written down before the wallet is called, for
+     the reason it is on the booking side: MTN keys the charge on the value we
+     send as X-Reference-Id, so a retry can only be safe if the value survives
+     the retry, and a charge made before the row exists is a debit with nothing
+     here to reconcile it against. */
+  const reference = `CCM-${randomUUID()}`;
+
+  await db.prepare(
+    `UPDATE takeaway_orders
+     SET momo_reference = ?, momo_phone = ?, payment_status = 'pending',
+         pay_requested_at = now_text(), fail_reason = NULL
+     WHERE id = ?`
+  ).run(reference, `+${msisdn}`, order.id);
+
   try {
-    reference = await requestToPay({
+    await requestToPay({
       amount: order.total_fcfa,
       msisdn,
+      reference,
       externalId: order.order_no,
       payerMessage: "Cam Chop Meat takeaway",
       payeeNote: `Order ${order.order_no}`,
     });
   } catch (err) {
+    /* Nothing was charged, so the order goes back to unpaid rather than sitting
+       as pending until the window expires. */
+    await db.prepare(
+      "UPDATE takeaway_orders SET payment_status = 'unpaid', momo_reference = NULL WHERE id = ?"
+    ).run(order.id);
+
     if (err instanceof MomoError) {
       if (err.configuration) console.error("[momo] takeaway config problem:", err.message);
       res.status(err.configuration ? 503 : 400).json({
@@ -222,13 +243,6 @@ takeawayRouter.post("/:orderNo/pay", payLimit, async (req, res) => {
     res.status(502).json({ error: "Could not reach Mobile Money. Try again in a moment." });
     return;
   }
-
-  await db.prepare(
-    `UPDATE takeaway_orders
-     SET momo_reference = ?, momo_phone = ?, payment_status = 'pending',
-         pay_requested_at = now_text(), fail_reason = NULL
-     WHERE id = ?`
-  ).run(reference, `+${msisdn}`, order.id);
 
   res.status(201).json({
     reference,

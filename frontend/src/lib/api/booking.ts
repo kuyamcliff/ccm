@@ -59,13 +59,27 @@ export const bookingApi = {
    * Pushes a mobile-money PIN prompt to the guest's handset. Nothing is taken
    * until they approve it, so the caller polls `paymentStatus` until it settles.
    */
-  payDeposit: (input: { reservationId: number; momoPhone: string; promoCode?: string; giftCardCode?: string }) =>
-    http.post<MomoPrompt>("/api/payments/initiate", {
-      reservationId: input.reservationId,
-      momoPhone: input.momoPhone,
-      promoCode: input.promoCode || undefined,
-      giftCardCode: input.giftCardCode || undefined,
-    }),
+  payDeposit: (input: {
+    reservationId: number;
+    momoPhone: string;
+    promoCode?: string;
+    giftCardCode?: string;
+    wallet?: string;
+    /** The same value on every retry of one attempt, so a request that was
+     *  sent twice is charged once. */
+    idempotencyKey: string;
+  }) =>
+    http.post<MomoPrompt>(
+      "/api/payments/initiate",
+      {
+        reservationId: input.reservationId,
+        momoPhone: input.momoPhone,
+        wallet: input.wallet || undefined,
+        promoCode: input.promoCode || undefined,
+        giftCardCode: input.giftCardCode || undefined,
+      },
+      { "Idempotency-Key": input.idempotencyKey }
+    ),
 
   paymentStatus: (reference: string) => http.get<MomoStatus>(`/api/payments/${encodeURIComponent(reference)}/status`),
 

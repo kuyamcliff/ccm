@@ -25,7 +25,13 @@ import { Sheet } from "~/ui/Sheet";
 
 export interface PaymentDriver {
   /** Pushes the prompt. Resolves with the reference to poll and the amount. */
-  start: (input: { momoPhone: string; promoCode?: string; giftCardCode?: string }) => Promise<{
+  start: (input: {
+    momoPhone: string;
+    promoCode?: string;
+    giftCardCode?: string;
+    /** Identifies one attempt across every retry of it. */
+    idempotencyKey: string;
+  }) => Promise<{
     reference: string;
     amount_fcfa: number;
     /** Present when a discount covered the whole amount and nothing is owed. */
@@ -66,6 +72,11 @@ export function MomoDialog({ open, onClose, onPaid, amountFcfa, title, what, dri
 
   const timers = useRef<{ poll?: ReturnType<typeof setInterval>; tick?: ReturnType<typeof setInterval> }>({});
 
+  /* The current attempt's idempotency key. Cleared when an attempt finishes
+     for good, so a guest who genuinely wants to try again after a decline gets
+     a new charge rather than being handed back the declined one. */
+  const attemptKey = useRef<string | null>(null);
+
   const stopTimers = useCallback(() => {
     if (timers.current.poll) clearInterval(timers.current.poll);
     if (timers.current.tick) clearInterval(timers.current.tick);
@@ -82,6 +93,7 @@ export function MomoDialog({ open, onClose, onPaid, amountFcfa, title, what, dri
       setError(null);
       setReference(null);
       setCharged(amountFcfa);
+      attemptKey.current = null;
     } else {
       stopTimers();
     }
@@ -140,6 +152,18 @@ export function MomoDialog({ open, onClose, onPaid, amountFcfa, title, what, dri
       return;
     }
 
+    /*
+     * One key per attempt, minted here and kept until the attempt resolves.
+     *
+     * The case this exists for: the request goes out, the money is taken, and
+     * the reply never comes back over a weak connection. The guest sees an
+     * error, taps Pay again, and without this the server has no way to tell
+     * that from a request to pay a second time. Held in a ref rather than
+     * state so pressing the button twice quickly cannot mint two keys between
+     * renders.
+     */
+    if (!attemptKey.current) attemptKey.current = crypto.randomUUID();
+
     setBusy(true);
     setError(null);
     try {
@@ -147,6 +171,7 @@ export function MomoDialog({ open, onClose, onPaid, amountFcfa, title, what, dri
         momoPhone: digits,
         promoCode: promo.trim() || undefined,
         giftCardCode: gift.trim() || undefined,
+        idempotencyKey: attemptKey.current,
       });
       setCharged(result.amount_fcfa);
 
@@ -205,7 +230,16 @@ export function MomoDialog({ open, onClose, onPaid, amountFcfa, title, what, dri
             <Button tone="ghost" onClick={onClose}>
               Close
             </Button>
-            <Button tone="primary" onClick={() => setPhase("form")} icon="refresh">
+            <Button
+              tone="primary"
+              onClick={() => {
+                /* This attempt is over and was not paid, so the next one is a
+                   new charge rather than a replay of the declined one. */
+                attemptKey.current = null;
+                setPhase("form");
+              }}
+              icon="refresh"
+            >
               Try again
             </Button>
           </>

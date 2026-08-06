@@ -114,6 +114,41 @@ steps limited too, TOTP is real, and every staff capability is enforced by
 `requireAdmin` / `requireScope` on the server. What the console hides is
 convenience, never the check.
 
+## Payments
+Two wallets behind one shape. `lib/wallets.ts` is the interface, `lib/momo.ts`
+and `lib/orange.ts` the implementations, and a wallet with no credentials is
+never offered rather than failing when tapped (`GET /api/payments/wallets`).
+Orange is written from the documented Web Payment API and has not been run
+against a live merchant account, so treat its first real transaction as a test.
+
+Three rules hold the money side together:
+
+**The reference is ours, and it is written before the wallet is called.** It
+doubles as the wallet's idempotency key (MTN's `X-Reference-Id`, Orange's
+`order_id`), so a retry cannot charge twice — which only works because the
+value survives the retry. It used to be minted inside `requestToPay` per
+attempt, which made every retry a new charge. A row written before the call
+means the worst case is an `initiated` row that went nowhere, not a debit with
+nothing to reconcile against.
+
+**`Idempotency-Key` is required on `POST /api/payments/initiate`.** The browser
+mints it per attempt (`MomoDialog` holds it in a ref) and resends it on every
+retry; a key already seen returns the original payment with `replayed: true`
+instead of charging again. The unique index settles the race between two
+in-flight retries.
+
+**`payment_events` is append-only.** `payments.status` is now a cache of the
+last row there. Nothing updates or deletes an event; a correction is another
+row. `provider_event_id` is unique, which is what makes a webhook redelivery a
+no-op.
+
+`POST /api/payments/webhook/:provider` sits above `requireAuth` because the
+caller is the wallet, not a guest. It is the only route where an anonymous
+request can mark a booking paid, so it verifies an HMAC over the raw bytes
+(hence `express.json`'s `verify` hook) in constant time, and refuses everything
+it cannot prove. With no webhook secret set it refuses every delivery and
+settlement falls back to polling, which is the safe direction to fail in.
+
 ## Placeholders still in the code
 None. Every fact on the site (phone, address, hours, socials) comes from
 site_settings and is edited in the console under Details.
