@@ -11,12 +11,12 @@ import {
   purgeExpiredResets,
   verifyCode,
 } from "../lib/passwordReset.js";
+import { checkPassword } from "../lib/passwordStrength.js";
 import { rateLimit } from "../middleware/security.js";
 
 export const recoveryRouter = Router();
 
 const BCRYPT_ROUNDS = 12;
-const MIN_PASSWORD = 8;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /* The per-code attempt cap stops one code being guessed. These stop someone
@@ -110,8 +110,12 @@ recoveryRouter.post("/redeem", redeemLimit, async (req, res) => {
     res.status(400).json({ error: "Enter a valid email address." });
     return;
   }
-  if (password.length < MIN_PASSWORD) {
-    res.status(400).json({ error: `Use at least ${MIN_PASSWORD} characters for the new password.` });
+  /* Checked against the address the caller typed rather than the one on the
+     account, so a weak password is refused without a lookup that would say
+     whether the account exists. It is the same address either way. */
+  const weak = checkPassword(password, { email });
+  if (weak) {
+    res.status(400).json({ error: weak });
     return;
   }
 
@@ -129,7 +133,7 @@ recoveryRouter.post("/redeem", redeemLimit, async (req, res) => {
   if (!check.ok) {
     if (check.reason === "locked") {
       res.status(400).json({
-        error: `Too many wrong codes. That code is now dead — ask for a new one.`,
+        error: "Too many wrong codes. That code is now dead. Ask for a new one.",
       });
       return;
     }

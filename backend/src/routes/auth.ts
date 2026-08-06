@@ -11,6 +11,7 @@ import {
   signChallenge,
   signSession,
 } from "../auth.js";
+import { checkPassword } from "../lib/passwordStrength.js";
 import { verifyTotp } from "../lib/totp.js";
 import { clientIp, rateLimit, resetLimit } from "../middleware/security.js";
 
@@ -97,12 +98,11 @@ authRouter.post("/register", registerLimit, async (req, res) => {
     res.status(400).json({ error: "That email address does not look right." });
     return;
   }
-  if (password.length < 8) {
-    res.status(400).json({ error: "Password needs at least 8 characters." });
-    return;
-  }
-  if (password.length > 200) {
-    res.status(400).json({ error: "That password is too long. Keep it under 200 characters." });
+  /* Length, the guessed-first list, and anything built out of the name and
+     email that were typed into the two fields above this one. */
+  const weak = checkPassword(password, { name, email });
+  if (weak) {
+    res.status(400).json({ error: weak });
     return;
   }
 

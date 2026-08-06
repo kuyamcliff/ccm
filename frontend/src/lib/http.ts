@@ -61,8 +61,8 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
-async function once<T>(method: Method, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = {};
+async function once<T>(method: Method, path: string, body?: unknown, extra?: Record<string, string>): Promise<T> {
+  const headers: Record<string, string> = { ...extra };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (path.startsWith("/api/support")) {
     const token = guestToken.read();
@@ -110,12 +110,12 @@ async function once<T>(method: Method, path: string, body?: unknown): Promise<T>
  * moment later usually works. Repeating a POST is a different matter — an order
  * or a mobile-money prompt could go out twice — so only GET is replayed.
  */
-async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
+async function request<T>(method: Method, path: string, body?: unknown, extra?: Record<string, string>): Promise<T> {
   const idempotent = method === "GET";
 
   for (let attempt = 0; ; attempt++) {
     try {
-      return await once<T>(method, path, body);
+      return await once<T>(method, path, body, extra);
     } catch (err) {
       const api = err instanceof ApiError ? err : null;
       const worthRetrying = api !== null && (api.isOffline || api.status === 502 || api.status === 503);
@@ -137,7 +137,10 @@ function query(params: Record<string, string | number | boolean | undefined | nu
 
 export const http = {
   get: <T>(path: string) => request<T>("GET", path),
-  post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
+  /** `headers` carries the one thing a POST sometimes needs beyond its body:
+   *  an Idempotency-Key, so a retry is recognised as the same attempt. */
+  post: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
+    request<T>("POST", path, body, headers),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
   put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
   del: <T>(path: string, body?: unknown) => request<T>("DELETE", path, body),

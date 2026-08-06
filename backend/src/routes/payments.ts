@@ -1,15 +1,12 @@
 import { Router } from "express";
+import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
 import { requireAuth } from "../auth.js";
-import {
-  APPROVAL_WINDOW_SECONDS,
-  MomoError,
-  explainFailure,
-  getTransaction,
-  momoConfigured,
-  requestToPay,
-  toMsisdn,
-} from "../lib/momo.js";
+import { MomoError } from "../lib/momo.js";
+import { startOrangePayment } from "../lib/orange.js";
+import { APPROVAL_WINDOW_SECONDS, WALLETS, availableWallets, walletFor } from "../lib/wallets.js";
+import type { Wallet, WalletId } from "../lib/wallets.js";
+import * as ledger from "../lib/paymentLedger.js";
 import { redeemGiftCard, refundGiftCard } from "./giftcards.js";
 import { evaluatePromo, releasePromoCode, usePromoCode } from "./promos.js";
 import { rateLimit } from "../middleware/security.js";
@@ -36,7 +33,11 @@ type PaymentRow = {
    Both the status poll and any later reconciliation can land on the same
    payment. The conditional UPDATE means only the first caller does the work.  */
 
-async function settlePayment(paymentId: number, financialTransactionId?: string | null): Promise<boolean> {
+async function settlePayment(
+  paymentId: number,
+  financialTransactionId?: string | null,
+  trail: { source: ledger.LedgerSource; providerEventId?: string | null } = { source: "poll" }
+): Promise<boolean> {
   const won = await db
     .prepare(
       "UPDATE payments SET status = 'completed', updated_at = now_text() WHERE id = ? AND status != 'completed'"
@@ -48,6 +49,17 @@ async function settlePayment(paymentId: number, financialTransactionId?: string 
   if (financialTransactionId) {
     await db.prepare("UPDATE payments SET momo_transaction_id = ? WHERE id = ?").run(financialTransactionId, paymentId);
   }
+
+  /* Appended only on the transition the conditional UPDATE above actually won,
+     so the ledger records one settlement no matter how many pollers and
+     webhooks arrive at the same conclusion at the same moment. */
+  await ledger.record({
+    paymentId,
+    status: "completed",
+    source: trail.source,
+    providerEventId: trail.providerEventId,
+    detail: financialTransactionId ?? null,
+  });
 
   const row = (await db.prepare("SELECT reservation_id FROM payments WHERE id = ?").get(paymentId)) as
     | { reservation_id: number }
@@ -118,7 +130,11 @@ async function announceBooking(reservationId: number): Promise<void> {
 }
 
 /** Marks a payment failed and hands back any discount it was holding. */
-async function failPayment(paymentId: number, reason?: string | null): Promise<void> {
+async function failPayment(
+  paymentId: number,
+  reason?: string | null,
+  trail: { source: ledger.LedgerSource; providerEventId?: string | null } = { source: "poll" }
+): Promise<void> {
   const lost = await db
     .prepare(
       "UPDATE payments SET status = 'failed', updated_at = now_text(), fail_reason = ? WHERE id = ? AND status = 'pending'"
@@ -126,6 +142,14 @@ async function failPayment(paymentId: number, reason?: string | null): Promise<v
     .run(reason ?? null, paymentId);
 
   if (lost.changes !== 1) return;
+
+  await ledger.record({
+    paymentId,
+    status: "failed",
+    source: trail.source,
+    providerEventId: trail.providerEventId,
+    detail: reason ?? null,
+  });
 
   const row = (await db
     .prepare("SELECT promo_code, gift_card_code, discount_fcfa, redeemed_at FROM payments WHERE id = ?")
@@ -148,7 +172,86 @@ function secondsRemaining(createdAt: string): number {
 
 // ---------- routes ----------
 
+/*
+ * Where the wallet tells us the money moved.
+ *
+ * Deliberately above `requireAuth`: the caller is MTN or Orange, not a signed
+ * in guest, so there is no cookie and never will be. That makes this the only
+ * route on the site where an anonymous request can mark a booking paid, and
+ * the whole of its defence is the signature — being reachable only from "the
+ * payment provider's network" is not a thing the internet can promise.
+ *
+ * Three rules, in order:
+ *   verify the signature, or record nothing;
+ *   refuse an event id already in the ledger, because wallets retry until they
+ *   get a 2xx and a retry is not a second payment;
+ *   answer 200 to anything genuine, including a duplicate, so the wallet stops
+ *   retrying rather than escalating a delivery we have already handled.
+ */
+/* Generous, because a busy night is a lot of genuine deliveries and a wallet
+   that gets throttled will retry. Tight enough that somebody grinding at the
+   signature check is not doing it for free. Keyed per provider rather than per
+   IP, since a wallet's callbacks arrive from addresses we do not control. */
+const webhookLimit = rateLimit("payment-webhook", {
+  windowMs: 60 * 1000,
+  max: 120,
+  message: "Too many webhook deliveries.",
+  key: (req) => String(req.params?.provider ?? "unknown"),
+});
+
+paymentsRouter.post("/webhook/:provider", webhookLimit, async (req, res) => {
+  const wallet = walletFor(req.params.provider);
+  if (!wallet) {
+    res.status(404).json({ error: "Unknown payment provider." });
+    return;
+  }
+
+  const event = wallet.verifyWebhook(req);
+  if (!event) {
+    /* Deliberately terse. A caller who cannot sign a request is told nothing
+       about why, since the difference between "no secret configured", "bad
+       signature" and "malformed body" is only useful to somebody guessing. */
+    console.warn(`[${wallet.id}] rejected an unverified webhook delivery`);
+    res.status(401).json({ error: "Signature rejected." });
+    return;
+  }
+
+  if (await ledger.alreadySeen(event.eventId)) {
+    res.json({ ok: true, duplicate: true });
+    return;
+  }
+
+  const row = (await db
+    .prepare("SELECT id, status FROM payments WHERE reference = ?")
+    .get(event.reference)) as { id: number; status: string } | undefined;
+
+  /* A signed event for a payment we have no record of. 200 anyway: retrying
+     will not conjure the row, and a wallet that keeps redelivering forever is
+     noise on top of a problem that needs a person. */
+  if (!row) {
+    console.error(`[${wallet.id}] webhook for unknown reference ${event.reference}`);
+    res.json({ ok: true, unknown: true });
+    return;
+  }
+
+  const trail = { source: "webhook" as const, providerEventId: event.eventId };
+
+  if (event.status === "SUCCESSFUL") {
+    await settlePayment(row.id, event.providerTransactionId, trail);
+  } else {
+    await failPayment(row.id, event.reason ?? "FAILED", trail);
+  }
+
+  res.json({ ok: true });
+});
+
 paymentsRouter.use(requireAuth);
+
+/** Which wallets checkout may offer. Read by the payment screen so a wallet
+ *  without credentials is never shown rather than failing when tapped. */
+paymentsRouter.get("/wallets", (_req, res) => {
+  res.json({ wallets: availableWallets() });
+});
 
 const initiateLimit = rateLimit("payment-initiate", {
   windowMs: 10 * 60 * 1000,
@@ -165,6 +268,30 @@ const statusLimit = rateLimit("payment-status", {
   key: (req) => String(req.user?.id ?? "anon"),
 });
 
+/**
+ * The response a completed attempt produced, rebuilt from the row.
+ *
+ * A replayed request has to be answered with what the first one said, not with
+ * a fresh attempt, so the client that never saw the original response is told
+ * about the payment it already started rather than starting another.
+ */
+function describePayment(row: {
+  id: number; reference: string; status: string; amount_fcfa: number;
+  discount_fcfa: number; method: string; momo_phone: string; created_at: string;
+}) {
+  return {
+    payment_id: row.id,
+    reference: row.reference,
+    status: row.status === "initiated" ? "pending" : row.status,
+    amount_fcfa: row.amount_fcfa,
+    discount_fcfa: row.discount_fcfa,
+    method: row.method,
+    momo_phone: row.momo_phone || null,
+    expires_in_seconds: row.status === "pending" ? secondsRemaining(row.created_at) : 0,
+    zero_cost: row.amount_fcfa === 0,
+  };
+}
+
 paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
   const reservationId = Number(req.body?.reservationId);
   const promoCode = String(req.body?.promoCode ?? "").trim().toUpperCase();
@@ -172,6 +299,43 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
 
   if (!Number.isInteger(reservationId) || reservationId < 1) {
     res.status(400).json({ error: "Invalid reservation." });
+    return;
+  }
+
+  /*
+   * The idempotency key, generated by the browser before the first attempt and
+   * resent unchanged with every retry of it.
+   *
+   * This is the difference between a customer on a weak connection retrying a
+   * request and a customer being charged twice. The phone that sends the
+   * request, loses the response, and sends it again is indistinguishable here
+   * from one asking to pay a second time — unless it says which of the two it
+   * meant, which is all this header is.
+   */
+  const idempotencyKey = String(req.get("idempotency-key") ?? "").trim().slice(0, 100);
+  if (!idempotencyKey) {
+    res.status(400).json({ error: "Missing Idempotency-Key header." });
+    return;
+  }
+
+  const replay = (await db
+    .prepare(
+      `SELECT p.id, p.reference, p.status, p.amount_fcfa, p.discount_fcfa, p.method,
+              p.momo_phone, p.created_at, r.user_id
+       FROM payments p JOIN reservations r ON p.reservation_id = r.id
+       WHERE p.idempotency_key = ?`
+    )
+    .get(idempotencyKey)) as
+    | (Parameters<typeof describePayment>[0] & { user_id: number })
+    | undefined;
+
+  if (replay) {
+    // Somebody else's key. Answered as if it simply is not there.
+    if (replay.user_id !== req.user!.id) {
+      res.status(404).json({ error: "Reservation not found." });
+      return;
+    }
+    res.status(200).json({ ...describePayment(replay), replayed: true });
     return;
   }
 
@@ -245,21 +409,24 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
 
   // ── Fully covered by discount: nothing to charge ──
   if (amountDue === 0) {
-    const reference = `CCM-${Date.now().toString(36).toUpperCase()}-FREE`;
+    const reference = `CCM-${randomUUID()}`;
     const info = await db
       .prepare(
         `INSERT INTO payments (reservation_id, amount_fcfa, momo_phone, status, reference, type, method,
-                               promo_code, gift_card_code, discount_fcfa, redeemed_at)
-         VALUES (?, 0, '', 'completed', ?, 'reservation', 'free', ?, ?, ?, now_text())`
+                               promo_code, gift_card_code, discount_fcfa, redeemed_at, idempotency_key)
+         VALUES (?, 0, '', 'completed', ?, 'reservation', 'free', ?, ?, ?, now_text(), ?)`
       )
-      .run(reservationId, reference, claimedPromo, claimedGift, totalDiscount);
+      .run(reservationId, reference, claimedPromo, claimedGift, totalDiscount, idempotencyKey);
+
+    const paymentId = Number(info.lastInsertRowid);
+    await ledger.record({ paymentId, status: "completed", source: "checkout", detail: "covered by discount" });
 
     await db.prepare(
       "UPDATE reservations SET payment_status = 'paid', status = 'confirmed' WHERE id = ?"
     ).run(reservationId);
 
     res.status(201).json({
-      payment_id: Number(info.lastInsertRowid),
+      payment_id: paymentId,
       reference,
       status: "completed",
       amount_fcfa: 0,
@@ -270,63 +437,125 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
     return;
   }
 
-  // ── Charge the balance over MoMo ──
-  if (!momoConfigured()) {
+  // ── Charge the balance to a mobile wallet ──
+  const wallet: Wallet | null = walletFor(req.body?.wallet) ?? WALLETS.mtn_momo;
+
+  if (!wallet.configured()) {
     await releaseClaims();
-    res.status(503).json({ error: "Mobile Money payments are not available right now. Please contact us." });
+    res.status(503).json({ error: `${wallet.label} payments are not available right now. Please contact us.` });
     return;
   }
 
-  const msisdn = toMsisdn(String(req.body?.momoPhone ?? ""));
+  const msisdn = wallet.toMsisdn(String(req.body?.momoPhone ?? req.body?.phone ?? ""));
   if (!msisdn) {
     await releaseClaims();
-    res.status(400).json({ error: "Enter a valid MTN number: 9 digits starting with 6." });
+    res.status(400).json({ error: `Enter a valid ${wallet.network} number: 9 digits starting with 6.` });
     return;
   }
 
   const externalId = reservation.ccm_code ?? `CCM-${reservationId}`;
 
-  let momoReference: string;
+  /*
+   * The intent goes in the ledger before the wallet is called, not after.
+   *
+   * If the order were the other way round — charge, then write the row — a
+   * process that died in between would leave a customer debited with nothing
+   * here to show for it, and no reference to reconcile against. Written first,
+   * the worst case is a row marked `initiated` that never went anywhere, which
+   * is visible, reconcilable and costs nobody money.
+   *
+   * The reference is generated here for the same reason: the wallet needs to
+   * be given a key it can recognise on a retry, and it cannot be given one we
+   * have not stored.
+   */
+  const reference = `CCM-${randomUUID()}`;
+
+  let paymentId: number;
   try {
-    momoReference = await requestToPay({
-      amount: amountDue,
-      msisdn,
-      externalId,
-      payerMessage: `Cam Chop Meat table deposit`,
-      payeeNote: `Booking ${externalId}`,
-    });
+    const info = await db
+      .prepare(
+        `INSERT INTO payments (reservation_id, amount_fcfa, momo_phone, status, reference, type, method,
+                               promo_code, gift_card_code, discount_fcfa, redeemed_at, idempotency_key)
+         VALUES (?, ?, ?, 'initiated', ?, 'reservation', ?, ?, ?, ?, now_text(), ?)`
+      )
+      .run(
+        reservationId, amountDue, `+${msisdn}`, reference, wallet.id,
+        claimedPromo, claimedGift, totalDiscount, idempotencyKey
+      );
+    paymentId = Number(info.lastInsertRowid);
+  } catch (err) {
+    /* Two retries of the same request raced and the other one won the unique
+       index. That is the mechanism working: hand back its payment rather than
+       starting a second charge. */
+    if (err && typeof err === "object" && "code" in err && String((err as { code: unknown }).code) === "23505") {
+      await releaseClaims();
+      const winner = (await db
+        .prepare(
+          `SELECT id, reference, status, amount_fcfa, discount_fcfa, method, momo_phone, created_at
+           FROM payments WHERE idempotency_key = ?`
+        )
+        .get(idempotencyKey)) as Parameters<typeof describePayment>[0] | undefined;
+      if (winner) {
+        res.status(200).json({ ...describePayment(winner), replayed: true });
+        return;
+      }
+    }
+    throw err;
+  }
+
+  await ledger.record({ paymentId, status: "initiated", source: "checkout", detail: `${wallet.id} ${amountDue}` });
+
+  const charge = {
+    amount: amountDue,
+    msisdn,
+    reference,
+    externalId,
+    payerMessage: "Cam Chop Meat table deposit",
+    payeeNote: `Booking ${externalId}`,
+  };
+
+  /* Orange hands back a URL the customer has to open; MTN pushes a prompt to
+     the handset and there is nothing to open. The one extra field is the whole
+     difference at this layer. */
+  let paymentUrl: string | null = null;
+
+  try {
+    if (wallet.id === "orange_money") {
+      paymentUrl = (await startOrangePayment(charge)).paymentUrl;
+    } else {
+      await wallet.charge(charge);
+    }
   } catch (err) {
     await releaseClaims();
-    if (err instanceof MomoError) {
-      if (err.configuration) console.error("[momo] configuration problem:", err.message);
-      res.status(err.configuration ? 503 : 400).json({
-        error: err.configuration
-          ? "Mobile Money is temporarily unavailable. Please try again shortly."
-          : err.message,
-      });
-      return;
-    }
-    console.error("[momo] initiate failed:", err);
-    res.status(502).json({ error: "Could not reach Mobile Money. Try again in a moment." });
+    await failPayment(paymentId, "PROVIDER_REFUSED", { source: "checkout" });
+
+    const configuration = err instanceof MomoError ? err.configuration : false;
+    const message = err instanceof Error ? err.message : "";
+    if (configuration) console.error(`[${wallet.id}] configuration problem:`, message);
+    else console.error(`[${wallet.id}] initiate failed:`, err);
+
+    res.status(configuration ? 503 : 400).json({
+      error: configuration
+        ? `${wallet.label} is temporarily unavailable. Please try again shortly.`
+        : message || "Could not start that payment. Try again in a moment.",
+    });
     return;
   }
 
-  const info = await db
-    .prepare(
-      `INSERT INTO payments (reservation_id, amount_fcfa, momo_phone, status, reference, type, method,
-                             promo_code, gift_card_code, discount_fcfa, redeemed_at)
-       VALUES (?, ?, ?, 'pending', ?, 'reservation', 'mtn_momo', ?, ?, ?, now_text())`
-    )
-    .run(reservationId, amountDue, `+${msisdn}`, momoReference, claimedPromo, claimedGift, totalDiscount);
+  await db
+    .prepare("UPDATE payments SET status = 'pending', updated_at = now_text() WHERE id = ? AND status = 'initiated'")
+    .run(paymentId);
+  await ledger.record({ paymentId, status: "pending", source: "checkout", detail: reference });
 
   res.status(201).json({
-    payment_id: Number(info.lastInsertRowid),
-    reference: momoReference,
+    payment_id: paymentId,
+    reference,
     status: "pending",
     amount_fcfa: amountDue,
     discount_fcfa: totalDiscount,
-    method: "mtn_momo",
+    method: wallet.id,
     momo_phone: `+${msisdn}`,
+    payment_url: paymentUrl,
     expires_in_seconds: APPROVAL_WINDOW_SECONDS,
     zero_cost: false,
   });
@@ -356,32 +585,37 @@ paymentsRouter.get("/:reference/status", statusLimit, async (req, res) => {
     return;
   }
 
+  /* Which wallet took this payment. `free` rows never had one, and a row
+     written before wallets existed is MTN by definition. */
+  const wallet = walletFor(row.method);
+
   let status = row.status;
-  let message: string | null = row.fail_reason ? explainFailure(row.fail_reason) : null;
+  let message: string | null =
+    row.fail_reason && wallet ? wallet.explainFailure(row.fail_reason) : null;
   const remaining = secondsRemaining(row.created_at);
 
-  if (status === "pending") {
+  if (wallet && (status === "pending" || status === "initiated")) {
     try {
-      const trx = await getTransaction(reference);
+      const trx = await wallet.getTransaction(reference);
 
       if (trx.status === "SUCCESSFUL") {
-        await settlePayment(row.id, trx.financialTransactionId);
+        await settlePayment(row.id, trx.providerTransactionId, { source: "poll" });
         status = "completed";
         message = null;
       } else if (trx.status === "FAILED") {
-        await failPayment(row.id, trx.reason);
+        await failPayment(row.id, trx.reason, { source: "poll" });
         status = "failed";
-        message = explainFailure(trx.reason);
+        message = wallet.explainFailure(trx.reason);
       } else if (remaining === 0) {
-        // Still pending with no time left: MTN will expire it their side too.
-        await failPayment(row.id, "EXPIRED");
+        // Still pending with no time left: the wallet will expire it too.
+        await failPayment(row.id, "EXPIRED", { source: "poll" });
         status = "failed";
-        message = explainFailure("EXPIRED");
+        message = wallet.explainFailure("EXPIRED");
       }
     } catch (err) {
       // A failed status check is not a failed payment — report what we have
       // and let the next poll try again.
-      if (!(err instanceof MomoError)) console.error("[momo] status check:", err);
+      if (!(err instanceof MomoError)) console.error(`[${row.method}] status check:`, err);
     }
   }
 

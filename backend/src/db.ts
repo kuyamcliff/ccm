@@ -30,8 +30,55 @@ export const pool = new Pool({
 /** The value types columns accept from this codebase. */
 export type SqlValue = string | number | null;
 
-/** Tables whose primary key isn't called `id` — RETURNING id must not be auto-added for these. */
-const NON_ID_PK_TABLES = new Set(["site_settings", "legal_pages"]);
+/**
+ * Which tables actually have an `id` column, so `RETURNING id` is only ever
+ * appended where there is one to return.
+ *
+ * This was a hand-written list of the exceptions, and the trouble with writing
+ * down the exceptions is that the next one does not get written down. It
+ * missed `admin_permissions`, whose key is (user_id, scope), so every attempt
+ * by the owner to restrict an admin's access failed with `column "id" does not
+ * exist` for as long as the feature has existed. Asking the database is the
+ * only version of this that cannot go stale.
+ *
+ * The seed below is what the shim assumes until `loadIdColumns()` has answered,
+ * which covers the inserts that migrations themselves make on the way up.
+ */
+const NON_ID_PK_TABLES = new Set(["site_settings", "legal_pages", "admin_permissions"]);
+
+/** Populated at boot. Empty means "not asked yet", not "no tables have an id". */
+let tablesWithId: Set<string> | null = null;
+
+/**
+ * Learns which tables have an `id` column. Called once after migrations, so a
+ * table added in this deploy is classified correctly on the same boot.
+ *
+ * A failure here is not fatal: the shim falls back to the seeded list, which is
+ * exactly how it behaved before this existed.
+ */
+export async function loadIdColumns(): Promise<void> {
+  try {
+    /* `to_regclass` on the bare name resolves it through the search path
+       exactly as the INSERT will, so a table of the same name in `public`
+       (this database hosts an unrelated app there) cannot answer for
+       camchop's. Only the relation that actually wins is considered. */
+    const res = await pool.query<{ relname: string }>(
+      `SELECT c.relname FROM pg_class c
+       JOIN pg_attribute a
+         ON a.attrelid = c.oid AND a.attname = 'id' AND a.attnum > 0 AND NOT a.attisdropped
+       WHERE c.relkind = 'r'
+         AND c.oid = to_regclass(quote_ident(c.relname))`
+    );
+    tablesWithId = new Set(res.rows.map((r) => r.relname));
+  } catch (err) {
+    console.error("[db] could not read which tables have an id column:", err);
+  }
+}
+
+/** Whether an INSERT into this table can be asked to return an id. */
+function tableHasId(table: string): boolean {
+  return tablesWithId ? tablesWithId.has(table) : !NON_ID_PK_TABLES.has(table);
+}
 
 /**
  * Rewrites SQLite-style `?` placeholders (in source order, ignoring `?` inside
@@ -87,7 +134,7 @@ function prepare(sql: string): Stmt {
       let text = sql;
       const isInsert = /^\s*insert\s+into/i.test(sql);
       const table = isInsert ? tableFromInsert(sql) : null;
-      const wantsId = isInsert && table && !NON_ID_PK_TABLES.has(table) && !/returning/i.test(sql);
+      const wantsId = isInsert && table && tableHasId(table) && !/returning/i.test(sql);
       if (wantsId) text += " RETURNING id";
       const res = await run(text, params);
       return {

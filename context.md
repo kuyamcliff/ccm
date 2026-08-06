@@ -94,6 +94,92 @@ Discoverable credentials, so the sign-in screen offers the key without an email
 being typed first. The relying party ID comes from `FRONTEND_URL` and must be
 the domain in the URL bar: a credential is bound to it permanently.
 
+## Passwords
+`backend/src/lib/passwordStrength.ts` is the authority on what may be chosen,
+and all three places a password gets set go through it: register, Account >
+Password, and the reset redeem. Length, a guessed-first blocklist (including
+the ones this restaurant invites: camchop, cameroon, buea), keyboard runs,
+repeated blocks, and anything built out of the account's own name or email.
+Long passphrases pass untouched; only short ones have to mix character types.
+
+`frontend/src/lib/passwordStrength.ts` is a byte-for-byte copy below the header
+comment, so the meter in `ui/PasswordField.tsx` says exactly what the server
+would say. `cd backend && npm run check:rules` fails if the two drift. Change
+one, change both.
+
+Everything else the login endpoint needs was already here and stays: the
+session is an httpOnly cookie and never touches localStorage, `/login` is rate
+limited per IP and per email with `/register`, `/login/2fa` and both reset
+steps limited too, TOTP is real, and every staff capability is enforced by
+`requireAdmin` / `requireScope` on the server. What the console hides is
+convenience, never the check.
+
+## Payments
+Two wallets behind one shape. `lib/wallets.ts` is the interface, `lib/momo.ts`
+and `lib/orange.ts` the implementations, and a wallet with no credentials is
+never offered rather than failing when tapped (`GET /api/payments/wallets`).
+Orange is written from the documented Web Payment API and has not been run
+against a live merchant account, so treat its first real transaction as a test.
+
+Three rules hold the money side together:
+
+**The reference is ours, and it is written before the wallet is called.** It
+doubles as the wallet's idempotency key (MTN's `X-Reference-Id`, Orange's
+`order_id`), so a retry cannot charge twice — which only works because the
+value survives the retry. It used to be minted inside `requestToPay` per
+attempt, which made every retry a new charge. A row written before the call
+means the worst case is an `initiated` row that went nowhere, not a debit with
+nothing to reconcile against.
+
+**`Idempotency-Key` is required on `POST /api/payments/initiate`.** The browser
+mints it per attempt (`MomoDialog` holds it in a ref) and resends it on every
+retry; a key already seen returns the original payment with `replayed: true`
+instead of charging again. The unique index settles the race between two
+in-flight retries.
+
+**`payment_events` is append-only.** `payments.status` is now a cache of the
+last row there. Nothing updates or deletes an event; a correction is another
+row. `provider_event_id` is unique, which is what makes a webhook redelivery a
+no-op.
+
+`POST /api/payments/webhook/:provider` sits above `requireAuth` because the
+caller is the wallet, not a guest. It is the only route where an anonymous
+request can mark a booking paid, so it verifies an HMAC over the raw bytes
+(hence `express.json`'s `verify` hook) in constant time, and refuses everything
+it cannot prove. With no webhook secret set it refuses every delivery and
+settlement falls back to polling, which is the safe direction to fail in.
+
+## Security posture, and what was checked
+Audited against the usual vibecoded-app checklist. Most of it was already
+covered, so this records what was verified rather than implying it was added:
+
+- **XSS**: no `dangerouslySetInnerHTML` or `innerHTML` anywhere, so React's
+  escaping is never bypassed. SVG is deliberately absent from the upload
+  allowlist, since an SVG served from our own origin is a script.
+- **SQL injection**: every value is bound. Two places interpolate identifiers
+  (`applyUpdate`, gallery's PATCH) and both take column names from fixed sets
+  in our code, never from a request body.
+- **Uploads**: mime allowlist, magic-byte sniff so a renamed file cannot pose
+  as an image, per-type size caps, content-addressed names with the extension
+  taken from the allowlist rather than the upload. Served with `nosniff` and
+  `dotfiles: deny`.
+- **Secrets**: nothing under `VITE_`. The browser holds no key of any kind.
+- **CSRF**: SameSite=Lax plus an Origin check on every unsafe method.
+- **Transport**: HSTS with preload in production, `upgrade-insecure-requests`,
+  and a CSP with `script-src 'self'`, `object-src 'none'`, `frame-ancestors
+  'none'`.
+- **Sessions**: httpOnly cookie, 30-day expiry, and `session_version` so a
+  password change or "sign out everywhere" kills tokens already issued.
+
+Two things are knowingly not done. There is no CAPTCHA on signup — the
+registration rate limit (5 per hour per address) stands in for one, and adding
+a real one means a third-party key. And `npm audit` reports a high-severity
+React Router advisory (GHSA-qwww-vcr4-c8h2): it applies to RSC mode, this app
+mounts a plain `BrowserRouter` with no server actions, and no patched version
+exists yet — 8.3.0 is not published. Recheck when it is; downgrading below
+7.12.0 to silence the tool would trade six minor versions of real fixes for a
+vulnerability the app cannot reach.
+
 ## Placeholders still in the code
 None. Every fact on the site (phone, address, hours, socials) comes from
 site_settings and is edited in the console under Details.

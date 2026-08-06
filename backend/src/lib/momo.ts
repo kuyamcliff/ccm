@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import type { Request } from "express";
 import {
   IS_PROD,
   MOMO_API_KEY,
@@ -7,7 +8,9 @@ import {
   MOMO_CURRENCY,
   MOMO_SUBSCRIPTION_KEY,
   MOMO_TARGET_ENVIRONMENT,
+  MOMO_WEBHOOK_SECRET,
 } from "../config.js";
+import type { ChargeInput, WalletEvent } from "./wallets.js";
 
 /**
  * MTN MoMo Collections client.
@@ -109,30 +112,21 @@ export function toMsisdn(rawPhone: string): string | null {
 
 /* ── Request to pay ────────────────────────────────────────────────────── */
 
-interface RequestToPayInput {
-  /** Whole currency units. XAF has no minor unit, so no cents conversion. */
-  amount: number;
-  msisdn: string;
-  /** Our own payment reference, echoed back on the status response. */
-  externalId: string;
-  /** Shown to the customer on their handset. Keep it short. */
-  payerMessage: string;
-  payeeNote: string;
-}
-
 /**
  * Sends the payment prompt. Returns the reference used to track it.
  *
- * The reference is generated here and passed as X-Reference-Id, which MoMo
- * treats as an idempotency key: retrying with the same value cannot charge the
- * customer twice.
+ * The reference comes from the caller, which wrote it to the payments table
+ * before calling this. MoMo treats X-Reference-Id as the idempotency key for
+ * the charge, so a retry that reuses the value cannot take the money twice —
+ * which only holds because the value survives the retry. Minting one here per
+ * attempt, as this used to, made every retry a fresh charge.
  */
-export async function requestToPay(input: RequestToPayInput): Promise<string> {
+export async function requestToPay(input: ChargeInput): Promise<string> {
   if (!momoConfigured()) {
     throw new MomoError("Mobile Money is not configured on this server.", true);
   }
 
-  const referenceId = randomUUID();
+  const referenceId = input.reference;
 
   const res = await fetch(`${MOMO_BASE_URL}${REQUEST_TO_PAY_PATH}`, {
     method: "POST",
@@ -213,6 +207,60 @@ export async function getTransaction(referenceId: string): Promise<MomoTransacti
   return {
     status,
     financialTransactionId: data.financialTransactionId ?? null,
+    reason,
+  };
+}
+
+/* ── Webhook ─────────────────────────────────────────────────────────────── */
+
+/**
+ * Proves a callback came from MTN before anything is settled on the strength
+ * of it.
+ *
+ * This endpoint is the one place on the site where an unauthenticated request
+ * can mark money as received, so the bar is a signature or nothing. Without
+ * MOMO_WEBHOOK_SECRET set, every delivery is refused and settlement falls back
+ * to polling: a payment confirmed late is an inconvenience, a forged
+ * confirmation is a free dinner for anyone who can spell our domain.
+ *
+ * The HMAC is taken over the raw bytes that arrived. Re-serialising the parsed
+ * body would produce a different string whenever key order or number
+ * formatting differed, so the comparison has to be against what was actually
+ * sent. `timingSafeEqual` because a comparison that stops at the first wrong
+ * byte leaks how much of a forged signature was correct.
+ */
+export function verifyMomoWebhook(req: Request): WalletEvent | null {
+  if (!MOMO_WEBHOOK_SECRET) return null;
+
+  const raw = (req as Request & { rawBody?: Buffer }).rawBody;
+  const signature = String(req.get("x-momo-signature") ?? "");
+  if (!raw || !signature) return null;
+
+  const expected = createHmac("sha256", MOMO_WEBHOOK_SECRET).update(raw).digest("hex");
+  const given = Buffer.from(signature, "hex");
+  const mine = Buffer.from(expected, "hex");
+  if (given.length !== mine.length || !timingSafeEqual(given, mine)) return null;
+
+  const body = req.body as {
+    referenceId?: string;
+    externalId?: string;
+    status?: string;
+    financialTransactionId?: string;
+    reason?: string | { code?: string };
+  };
+
+  const reference = String(body?.referenceId ?? "");
+  const raw_status = String(body?.status ?? "").toUpperCase();
+  if (!reference || (raw_status !== "SUCCESSFUL" && raw_status !== "FAILED")) return null;
+
+  const reason =
+    typeof body?.reason === "string" ? body.reason : (body?.reason?.code ?? null);
+
+  return {
+    eventId: `mtn_momo:${reference}:${raw_status}`,
+    reference,
+    status: raw_status === "SUCCESSFUL" ? "SUCCESSFUL" : "FAILED",
+    providerTransactionId: body?.financialTransactionId ?? null,
     reason,
   };
 }

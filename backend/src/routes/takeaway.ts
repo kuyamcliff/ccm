@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
 import { requireAdmin, requireScope } from "../auth.js";
 import { audit } from "../lib/audit.js";
@@ -177,6 +178,37 @@ function secondsRemaining(startedAt: string | null): number {
 takeawayRouter.post("/:orderNo/pay", payLimit, async (req, res) => {
   const orderNo = String(req.params.orderNo ?? "");
 
+  /* The same attempt key the booking side uses, for the same reason: a phone
+     that loses the response and sends the request again must not be charged
+     twice for one order. */
+  const idempotencyKey = String(req.get("idempotency-key") ?? "").trim().slice(0, 100);
+  if (!idempotencyKey) {
+    res.status(400).json({ error: "Missing Idempotency-Key header." });
+    return;
+  }
+
+  const replay = (await db
+    .prepare(
+      `SELECT order_no, total_fcfa, momo_reference, momo_phone, pay_requested_at
+       FROM takeaway_orders WHERE idempotency_key = ?`
+    )
+    .get(idempotencyKey)) as
+    | { order_no: string; total_fcfa: number; momo_reference: string | null; momo_phone: string | null; pay_requested_at: string | null }
+    | undefined;
+
+  if (replay?.momo_reference) {
+    res.status(200).json({
+      reference: replay.momo_reference,
+      order_no: replay.order_no,
+      amount_fcfa: replay.total_fcfa,
+      momo_phone: replay.momo_phone,
+      expires_in_seconds: secondsRemaining(replay.pay_requested_at),
+      status: "pending",
+      replayed: true,
+    });
+    return;
+  }
+
   const order = (await db
     .prepare(
       "SELECT id, order_no, total_fcfa, payment_status, status FROM takeaway_orders WHERE order_no = ?"
@@ -199,16 +231,47 @@ takeawayRouter.post("/:orderNo/pay", payLimit, async (req, res) => {
     return;
   }
 
-  let reference: string;
+  /* The reference is chosen and written down before the wallet is called, for
+     the reason it is on the booking side: MTN keys the charge on the value we
+     send as X-Reference-Id, so a retry can only be safe if the value survives
+     the retry, and a charge made before the row exists is a debit with nothing
+     here to reconcile it against. */
+  const reference = `CCM-${randomUUID()}`;
+
   try {
-    reference = await requestToPay({
+    await db.prepare(
+      `UPDATE takeaway_orders
+       SET momo_reference = ?, momo_phone = ?, payment_status = 'pending',
+           pay_requested_at = now_text(), fail_reason = NULL, idempotency_key = ?
+       WHERE id = ?`
+    ).run(reference, `+${msisdn}`, idempotencyKey, order.id);
+  } catch (err) {
+    // Another retry of this attempt claimed the key first.
+    if (err && typeof err === "object" && "code" in err && String((err as { code: unknown }).code) === "23505") {
+      res.status(409).json({ error: "That payment is already being started. Give it a moment." });
+      return;
+    }
+    throw err;
+  }
+
+  try {
+    await requestToPay({
       amount: order.total_fcfa,
       msisdn,
+      reference,
       externalId: order.order_no,
       payerMessage: "Cam Chop Meat takeaway",
       payeeNote: `Order ${order.order_no}`,
     });
   } catch (err) {
+    /* Nothing was charged, so the order goes back to unpaid rather than sitting
+       as pending until the window expires. */
+    await db.prepare(
+      `UPDATE takeaway_orders
+       SET payment_status = 'unpaid', momo_reference = NULL, idempotency_key = NULL
+       WHERE id = ?`
+    ).run(order.id);
+
     if (err instanceof MomoError) {
       if (err.configuration) console.error("[momo] takeaway config problem:", err.message);
       res.status(err.configuration ? 503 : 400).json({
@@ -222,13 +285,6 @@ takeawayRouter.post("/:orderNo/pay", payLimit, async (req, res) => {
     res.status(502).json({ error: "Could not reach Mobile Money. Try again in a moment." });
     return;
   }
-
-  await db.prepare(
-    `UPDATE takeaway_orders
-     SET momo_reference = ?, momo_phone = ?, payment_status = 'pending',
-         pay_requested_at = now_text(), fail_reason = NULL
-     WHERE id = ?`
-  ).run(reference, `+${msisdn}`, order.id);
 
   res.status(201).json({
     reference,

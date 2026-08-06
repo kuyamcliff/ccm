@@ -150,6 +150,7 @@ function Bookings({ bookings }: { bookings: Resource<Booking[]> }) {
                   momoPhone: input.momoPhone,
                   promoCode: input.promoCode,
                   giftCardCode: input.giftCardCode,
+                  idempotencyKey: input.idempotencyKey,
                 })
                 .then((prompt) => ({
                   reference: prompt.reference,
@@ -271,7 +272,7 @@ function Orders({ orders }: { orders: Resource<TakeawayOrder[]> }) {
           what={`Order ${payFor.order_no}, collect at ${timeLabel(payFor.pickup_time)}`}
           driver={{
             start: (input) =>
-              api.orders.pay(payFor.order_no, input.momoPhone).then((prompt) => ({
+              api.orders.pay(payFor.order_no, input.momoPhone, input.idempotencyKey).then((prompt) => ({
                 reference: prompt.reference,
                 amount_fcfa: prompt.amount_fcfa,
                 expires_in_seconds: prompt.expires_in_seconds,

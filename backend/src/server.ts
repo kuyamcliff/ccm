@@ -3,7 +3,7 @@ import cookieParser from "cookie-parser";
 import compression from "compression";
 import { IS_PROD, PORT } from "./config.js";
 import { attachUser } from "./auth.js";
-import { db, pool } from "./db.js";
+import { db, loadIdColumns, pool } from "./db.js";
 import { UPLOAD_DIR } from "./lib/media.js";
 import { migrateInlineMedia } from "./lib/migrate-media.js";
 import { migrateSchema } from "./lib/migrate-schema.js";
@@ -40,6 +40,10 @@ await migrateSchema();
 await migrateInlineMedia();
 await backfillLegacyBookingCodes();
 
+/* After the migrations, so a table created moments ago is classified on the
+   same boot rather than the next one. */
+await loadIdColumns();
+
 const app = express();
 
 // Rate limits and cookie `secure` depend on the real client address, which only
@@ -66,7 +70,19 @@ app.use(
 
 /* Uploads travel as base64, which inflates them by about a third; 12 MB of body
    covers a 6 MB image with headroom without inviting memory-exhaustion. */
-app.use(express.json({ limit: "12mb" }));
+/* The raw bytes are kept for webhook routes only, which have to verify an HMAC
+   over exactly what was sent rather than over a re-serialised object. Kept to
+   the webhook paths so an 12 MB photo upload is not held in memory twice. */
+app.use(
+  express.json({
+    limit: "12mb",
+    verify: (req, _res, buf) => {
+      if (req.url?.startsWith("/api/payments/webhook/")) {
+        (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+      }
+    },
+  })
+);
 app.use(cookieParser());
 app.use(attachUser);
 app.use(sameOriginOnly);

@@ -5,10 +5,9 @@ import { useAction } from "~/lib/useResource";
 import { Button } from "~/ui/Button";
 import { TextField } from "~/ui/Field";
 import { Notice } from "~/ui/Feedback";
+import { PasswordField } from "~/ui/PasswordField";
+import { checkPassword } from "~/lib/passwordStrength";
 import { useSession } from "~/state/session";
-
-/** Minimum the server enforces. Said up front rather than after a rejection. */
-const MIN_PASSWORD = 8;
 
 export function JoinPage() {
   const { user, register } = useSession();
@@ -28,7 +27,9 @@ export function JoinPage() {
 
   if (user) return <Navigate to={from} replace />;
 
-  const tooShort = password.length > 0 && password.length < MIN_PASSWORD;
+  /* The name and email above are what a password must not be built out of, so
+     they travel with it into the same check the server runs. */
+  const identity = { name: name.trim(), email: email.trim() };
 
   return (
     <div className="page auth">
@@ -41,8 +42,9 @@ export function JoinPage() {
           onSubmit={async (event) => {
             event.preventDefault();
             setProblem(null);
-            if (password.length < MIN_PASSWORD) {
-              setProblem(`Use at least ${MIN_PASSWORD} characters for your password.`);
+            const weak = checkPassword(password, identity);
+            if (weak) {
+              setProblem(weak);
               return;
             }
             await create.run();
@@ -69,14 +71,10 @@ export function JoinPage() {
             inputMode="email"
             required
           />
-          <TextField
-            label="Password"
-            type="password"
-            hint={`At least ${MIN_PASSWORD} characters.`}
-            error={tooShort ? `That is only ${password.length} characters.` : null}
+          <PasswordField
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password"
+            onChange={setPassword}
+            identity={identity}
             required
           />
 

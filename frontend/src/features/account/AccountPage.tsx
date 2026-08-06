@@ -8,6 +8,8 @@ import { TextField } from "~/ui/Field";
 import { Avatar, Badge, Money } from "~/ui/Bits";
 import { EmptyState, ErrorState, Notice, Skeleton, SkeletonCards } from "~/ui/Feedback";
 import { Sheet, useConfirm } from "~/ui/Sheet";
+import { PasswordField } from "~/ui/PasswordField";
+import { checkPassword } from "~/lib/passwordStrength";
 import { PasskeyError, addPasskey, passkeysSupported } from "~/lib/passkey";
 import { Icon } from "~/ui/Icon";
 import { useSession } from "~/state/session";
@@ -106,6 +108,11 @@ function Profile() {
           className="stack"
           onSubmit={async (event) => {
             event.preventDefault();
+            const weak = checkPassword(next, { name: user?.name, email: user?.email });
+            if (weak) {
+              toast.failed(weak);
+              return;
+            }
             if (!(await savePassword.run(current, next))) {
               toast.failed(savePassword.readError());
               return;
@@ -123,17 +130,19 @@ function Profile() {
             autoComplete="current-password"
             required
           />
-          <TextField
+          <PasswordField
             label="New password"
-            type="password"
-            hint="At least 8 characters."
             value={next}
-            onChange={(e) => setNext(e.target.value)}
-            autoComplete="new-password"
+            onChange={setNext}
+            identity={{ name: user?.name, email: user?.email }}
             required
           />
           <div className="row">
-            <Button type="submit" busy={savePassword.busy} disabled={!current || next.length < 8}>
+            <Button
+              type="submit"
+              busy={savePassword.busy}
+              disabled={!current || checkPassword(next, { name: user?.name, email: user?.email }) !== null}
+            >
               Change password
             </Button>
           </div>

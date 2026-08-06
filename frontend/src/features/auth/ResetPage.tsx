@@ -6,6 +6,8 @@ import { useAction, useResource } from "~/lib/useResource";
 import { Button } from "~/ui/Button";
 import { TextField } from "~/ui/Field";
 import { Notice, Skeleton } from "~/ui/Feedback";
+import { PasswordField } from "~/ui/PasswordField";
+import { checkPassword } from "~/lib/passwordStrength";
 import { useToast } from "~/state/toast";
 
 /**
@@ -114,6 +116,11 @@ export function ResetPage() {
               onSubmit={async (event) => {
                 event.preventDefault();
                 setProblem(null);
+                const weak = checkPassword(password, { email: email.trim() });
+                if (weak) {
+                  setProblem(weak);
+                  return;
+                }
                 const result = await redeem.run(email.trim(), code.trim(), password);
                 if (!result) {
                   const failure = redeem.readError();
@@ -134,13 +141,11 @@ export function ResetPage() {
                 required
                 autoFocus
               />
-              <TextField
+              <PasswordField
                 label="New password"
-                type="password"
-                hint="At least 8 characters."
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
+                onChange={setPassword}
+                identity={{ email: email.trim() }}
                 required
               />
               {problem ? <Notice tone="bad">{problem}</Notice> : null}

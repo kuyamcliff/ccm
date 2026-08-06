@@ -63,6 +63,30 @@ export const MOMO_CURRENCY = optional(
   MOMO_TARGET_ENVIRONMENT === "sandbox" ? "EUR" : "XAF"
 );
 
+/**
+ * The shared secret MTN signs callbacks with. Without it the webhook route
+ * refuses every delivery, and settlement falls back to polling — which is the
+ * safe direction to fail in: a payment settling late is recoverable, a forged
+ * "this is paid" is not.
+ */
+export const MOMO_WEBHOOK_SECRET = optional("MOMO_WEBHOOK_SECRET");
+
+/* ── Orange Money ──────────────────────────────────────────────────────────
+   Credentials come from the Orange developer portal once a merchant account
+   exists. Until all three are set, Orange simply is not offered at checkout,
+   exactly as MTN is not, so an unconfigured wallet is invisible rather than
+   broken. */
+
+export const ORANGE_CLIENT_ID = optional("ORANGE_CLIENT_ID");
+export const ORANGE_CLIENT_SECRET = optional("ORANGE_CLIENT_SECRET");
+/** The merchant's Orange Money account the money lands in. */
+export const ORANGE_MERCHANT_KEY = optional("ORANGE_MERCHANT_KEY");
+export const ORANGE_WEBHOOK_SECRET = optional("ORANGE_WEBHOOK_SECRET");
+
+export const ORANGE_BASE_URL = optional("ORANGE_BASE_URL", "https://api.orange.com").replace(/\/+$/, "");
+
+export const ORANGE_CURRENCY = optional("ORANGE_CURRENCY", "XAF");
+
 export const PORT = Number(process.env.PORT ?? 4000);
 
 /* ── Outgoing email (Resend) ───────────────────────────────────────────────

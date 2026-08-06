@@ -52,6 +52,23 @@ const badReg = await call("POST", "/api/auth/register", {
 });
 check("register rejects bad input", badReg.status === 400, badReg);
 
+/* Long enough to clear the old length rule, and refused anyway: guessed-first,
+   keyboard run, and built from the name on the same form. */
+const weakPasswords = [
+  ["a guessed-first password", "password123"],
+  ["a keyboard run", "qwertyuiop"],
+  ["the account's own name in it", "smoketester99"],
+] as const;
+
+for (const [index, [label, weak]] of weakPasswords.entries()) {
+  const attempt = await call("POST", "/api/auth/register", {
+    name: "Smoke Tester",
+    email: `weak-${index}-${Date.now()}@test.local`,
+    password: weak,
+  });
+  check(`register rejects ${label}`, attempt.status === 400, attempt);
+}
+
 const reg = await call("POST", "/api/auth/register", {
   name: "Smoke Tester",
   email,
