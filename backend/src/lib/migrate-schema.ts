@@ -203,6 +203,18 @@ const STEPS: Step[] = [
     sql: "CREATE UNIQUE INDEX IF NOT EXISTS payment_events_provider_event_idx ON payment_events (provider_event_id) WHERE provider_event_id IS NOT NULL",
   },
 
+  /* Takeaway is prepaid over the same wallets, so it gets the same protection
+     the booking side does. Without it, the retry that follows a lost response
+     starts a second prompt for an order already being paid for. */
+  {
+    name: "takeaway_orders.idempotency_key",
+    sql: "ALTER TABLE takeaway_orders ADD COLUMN IF NOT EXISTS idempotency_key text",
+  },
+  {
+    name: "takeaway_orders.idempotency_key unique",
+    sql: "CREATE UNIQUE INDEX IF NOT EXISTS takeaway_orders_idempotency_key_idx ON takeaway_orders (idempotency_key) WHERE idempotency_key IS NOT NULL",
+  },
+
   /* One tier above super admin. There was no such role before this feature,
      so the first boot after it ships has to create one: whoever has been
      `super_admin` the longest becomes the `owner`, once, and only if nobody

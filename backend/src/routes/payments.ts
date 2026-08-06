@@ -188,7 +188,18 @@ function secondsRemaining(createdAt: string): number {
  *   answer 200 to anything genuine, including a duplicate, so the wallet stops
  *   retrying rather than escalating a delivery we have already handled.
  */
-paymentsRouter.post("/webhook/:provider", async (req, res) => {
+/* Generous, because a busy night is a lot of genuine deliveries and a wallet
+   that gets throttled will retry. Tight enough that somebody grinding at the
+   signature check is not doing it for free. Keyed per provider rather than per
+   IP, since a wallet's callbacks arrive from addresses we do not control. */
+const webhookLimit = rateLimit("payment-webhook", {
+  windowMs: 60 * 1000,
+  max: 120,
+  message: "Too many webhook deliveries.",
+  key: (req) => String(req.params?.provider ?? "unknown"),
+});
+
+paymentsRouter.post("/webhook/:provider", webhookLimit, async (req, res) => {
   const wallet = walletFor(req.params.provider);
   if (!wallet) {
     res.status(404).json({ error: "Unknown payment provider." });

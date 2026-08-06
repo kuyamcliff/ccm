@@ -149,6 +149,37 @@ request can mark a booking paid, so it verifies an HMAC over the raw bytes
 it cannot prove. With no webhook secret set it refuses every delivery and
 settlement falls back to polling, which is the safe direction to fail in.
 
+## Security posture, and what was checked
+Audited against the usual vibecoded-app checklist. Most of it was already
+covered, so this records what was verified rather than implying it was added:
+
+- **XSS**: no `dangerouslySetInnerHTML` or `innerHTML` anywhere, so React's
+  escaping is never bypassed. SVG is deliberately absent from the upload
+  allowlist, since an SVG served from our own origin is a script.
+- **SQL injection**: every value is bound. Two places interpolate identifiers
+  (`applyUpdate`, gallery's PATCH) and both take column names from fixed sets
+  in our code, never from a request body.
+- **Uploads**: mime allowlist, magic-byte sniff so a renamed file cannot pose
+  as an image, per-type size caps, content-addressed names with the extension
+  taken from the allowlist rather than the upload. Served with `nosniff` and
+  `dotfiles: deny`.
+- **Secrets**: nothing under `VITE_`. The browser holds no key of any kind.
+- **CSRF**: SameSite=Lax plus an Origin check on every unsafe method.
+- **Transport**: HSTS with preload in production, `upgrade-insecure-requests`,
+  and a CSP with `script-src 'self'`, `object-src 'none'`, `frame-ancestors
+  'none'`.
+- **Sessions**: httpOnly cookie, 30-day expiry, and `session_version` so a
+  password change or "sign out everywhere" kills tokens already issued.
+
+Two things are knowingly not done. There is no CAPTCHA on signup — the
+registration rate limit (5 per hour per address) stands in for one, and adding
+a real one means a third-party key. And `npm audit` reports a high-severity
+React Router advisory (GHSA-qwww-vcr4-c8h2): it applies to RSC mode, this app
+mounts a plain `BrowserRouter` with no server actions, and no patched version
+exists yet — 8.3.0 is not published. Recheck when it is; downgrading below
+7.12.0 to silence the tool would trade six minor versions of real fixes for a
+vulnerability the app cannot reach.
+
 ## Placeholders still in the code
 None. Every fact on the site (phone, address, hours, socials) comes from
 site_settings and is edited in the console under Details.

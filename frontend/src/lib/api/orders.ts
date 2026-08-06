@@ -24,7 +24,7 @@ export const orderApi = {
       status: string;
     }>("/api/takeaway", input),
 
-  pay: (orderNo: string, momoPhone: string) =>
+  pay: (orderNo: string, momoPhone: string, idempotencyKey: string) =>
     http.post<{
       reference: string;
       order_no: string;
@@ -32,7 +32,11 @@ export const orderApi = {
       momo_phone: string;
       expires_in_seconds: number;
       status: "pending";
-    }>(`/api/takeaway/${encodeURIComponent(orderNo)}/pay`, { momoPhone }),
+    }>(
+      `/api/takeaway/${encodeURIComponent(orderNo)}/pay`,
+      { momoPhone },
+      { "Idempotency-Key": idempotencyKey }
+    ),
 
   paymentStatus: (reference: string) =>
     http.get<MomoStatus>(`/api/takeaway/pay/${encodeURIComponent(reference)}/status`),

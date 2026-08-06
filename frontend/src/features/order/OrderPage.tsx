@@ -411,7 +411,7 @@ export function OrderPage() {
           what={`Order ${placed.order_no}, collect at ${timeLabel(pickup)}`}
           driver={{
             start: (input) =>
-              api.orders.pay(placed.order_no, input.momoPhone).then((prompt) => ({
+              api.orders.pay(placed.order_no, input.momoPhone, input.idempotencyKey).then((prompt) => ({
                 reference: prompt.reference,
                 amount_fcfa: prompt.amount_fcfa,
                 expires_in_seconds: prompt.expires_in_seconds,
