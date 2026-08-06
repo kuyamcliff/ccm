@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "smoke": "tsx scripts/smoke.ts",
+    "check:rules": "tsx scripts/check-password-rules.ts",
     "momo:provision": "tsx scripts/momo-provision.ts"
   },
   "dependencies": {

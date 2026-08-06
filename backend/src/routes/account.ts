@@ -10,6 +10,7 @@ import {
   sessionCookieOptions,
   signSession,
 } from "../auth.js";
+import { checkPassword } from "../lib/passwordStrength.js";
 import { generateSecret, otpauthUri, verifyTotp } from "../lib/totp.js";
 import { rateLimit } from "../middleware/security.js";
 
@@ -133,12 +134,9 @@ accountRouter.patch("/password", credentialLimit, async (req, res) => {
     res.status(400).json({ error: "Both passwords required." });
     return;
   }
-  if (newPassword.length < 8) {
-    res.status(400).json({ error: "New password must be at least 8 characters." });
-    return;
-  }
-  if (newPassword.length > 200) {
-    res.status(400).json({ error: "That password is too long. Keep it under 200 characters." });
+  const weak = checkPassword(newPassword, { name: user.name, email: user.email });
+  if (weak) {
+    res.status(400).json({ error: weak });
     return;
   }
   if (newPassword === currentPassword) {

@@ -94,6 +94,26 @@ Discoverable credentials, so the sign-in screen offers the key without an email
 being typed first. The relying party ID comes from `FRONTEND_URL` and must be
 the domain in the URL bar: a credential is bound to it permanently.
 
+## Passwords
+`backend/src/lib/passwordStrength.ts` is the authority on what may be chosen,
+and all three places a password gets set go through it: register, Account >
+Password, and the reset redeem. Length, a guessed-first blocklist (including
+the ones this restaurant invites: camchop, cameroon, buea), keyboard runs,
+repeated blocks, and anything built out of the account's own name or email.
+Long passphrases pass untouched; only short ones have to mix character types.
+
+`frontend/src/lib/passwordStrength.ts` is a byte-for-byte copy below the header
+comment, so the meter in `ui/PasswordField.tsx` says exactly what the server
+would say. `cd backend && npm run check:rules` fails if the two drift. Change
+one, change both.
+
+Everything else the login endpoint needs was already here and stays: the
+session is an httpOnly cookie and never touches localStorage, `/login` is rate
+limited per IP and per email with `/register`, `/login/2fa` and both reset
+steps limited too, TOTP is real, and every staff capability is enforced by
+`requireAdmin` / `requireScope` on the server. What the console hides is
+convenience, never the check.
+
 ## Placeholders still in the code
 None. Every fact on the site (phone, address, hours, socials) comes from
 site_settings and is edited in the console under Details.

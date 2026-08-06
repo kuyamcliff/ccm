@@ -256,6 +256,76 @@
   color: var(--bad);
 }
 
+/*
+ * Password strength.
+ *
+ * Four hairlines rather than one sliding bar: a bar that grows invites the
+ * reading that the goal is to fill it, and the goal is a password somebody can
+ * remember. The colours are the semantic three, never the brand red, which
+ * stays reserved for things you press and things you pay.
+ *
+ * The row keeps its height whether or not there is anything to say, so the
+ * button below it does not jump out from under a thumb mid-tap.
+ */
+.pwmeter {
+  display: grid;
+  gap: var(--s-2);
+  margin-top: calc(var(--s-1) * -1);
+}
+
+.pwmeter__track {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--s-1);
+}
+
+.pwmeter__step {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--line);
+  transition: background-color 160ms ease;
+}
+
+.pwmeter__step--bad {
+  background: var(--bad);
+}
+
+.pwmeter__step--warn {
+  background: var(--warn);
+}
+
+.pwmeter__step--good {
+  background: var(--good);
+}
+
+.pwmeter__say {
+  min-height: 1.5em;
+  font-size: var(--t-fine);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.pwmeter__problem {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--bad);
+}
+
+.pwmeter__word--warn {
+  color: var(--warn);
+}
+
+.pwmeter__word--good {
+  color: var(--good);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pwmeter__step {
+    transition: none;
+  }
+}
+
 .field__row {
   display: flex;
   align-items: stretch;
