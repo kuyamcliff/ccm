@@ -149,6 +149,51 @@ request can mark a booking paid, so it verifies an HMAC over the raw bytes
 it cannot prove. With no webhook secret set it refuses every delivery and
 settlement falls back to polling, which is the safe direction to fail in.
 
+## What search engines and share cards see
+Split deliberately, because the two audiences read different things.
+
+**Static, in `index.html`**: the sharing card (`og:image`, 1200x630, plus
+`summary_large_image`) and the `Restaurant` JSON-LD. The crawlers behind
+WhatsApp, TikTok and Facebook do not run JavaScript, and this site is found
+through TikTok and passed around as a link — setting the card from React would
+be setting it long after the only reader that mattered had gone. Regenerate the
+card from `scratchpad/og.html` if the wording changes; the address and hours in
+the JSON-LD mirror `state/venue.tsx` and Desk > Details, so change them
+together.
+
+**Runtime, in `app/routeMeta.ts`**: title, description and canonical per route,
+applied by `<RouteMeta />` mounted once inside the router. Google renders
+JavaScript, so this is soon enough for it. A table rather than a hook each page
+calls, because the failure mode of the per-page version is a page that forgets
+and nobody notices for months. Private routes get `noindex` and no canonical at
+all — every page used to carry a canonical pointing at `/`, which told Google
+the menu was a duplicate of the homepage.
+
+There is no phone number in the JSON-LD. Nothing in this codebase hardcodes
+one, on purpose, and inventing one for a real business is worse than omitting
+it. Add it there once it is settled.
+
+## Closing an account
+`lib/closeAccount.ts`, used by both the guest's own delete and the console's.
+It settles before it forgets: any payment still `pending` or `initiated` is
+failed first (which also hands back the promo use and gift card value it was
+holding), held tables are cancelled, then the row is emptied rather than
+deleted.
+
+It is not a hard delete because it cannot be. `reservations.user_id` cascades
+from `users`, but `payments.reservation_id` does not cascade from
+`reservations`, so `DELETE FROM users` raised a foreign key violation for any
+guest who had ever paid — both delete routes returned a 500 for exactly the
+customers most likely to use them. For guests who had never paid it succeeded
+and took their bookings, reviews and points with it.
+
+What survives is the restaurant's: reservations and payments. What goes is
+theirs: name, email, password, passkeys, reviews, votes, replies. The address
+moves to `deleted-<id>@deleted.invalid`, which keeps the unique index happy,
+cannot collide with a real address, and frees the original if they come back.
+`deleted_at` is what `loadUser` checks, so a closed account reads as no account
+at all rather than as a sign-in to refuse.
+
 ## Security posture, and what was checked
 Audited against the usual vibecoded-app checklist. Most of it was already
 covered, so this records what was verified rather than implying it was added:

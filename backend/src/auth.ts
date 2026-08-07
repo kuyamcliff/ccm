@@ -121,14 +121,19 @@ async function loadUser(req: Request): Promise<AuthedUser | undefined> {
     if (!Number.isInteger(id)) return undefined;
 
     const row = (await db
-      .prepare("SELECT id, name, email, role, banned_at, session_version FROM users WHERE id = ?")
-      .get(id)) as (AuthedUser & { session_version: number }) | undefined;
+      .prepare("SELECT id, name, email, role, banned_at, session_version, deleted_at FROM users WHERE id = ?")
+      .get(id)) as (AuthedUser & { session_version: number; deleted_at: string | null }) | undefined;
     if (!row) return undefined;
+
+    /* A closed account keeps its row so the restaurant's records survive, but
+       it is nobody's account any more. Treated exactly like a row that is not
+       there, rather than as a sign-in to refuse with an explanation. */
+    if (row.deleted_at) return undefined;
 
     // A stale token from before a password change or forced sign-out is refused.
     if (Number(payload.sv) !== row.session_version) return undefined;
 
-    const { session_version: _ignored, ...user } = row;
+    const { session_version: _ignored, deleted_at: _closed, ...user } = row;
     return user;
   } catch {
     return undefined;

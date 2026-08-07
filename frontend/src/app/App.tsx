@@ -1,3 +1,4 @@
+import { RouteMeta } from "./RouteMeta";
 import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Shell } from "./Shell";
@@ -41,6 +42,9 @@ function Loading() {
 export function App() {
   return (
     <ErrorBoundary>
+      {/* Outside Suspense: the title should change as soon as the route does,
+          not after the page's chunk has finished downloading. */}
+      <RouteMeta />
       <Suspense fallback={<Loading />}>
         <Routes>
           <Route element={<Shell />}>

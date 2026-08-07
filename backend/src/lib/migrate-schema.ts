@@ -215,6 +215,16 @@ const STEPS: Step[] = [
     sql: "CREATE UNIQUE INDEX IF NOT EXISTS takeaway_orders_idempotency_key_idx ON takeaway_orders (idempotency_key) WHERE idempotency_key IS NOT NULL",
   },
 
+  /* Closing an account keeps the row and empties it, rather than deleting it.
+     The restaurant's books hang off `reservations`, which hangs off `users`,
+     and a customer asking to be forgotten is not asking the restaurant to lose
+     what it was paid last March. `deleted_at` is what makes the difference
+     between a live account and the shell left behind. */
+  {
+    name: "users.deleted_at",
+    sql: "ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at text",
+  },
+
   /* One tier above super admin. There was no such role before this feature,
      so the first boot after it ships has to create one: whoever has been
      `super_admin` the longest becomes the `owner`, once, and only if nobody

@@ -27,7 +27,60 @@
       content="Fresh grilled chicken, goat and pork over the fire. Order takeaway or book a table, both from your phone."
     />
     <meta property="og:url" content="https://camchopmeat.com/" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:locale" content="en_GB" />
+
+    <!--
+      The picture that shows when somebody shares the link.
+
+      This site is found through TikTok, which means it is mostly passed around
+      as a link in WhatsApp and DMs — and a link with no image is a grey box
+      with a URL under it. None of those crawlers run JavaScript, so this has
+      to be here in the served HTML; setting it from React would be setting it
+      long after the only reader that mattered has gone.
+
+      `summary_large_image` is what makes it the wide card rather than a
+      thumbnail beside the text.
+    -->
+    <meta property="og:image" content="https://camchopmeat.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Cam Chop Meat, Buea: chicken, goat and pork over the fire" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://camchopmeat.com/og-image.png" />
+
+    <!--
+      What the restaurant is, in the form Google reads.
+
+      Without this the site is just words on a page: with it, the address,
+      hours and the fact that it takes bookings can appear in the search
+      result itself and in Maps. The address and hours mirror the fallbacks in
+      state/venue.tsx — they are also editable in Desk > Details, so if the
+      owner changes them there, change them here too.
+    -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Restaurant",
+        "name": "Cam Chop Meat",
+        "description": "Fresh grilled chicken, goat and pork over the fire in Buea.",
+        "url": "https://camchopmeat.com/",
+        "image": "https://camchopmeat.com/og-image.png",
+        "servesCuisine": ["Cameroonian", "Grill", "Barbecue"],
+        "priceRange": "$$",
+        "currenciesAccepted": "XAF",
+        "paymentAccepted": "MTN Mobile Money, Orange Money, Cash",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "Razel Street, opposite P and T school",
+          "addressLocality": "Buea",
+          "addressRegion": "South-West",
+          "addressCountry": "CM"
+        },
+        "openingHours": "Mo-Su 12:00-23:00",
+        "acceptsReservations": "https://camchopmeat.com/book",
+        "hasMenu": "https://camchopmeat.com/menu"
+      }
+    </script>
 
     <link rel="icon" href="/mark.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/mark.svg" />

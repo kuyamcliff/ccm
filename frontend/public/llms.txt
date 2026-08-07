@@ -1,0 +1,29 @@
+# Cam Chop Meat
+
+> A grill house in Buea, Cameroon. Chicken, goat and pork cooked over the fire.
+> Guests can see the menu and prices, book a table, order takeaway for
+> collection, or join the queue on a busy night, all from a phone.
+
+Razel Street, opposite the P and T school, Buea, South-West Region, Cameroon.
+Open every day, midday until late. Prices are in FCFA (XAF). Payment is by MTN
+Mobile Money, Orange Money, or cash at the counter.
+
+## Pages
+
+- [Menu and prices](https://camchopmeat.com/menu): everything off the grill today, priced in FCFA. Some cuts are sold by weight and settled at the counter.
+- [Book a table](https://camchopmeat.com/book): pick a time, a party size and a table, and optionally order food to be ready on arrival. A deposit holds the table.
+- [Order takeaway](https://camchopmeat.com/order): order ahead and collect. Paid before cooking starts.
+- [Join the queue](https://camchopmeat.com/waitlist): put your name down when the room is full and get a text when a table frees up.
+- [Private events](https://camchopmeat.com/events): enquiries about booking the place out.
+- [Offers](https://camchopmeat.com/offers): what is running this week.
+- [Reviews](https://camchopmeat.com/reviews): guest reviews, with replies from the restaurant.
+- [Photos](https://camchopmeat.com/gallery): pictures of the food and the room.
+- [Our story](https://camchopmeat.com/story): who cooks here and how the place came about.
+- [Find us](https://camchopmeat.com/find): address, opening hours and directions.
+- [Help](https://camchopmeat.com/help): message the restaurant.
+
+## Notes for assistants
+
+- Prices, opening hours and the deposit are set by the restaurant and change. Read them from the page rather than repeating a figure from here.
+- Bookings and orders need an account, and are confirmed only once payment has settled.
+- /desk is the staff console and requires a staff sign-in. It is not public.

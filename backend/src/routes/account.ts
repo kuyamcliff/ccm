@@ -11,6 +11,7 @@ import {
   signSession,
 } from "../auth.js";
 import { checkPassword } from "../lib/passwordStrength.js";
+import { closeAccount } from "../lib/closeAccount.js";
 import { generateSecret, otpauthUri, verifyTotp } from "../lib/totp.js";
 import { rateLimit } from "../middleware/security.js";
 
@@ -382,7 +383,10 @@ accountRouter.delete("/", credentialLimit, async (req, res) => {
     return;
   }
 
-  await db.prepare("DELETE FROM users WHERE id = ?").run(user.id);
+  /* Settles what is in flight and empties the row rather than deleting it.
+     See lib/closeAccount.ts for why a plain DELETE could not work here. */
+  await closeAccount(user.id);
+
   clearSessionCookie(res);
   res.json({ ok: true });
 });

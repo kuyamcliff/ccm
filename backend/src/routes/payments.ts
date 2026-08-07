@@ -312,11 +312,16 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
    * from one asking to pay a second time — unless it says which of the two it
    * meant, which is all this header is.
    */
-  const idempotencyKey = String(req.get("idempotency-key") ?? "").trim().slice(0, 100);
-  if (!idempotencyKey) {
-    res.status(400).json({ error: "Missing Idempotency-Key header." });
-    return;
-  }
+  /* A client that does not send one still gets served, with a key minted here.
+     That gives it no protection against its own retries — exactly the position
+     everything was in before this existed — but it is better than a checkout
+     that returns 400. The frontend and the API deploy separately and a service
+     worker can hold an old build for a while, so for a window after this ships
+     there are real customers running a frontend that has never heard of this
+     header. Refusing them would be an outage in the one place that takes
+     money. Tighten to a hard 400 once the old builds have aged out. */
+  const idempotencyKey =
+    String(req.get("idempotency-key") ?? "").trim().slice(0, 100) || `legacy-${randomUUID()}`;
 
   const replay = (await db
     .prepare(

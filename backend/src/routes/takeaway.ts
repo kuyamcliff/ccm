@@ -181,11 +181,11 @@ takeawayRouter.post("/:orderNo/pay", payLimit, async (req, res) => {
   /* The same attempt key the booking side uses, for the same reason: a phone
      that loses the response and sends the request again must not be charged
      twice for one order. */
-  const idempotencyKey = String(req.get("idempotency-key") ?? "").trim().slice(0, 100);
-  if (!idempotencyKey) {
-    res.status(400).json({ error: "Missing Idempotency-Key header." });
-    return;
-  }
+  /* Minted here when the caller does not send one, so a frontend still cached
+     from before this shipped can pay rather than get a 400. See the same note
+     in payments.ts. */
+  const idempotencyKey =
+    String(req.get("idempotency-key") ?? "").trim().slice(0, 100) || `legacy-${randomUUID()}`;
 
   const replay = (await db
     .prepare(
