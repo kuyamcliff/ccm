@@ -2376,21 +2376,95 @@ body:has(.booking__foot) .shell__main {
 
 /* ══ Auth ═══════════════════════════════════════════════════════════════════ */
 
+/*
+ * Signing in and the account are denser than the rest of the site, on purpose.
+ *
+ * The public pages are a shop window and can afford to breathe. These are
+ * forms: nobody arrives at them to look, they arrive to get through them, and
+ * every row of air between two fields is another thumb-scroll between somebody
+ * and their booking. The whole sign-in card fits on a phone screen at this
+ * density, which the airy version did not.
+ *
+ * Two floors this does not go below, both of which look like free space and
+ * are not:
+ *
+ *   Inputs stay at 16px. Under that, iOS zooms the page the moment a field
+ *   takes focus and the layout never recovers.
+ *
+ *   Anything tappable stays at --tap (44px). The buttons here drop from the
+ *   `lg` size to the default, which is exactly --tap — smaller than that and
+ *   the target is too small to hit, whatever the design says.
+ *
+ * So what comes out is padding, gaps and heading size. Not the controls.
+ */
+.auth,
+.account {
+  --pad: var(--s-3);
+  --row: var(--s-3);
+}
+
 .auth {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--s-4);
-  padding-block: clamp(2rem, 8vw, 4.5rem);
+  gap: var(--s-3);
+  padding-block: clamp(1.25rem, 4vw, 2.25rem);
 }
 
 .auth__card {
   width: 100%;
-  max-width: 26rem;
+  max-width: 24rem;
+}
+
+/* Tighter than the shared card, which is sized for reading rather than
+   filling in. */
+.auth .card,
+.account .card {
+  padding: var(--pad);
+}
+
+.auth .stack,
+.account .card .stack {
+  gap: var(--row);
+}
+
+.auth .stack--tight,
+.account .stack--tight {
+  gap: var(--s-2);
+}
+
+/* The gap between one card and the next. `stack--loose` is 1.75rem, which on a
+   phone is most of a thumb between two boxes that plainly belong together. */
+.account > .stack--loose,
+.account .stack--loose {
+  gap: var(--s-4);
+}
+
+/* A form's heading is a label for what follows, not a headline. The account's
+   own card titles are already at --t-small and are left alone. */
+.auth__card .display--lg {
+  font-size: var(--t-head);
 }
 
 .auth__card .display {
   margin-bottom: var(--s-1);
+}
+
+/* The line under the heading carries the same weight as a hint. */
+.auth__card > .muted {
+  font-size: var(--t-small);
+  line-height: 1.45;
+}
+
+/* Fields lose the gap between the control and the label above it. */
+.auth .field,
+.account .field {
+  gap: var(--s-1);
+}
+
+.auth .input,
+.account .input {
+  padding-block: var(--s-2);
 }
 
 .auth__fine {
@@ -2458,7 +2532,7 @@ body:has(.booking__foot) .shell__main {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: var(--s-3);
-  margin-bottom: var(--s-4);
+  margin-bottom: var(--s-3);
 }
 
 .account-head > div {
