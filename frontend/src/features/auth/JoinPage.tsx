@@ -80,7 +80,7 @@ export function JoinPage() {
 
           {problem ? <Notice tone="bad">{problem}</Notice> : null}
 
-          <Button type="submit" tone="primary" block size="lg" busy={create.busy}>
+          <Button type="submit" tone="primary" block busy={create.busy}>
             Create account
           </Button>
 

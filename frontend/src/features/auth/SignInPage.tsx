@@ -143,7 +143,7 @@ export function SignInPage() {
 
               {problem ? <Notice tone="bad">{problem}</Notice> : null}
 
-              <Button type="submit" tone="primary" block size="lg" busy={attempt.busy}>
+              <Button type="submit" tone="primary" block busy={attempt.busy}>
                 Sign in
               </Button>
 

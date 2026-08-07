@@ -522,7 +522,7 @@ export function AccountPage() {
   const [tab, setTab] = useState<"profile" | "security" | "rewards">("profile");
 
   return (
-    <div className="page section">
+    <div className="page section account">
       <div className="account-head">
         <Avatar name={user?.name ?? ""} large />
         <div>
