@@ -3,6 +3,7 @@ import { applyUpdate, db } from "../db.js";
 import type { SqlValue } from "../db.js";
 import { requireAuth, requireAdmin, requireScope, requireSuperAdmin, revokeSessions } from "../auth.js";
 import { audit } from "../lib/audit.js";
+import { closeAccount } from "../lib/closeAccount.js";
 import { MediaError, storeOrValidateUrl } from "../lib/media.js";
 import { awardPoints } from "./loyalty.js";
 import { failPayment } from "./payments.js";
@@ -45,7 +46,7 @@ adminRouter.get("/stats", async (_req, res) => {
   const today = new Date().toISOString().slice(0, 10);
   const totalReservations = ((await db.prepare("SELECT COUNT(*) as c FROM reservations WHERE status = 'confirmed'").get()) as { c: number }).c;
   const todayReservations = ((await db.prepare("SELECT COUNT(*) as c FROM reservations WHERE date = ? AND status = 'confirmed'").get(today)) as { c: number }).c;
-  const totalUsers = ((await db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'user'").get()) as { c: number }).c;
+  const totalUsers = ((await db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'user' AND deleted_at IS NULL").get()) as { c: number }).c;
   const pendingPayments = ((await db.prepare("SELECT COUNT(*) as c FROM payments WHERE status = 'pending'").get()) as { c: number }).c;
   const totalRevenue = ((await db.prepare("SELECT COALESCE(SUM(amount_fcfa), 0) as s FROM payments WHERE status = 'completed'").get()) as { s: number }).s;
   res.json({ totalReservations, todayReservations, totalUsers, pendingPayments, totalRevenue });
@@ -241,7 +242,7 @@ adminRouter.delete("/tables/:id", async (req, res) => {
 // ── Users ────────────────────────────────────────────────
 
 adminRouter.get("/users", async (_req, res) => {
-  const users = await db.prepare("SELECT id, name, email, role, banned_at, created_at FROM users ORDER BY created_at DESC").all();
+  const users = await db.prepare("SELECT id, name, email, role, banned_at, created_at FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC").all();
   res.json({ users });
 });
 
@@ -298,7 +299,11 @@ adminRouter.delete("/users/:id", async (req, res) => {
   if (!target) { res.status(404).json({ error: "User not found." }); return; }
   if (target.role === "super_admin" || target.role === "owner") { res.status(403).json({ error: "Cannot delete a super admin." }); return; }
 
-  await db.prepare("DELETE FROM users WHERE id = ?").run(id);
+  /* Same treatment as a guest closing their own account: settle what is in
+     flight, then empty the row. A plain DELETE returned a 500 for any guest
+     who had ever paid, so this route did not work on the guests most likely
+     to need it. */
+  await closeAccount(id);
   audit(req, { action: "user.delete", targetType: "user", targetId: id });
   res.json({ ok: true });
 });
@@ -614,7 +619,7 @@ adminRouter.get("/analytics", async (_req, res) => {
 
   const newUsersByDay = await db.prepare(`
     SELECT substr(created_at, 1, 10) as day, COUNT(*) as count
-    FROM users WHERE role = 'user' AND created_at >= now_text_offset(interval '-30 days')
+    FROM users WHERE role = 'user' AND deleted_at IS NULL AND created_at >= now_text_offset(interval '-30 days')
     GROUP BY day ORDER BY day ASC
   `).all();
 

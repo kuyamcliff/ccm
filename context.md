@@ -149,6 +149,27 @@ request can mark a booking paid, so it verifies an HMAC over the raw bytes
 it cannot prove. With no webhook secret set it refuses every delivery and
 settlement falls back to polling, which is the safe direction to fail in.
 
+## Closing an account
+`lib/closeAccount.ts`, used by both the guest's own delete and the console's.
+It settles before it forgets: any payment still `pending` or `initiated` is
+failed first (which also hands back the promo use and gift card value it was
+holding), held tables are cancelled, then the row is emptied rather than
+deleted.
+
+It is not a hard delete because it cannot be. `reservations.user_id` cascades
+from `users`, but `payments.reservation_id` does not cascade from
+`reservations`, so `DELETE FROM users` raised a foreign key violation for any
+guest who had ever paid — both delete routes returned a 500 for exactly the
+customers most likely to use them. For guests who had never paid it succeeded
+and took their bookings, reviews and points with it.
+
+What survives is the restaurant's: reservations and payments. What goes is
+theirs: name, email, password, passkeys, reviews, votes, replies. The address
+moves to `deleted-<id>@deleted.invalid`, which keeps the unique index happy,
+cannot collide with a real address, and frees the original if they come back.
+`deleted_at` is what `loadUser` checks, so a closed account reads as no account
+at all rather than as a sign-in to refuse.
+
 ## Security posture, and what was checked
 Audited against the usual vibecoded-app checklist. Most of it was already
 covered, so this records what was verified rather than implying it was added:
