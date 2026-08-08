@@ -59,6 +59,22 @@ export const guestToken = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Notified on every 401, from any request, anywhere in the app.
+ *
+ * The session provider is the only subscriber: it already knows whether this
+ * tab currently believes somebody is signed in, so it is the one place that
+ * can tell "you were never signed in" (every guest's normal browsing) apart
+ * from "you were signed in a moment ago and are not any more" (the cookie
+ * expired, another device signed out everywhere, or an admin banned the
+ * account). Without this, a page that only reads its data once on mount has
+ * no way to learn its session died and keeps that account's data on screen.
+ */
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(fn: (() => void) | null) {
+  onUnauthorized = fn;
+}
+
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
 async function once<T>(method: Method, path: string, body?: unknown, extra?: Record<string, string>): Promise<T> {
@@ -97,6 +113,7 @@ async function once<T>(method: Method, path: string, body?: unknown, extra?: Rec
     const record = payload as Record<string, unknown> | null;
     const message = typeof record?.error === "string" ? record.error : `Request failed (${response.status}).`;
     const retryAfter = typeof record?.retry_after_seconds === "number" ? record.retry_after_seconds : undefined;
+    if (response.status === 401) onUnauthorized?.();
     throw new ApiError(response.status, message, retryAfter);
   }
 

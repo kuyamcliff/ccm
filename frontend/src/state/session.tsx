@@ -1,7 +1,27 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { api } from "~/lib/api";
 import type { AdminScope, LoginOutcome, User } from "~/lib/api";
+import { setUnauthorizedHandler } from "~/lib/http";
+import { useToast } from "~/state/toast";
+
+/**
+ * Broadcasts a sign-in or sign-out to every other tab on this browser.
+ *
+ * The cookie is shared between tabs the instant it changes, but each tab's
+ * React state is not: a tab left open on the account page, or on a page that
+ * only fetched its data once, would otherwise keep showing that account until
+ * something made it ask again. `storage` only fires in *other* tabs than the
+ * one that wrote the key, which is exactly the tabs that need telling.
+ */
+const SESSION_EVENT_KEY = "ccm.session.event";
+function announceSessionChange() {
+  try {
+    localStorage.setItem(SESSION_EVENT_KEY, String(Date.now()));
+  } catch {
+    /* Private browsing. Other tabs just will not hear about this one. */
+  }
+}
 
 interface SessionValue {
   user: User | null;
@@ -32,6 +52,46 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
   const [scopes, setScopes] = useState<Partial<Record<AdminScope, boolean>> | null>(null);
+  const toast = useToast();
+
+  /* Read from the 401 handler and the storage listener below, both of which
+     are registered once and must always see the current user, not the one
+     from whichever render happened to set them up. */
+  const userRef = useRef(user);
+  userRef.current = user;
+
+  /* A 401 on any request, from any page, means this tab's cookie no longer
+     works: it expired, "sign out everywhere" fired from another device, or
+     an admin banned the account. If this tab still thinks somebody is signed
+     in, that belief is now wrong, so drop it at once rather than leaving
+     whatever that account's data was on screen. A guest's normal 401s (the
+     first "who am I", a wrong password on the sign-in form) never reach this
+     branch, because userRef is still null when they happen. */
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      if (userRef.current !== null) {
+        setUser(null);
+        toast.say("You have been signed out.");
+      }
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [toast]);
+
+  /* Signing out in one tab clears the cookie for every tab, but only this
+     one re-renders. Without this, a tab left open on the account page, or on
+     anything that only fetched its data once, keeps showing that account
+     until something makes it ask again. */
+  useEffect(() => {
+    function onStorage(event: StorageEvent) {
+      if (event.key !== SESSION_EVENT_KEY) return;
+      api.me
+        .current()
+        .then((value) => setUser(value ?? null))
+        .catch(() => setUser(null));
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,19 +140,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     const outcome = await api.me.signIn(email, password);
-    if ("user" in outcome) setUser(outcome.user);
+    if ("user" in outcome) {
+      setUser(outcome.user);
+      announceSessionChange();
+    }
     return outcome;
   }, []);
 
   const completeTwoFactor = useCallback(async (challenge: string, code: string) => {
     const value = await api.me.answerTwoFactor(challenge, code);
     setUser(value);
+    announceSessionChange();
     return value;
   }, []);
 
   const register = useCallback(async (name: string, email: string, password: string) => {
     const value = await api.me.register(name, email, password);
     setUser(value);
+    announceSessionChange();
     return value;
   }, []);
 
@@ -100,8 +165,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       await api.me.signOut();
     } finally {
-      // Even if the call fails, this browser is done with the session.
+      // Even if the call fails, this browser is done with the session, and
+      // every other tab it has open needs to hear that too.
       setUser(null);
+      announceSessionChange();
     }
   }, []);
 
