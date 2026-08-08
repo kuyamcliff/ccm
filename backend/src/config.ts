@@ -105,33 +105,44 @@ export const EMAIL_REPLY_TO = optional("EMAIL_REPLY_TO");
 /** True only when the key needed to actually send is present. */
 export const EMAIL_ENABLED = RESEND_API_KEY.startsWith("re_");
 
-/* ── Outgoing SMS and WhatsApp (Twilio) ────────────────────────────────────
+/* ── Outgoing SMS (MTN SMS v3 API) ─────────────────────────────────────────
    Most guests here are reached on a phone number, not an inbox. Until these
    are supplied every message is still composed, still addressed and still
    written to the `notifications` table — it just gets marked 'logged' instead
    of going out, so the wiring can be checked before a provider is paid for.
 
-   To turn it on: set the account SID, the auth token, and whichever of the two
-   from-numbers you have. `TWILIO_WHATSAPP_FROM` takes the bare number; the
-   `whatsapp:` prefix Twilio wants is added when the message is sent. */
-export const TWILIO_ACCOUNT_SID = optional("TWILIO_ACCOUNT_SID");
-export const TWILIO_AUTH_TOKEN = optional("TWILIO_AUTH_TOKEN");
+   This is a different MTN portal from the Collections block above:
+   developers.mtn.com, not momodeveloper.mtn.com. Register an App against the
+   "SMS v3 API" product there to get a consumer key and secret. Full setup,
+   including what to register as the callback and delivery report URLs, is in
+   backend/SMS-SETUP.md. */
+export const MTN_SMS_CLIENT_ID = optional("MTN_SMS_CLIENT_ID");
+export const MTN_SMS_CLIENT_SECRET = optional("MTN_SMS_CLIENT_SECRET");
 
-/** The number SMS is sent from, in E.164 (e.g. +12025550123). */
-export const TWILIO_SMS_FROM = optional("TWILIO_SMS_FROM");
+/** The approved short code messages go out under. */
+export const MTN_SMS_SERVICE_CODE = optional("MTN_SMS_SERVICE_CODE");
 
-/** The WhatsApp sender, in E.164 and without the `whatsapp:` prefix. */
-export const TWILIO_WHATSAPP_FROM = optional("TWILIO_WHATSAPP_FROM");
+/** Optional alphanumeric sender name. Takes precedence over the service code when set. */
+export const MTN_SMS_SENDER_ADDRESS = optional("MTN_SMS_SENDER_ADDRESS");
+
+export const MTN_SMS_BASE_URL = optional("MTN_SMS_BASE_URL", "https://api.mtn.com").replace(/\/+$/, "");
 
 /** Country code assumed for a local number typed without one. 237 is Cameroon. */
 export const DEFAULT_PHONE_COUNTRY_CODE = optional("DEFAULT_PHONE_COUNTRY_CODE", "237");
 
-/** True only once an account and at least one sender are present. */
+/** True only once a consumer key, secret and service code are all present. */
 export const SMS_ENABLED =
-  TWILIO_ACCOUNT_SID.startsWith("AC") && TWILIO_AUTH_TOKEN.length > 0 && TWILIO_SMS_FROM.length > 0;
+  MTN_SMS_CLIENT_ID.length > 0 && MTN_SMS_CLIENT_SECRET.length > 0 && MTN_SMS_SERVICE_CODE.length > 0;
 
-export const WHATSAPP_ENABLED =
-  TWILIO_ACCOUNT_SID.startsWith("AC") && TWILIO_AUTH_TOKEN.length > 0 && TWILIO_WHATSAPP_FROM.length > 0;
+/**
+ * Shared secret this server expects on the delivery report URL it hands to
+ * MTN (as a path segment — see SMS-SETUP.md), since the SMS v3 API documents
+ * no signature on that callback. Without it the route still records what
+ * arrives, since a late or missing delivery report is recoverable and the
+ * report carries no money, but anyone who guesses the path can write fake
+ * delivery statuses into the log — set this before relying on the callback
+ * for anything more than a nicety. */
+export const SMS_CALLBACK_SECRET = optional("SMS_CALLBACK_SECRET");
 
 /** Public base URL the API is reachable at — used to build absolute image URLs. */
 export const PUBLIC_API_URL = optional("PUBLIC_API_URL", "").replace(/\/+$/, "");

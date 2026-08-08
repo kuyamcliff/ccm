@@ -1,13 +1,7 @@
-import {
-  DEFAULT_PHONE_COUNTRY_CODE,
-  SMS_ENABLED,
-  TWILIO_ACCOUNT_SID,
-  TWILIO_AUTH_TOKEN,
-  TWILIO_SMS_FROM,
-  TWILIO_WHATSAPP_FROM,
-  WHATSAPP_ENABLED,
-} from "../config.js";
+import { randomUUID } from "node:crypto";
+import { DEFAULT_PHONE_COUNTRY_CODE, SMS_ENABLED } from "../config.js";
 import { db } from "../db.js";
+import { sendSms } from "./mtnSms.js";
 
 /*
  * Messages to a guest's phone.
@@ -17,9 +11,9 @@ import { db } from "../db.js";
  * the room. Email is the wrong channel here — this is Buea, and the number is
  * what people actually read.
  *
- * Twilio is spoken to over plain HTTP for the same reason `mailer.ts` speaks to
- * Resend that way: it is one authenticated POST, and a booking is not worth
- * putting a package with an install script in front of.
+ * MTN's SMS v3 API is spoken to directly for the same reason `mailer.ts`
+ * speaks to Resend that way: it is a couple of authenticated POSTs, and a
+ * booking is not worth putting a package with an install script in front of.
  *
  * Until credentials exist every message is still composed, addressed and
  * recorded — it is written to `notifications` with status 'logged' rather than
@@ -27,9 +21,7 @@ import { db } from "../db.js";
  * turning it on later changes no call site.
  */
 
-const SEND_TIMEOUT_MS = 10_000;
-
-export type Channel = "whatsapp" | "sms";
+export type Channel = "sms";
 
 export type NotificationStatus = "sent" | "failed" | "logged" | "skipped";
 
@@ -41,8 +33,6 @@ export interface NotifyInput {
   body: string;
   userId?: number | null;
   reservationId?: number | null;
-  /** Forces a channel. By default WhatsApp is preferred when it is available. */
-  channel?: Channel;
 }
 
 export interface NotifyResult {
@@ -65,15 +55,6 @@ export function toE164(raw: string): string | null {
   if (trimmed.length === 9) return `+${DEFAULT_PHONE_COUNTRY_CODE}${trimmed}`;
   if (trimmed.length < 8 || trimmed.length > 15) return null;
   return `+${trimmed}`;
-}
-
-function preferredChannel(explicit?: Channel): Channel {
-  if (explicit) return explicit;
-  return WHATSAPP_ENABLED ? "whatsapp" : "sms";
-}
-
-function enabled(channel: Channel): boolean {
-  return channel === "whatsapp" ? WHATSAPP_ENABLED : SMS_ENABLED;
 }
 
 async function record(
@@ -108,49 +89,6 @@ async function record(
   }
 }
 
-async function sendViaTwilio(channel: Channel, to: string, body: string): Promise<{ ok: true; sid: string } | { ok: false; reason: string }> {
-  const from = channel === "whatsapp" ? `whatsapp:${TWILIO_WHATSAPP_FROM}` : TWILIO_SMS_FROM;
-  const target = channel === "whatsapp" ? `whatsapp:${to}` : to;
-
-  const form = new URLSearchParams({ To: target, From: from, Body: body });
-  const auth = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString("base64");
-
-  let res: Response;
-  try {
-    res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${auth}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: form,
-      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
-    });
-  } catch (err) {
-    const reason =
-      err instanceof DOMException && err.name === "TimeoutError" ? "Twilio did not respond in time." : "Could not reach Twilio.";
-    return { ok: false, reason };
-  }
-
-  let payload: unknown = null;
-  try { payload = await res.json(); } catch { /* non-JSON body, handled below */ }
-
-  if (!res.ok) {
-    // Twilio returns { message, code } and the message names the real problem —
-    // an unverified sender, a number outside the trial's allow-list — which is
-    // the difference between a diagnosable failure and a silent one.
-    const message =
-      payload && typeof payload === "object" && "message" in payload
-        ? String((payload as { message: unknown }).message)
-        : `Twilio returned ${res.status}.`;
-    return { ok: false, reason: message };
-  }
-
-  const sid =
-    payload && typeof payload === "object" && "sid" in payload ? String((payload as { sid: unknown }).sid) : "";
-  return { ok: true, sid };
-}
-
 /**
  * Sends one message and records it.
  *
@@ -159,7 +97,7 @@ async function sendViaTwilio(channel: Channel, to: string, body: string): Promis
  * table — and none of it should come apart because a phone network did.
  */
 export async function notify(input: NotifyInput): Promise<NotifyResult> {
-  const channel = preferredChannel(input.channel);
+  const channel: Channel = "sms";
   const recipient = toE164(input.to);
 
   if (!recipient) {
@@ -167,23 +105,27 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
     return { status: "skipped", channel, reason: "Not a phone number we can send to." };
   }
 
-  if (!enabled(channel)) {
+  if (!SMS_ENABLED) {
     await record(input, channel, recipient, "logged", null, null);
     return { status: "logged", channel, reason: "No provider is configured yet." };
   }
 
-  const result = await sendViaTwilio(channel, recipient, input.body);
+  // Doubles as the notifications row's provider_ref, so a delivery report
+  // arriving later (see routes/sms.ts) can find its way back to this row.
+  const clientCorrelatorId = randomUUID();
+
+  const result = await sendSms(recipient, input.body, clientCorrelatorId);
   if (!result.ok) {
     await record(input, channel, recipient, "failed", null, result.reason);
     console.error(`[notify] ${input.template} to ${recipient} failed: ${result.reason}`);
     return { status: "failed", channel, reason: result.reason };
   }
 
-  await record(input, channel, recipient, "sent", result.sid, null);
+  await record(input, channel, recipient, "sent", clientCorrelatorId, null);
   return { status: "sent", channel };
 }
 
 /** True when anything at all can actually leave the building. */
 export function messagingAvailable(): boolean {
-  return SMS_ENABLED || WHATSAPP_ENABLED;
+  return SMS_ENABLED;
 }

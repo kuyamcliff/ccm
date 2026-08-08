@@ -62,9 +62,9 @@ const STEPS: Step[] = [
   },
 
   /* Every message the site tries to send, kept whether it went out or not.
-     The provider is not wired up yet, so today every row lands as 'logged';
-     when Twilio credentials arrive the same rows start saying 'sent' and this
-     table becomes the record of what a guest was actually told. */
+     Without MTN SMS credentials every row lands as 'logged'; once they are
+     set the same rows start saying 'sent', and this table becomes the record
+     of what a guest was actually told. */
   {
     name: "notifications",
     sql: `CREATE TABLE IF NOT EXISTS notifications (

@@ -33,6 +33,7 @@ import { legalRouter } from "./routes/legal.js";
 import { supportRouter } from "./routes/support.js";
 import { recoveryRouter } from "./routes/recovery.js";
 import { accessRouter } from "./routes/access.js";
+import { smsRouter } from "./routes/sms.js";
 
 /* Columns and tables first: the two migrations below write to rows this one
    may have just added. */
@@ -136,6 +137,7 @@ app.use("/api/support", supportRouter);
 app.use("/api/recovery", recoveryRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/access", accessRouter);
+app.use("/api/sms", smsRouter);
 
 app.use("/api", (_req, res) => res.status(404).json({ error: "Not found." }));
 
