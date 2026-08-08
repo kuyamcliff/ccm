@@ -110,7 +110,7 @@ accountRouter.patch("/email", credentialLimit, async (req, res) => {
   const hash = await currentHash(user.id);
   if (!hash) { res.status(404).json({ error: "User not found." }); return; }
   if (!(await bcrypt.compare(password, hash))) {
-    res.status(401).json({ error: "Incorrect password." });
+    res.status(400).json({ error: "Incorrect password." });
     return;
   }
 
@@ -148,7 +148,7 @@ accountRouter.patch("/password", credentialLimit, async (req, res) => {
   const hash = await currentHash(user.id);
   if (!hash) { res.status(404).json({ error: "User not found." }); return; }
   if (!(await bcrypt.compare(currentPassword, hash))) {
-    res.status(401).json({ error: "Incorrect current password." });
+    res.status(400).json({ error: "Incorrect current password." });
     return;
   }
 
@@ -213,7 +213,7 @@ accountRouter.post("/2fa/enable", totpLimit, async (req, res) => {
   if (!row?.totp_secret) { res.status(400).json({ error: "Run 2FA setup first." }); return; }
 
   if (!verifyTotp(row.totp_secret, code)) {
-    res.status(401).json({ error: "Incorrect code. Check your app and try again." });
+    res.status(400).json({ error: "Incorrect code. Check your app and try again." });
     return;
   }
 
@@ -236,7 +236,7 @@ accountRouter.post("/2fa/disable", credentialLimit, async (req, res) => {
   const hash = await currentHash(user.id);
   if (!hash) { res.status(404).json({ error: "User not found." }); return; }
   if (!(await bcrypt.compare(password, hash))) {
-    res.status(401).json({ error: "Incorrect password." });
+    res.status(400).json({ error: "Incorrect password." });
     return;
   }
 
@@ -379,7 +379,7 @@ accountRouter.delete("/", credentialLimit, async (req, res) => {
   const hash = await currentHash(user.id);
   if (!hash) { res.status(404).json({ error: "User not found." }); return; }
   if (!(await bcrypt.compare(password, hash))) {
-    res.status(401).json({ error: "Incorrect password." });
+    res.status(400).json({ error: "Incorrect password." });
     return;
   }
 
