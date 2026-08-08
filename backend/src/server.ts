@@ -9,6 +9,7 @@ import { migrateInlineMedia } from "./lib/migrate-media.js";
 import { migrateSchema } from "./lib/migrate-schema.js";
 import { backfillLegacyBookingCodes } from "./lib/bookingCode.js";
 import { rateLimit, sameOriginOnly, securityHeaders } from "./middleware/security.js";
+import { initTelegramLogger, flushTelegramLogs } from "./lib/telegramLogger.js";
 import { authRouter } from "./routes/auth.js";
 import { reservationsRouter } from "./routes/reservations.js";
 import { reviewsRouter } from "./routes/reviews.js";
@@ -33,6 +34,9 @@ import { legalRouter } from "./routes/legal.js";
 import { supportRouter } from "./routes/support.js";
 import { recoveryRouter } from "./routes/recovery.js";
 import { accessRouter } from "./routes/access.js";
+
+/* Initialize Telegram logging before anything else */
+initTelegramLogger();
 
 /* Columns and tables first: the two migrations below write to rows this one
    may have just added. */
@@ -202,9 +206,10 @@ server.timeout = 0;                // no blanket socket timeout; the above gover
 
 /* Finish in-flight requests and close the database cleanly rather than being
    killed mid-write. */
-function shutdown(signal: string) {
+async function shutdown(signal: string) {
   console.log(`\n[${signal}] shutting down`);
-  server.close(() => {
+  server.close(async () => {
+    await flushTelegramLogs();
     pool.end().finally(() => process.exit(0));
   });
   setTimeout(() => process.exit(1), 10_000).unref();
