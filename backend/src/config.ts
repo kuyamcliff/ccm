@@ -136,6 +136,11 @@ export const WHATSAPP_ENABLED =
 /** Public base URL the API is reachable at — used to build absolute image URLs. */
 export const PUBLIC_API_URL = optional("PUBLIC_API_URL", "").replace(/\/+$/, "");
 
+/* ── Telegram Logging ──────────────────────────────────────────────────────
+   Send all render logs to Telegram for real-time monitoring. */
+export const TELEGRAM_BOT_TOKEN = optional("TELEGRAM_BOT_TOKEN");
+export const TELEGRAM_CHAT_ID = optional("TELEGRAM_CHAT_ID");
+
 if (IS_PROD) {
   if (JWT_SECRET.length < 32) {
     problems.push("JWT_SECRET must be at least 32 characters in production.");
