@@ -59,6 +59,19 @@ app.set("etag", "strong");
 app.use(securityHeaders);
 app.use(compression());
 
+/* Every request, not just errors — routed through console.log so the
+   Telegram logger (hooked into console.* above) forwards it like anything
+   else. Logged on 'finish' rather than at request start so the line carries
+   the actual status code and timing instead of just "request came in". */
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    const ms = Date.now() - start;
+    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms`);
+  });
+  next();
+});
+
 /* Uploads are content-addressed, so a given URL always names the same bytes and
    can be cached in the browser indefinitely. */
 app.use(
