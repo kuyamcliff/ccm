@@ -151,9 +151,15 @@ export function OrderPage() {
             </div>
           ) : null}
 
+          {/* An order placed without an account has nothing to be filed under,
+              so it is not in Mine and saying otherwise sends somebody looking
+              for it. The code is the whole record in that case, which is worth
+              saying while they are still looking at it. */}
           <p className="fine muted">
-            We start cooking closer to the time so it is hot when you arrive. Your code and this list are also saved in
-            Mine.
+            We start cooking closer to the time so it is hot when you arrive.{" "}
+            {user
+              ? "Your code and this list are also saved in Mine."
+              : "Write the code down: you ordered without an account, so this page is the only copy."}
           </p>
         </div>
 
@@ -471,7 +477,11 @@ export function OrderPage() {
             // stops a failed or abandoned payment from silently emptying the
             // basket with nothing to show for it.
             basket.clear();
-            toast.say(`Order ${placed.order_no} is saved. Pay for it in Mine so the kitchen can start.`);
+            toast.say(
+              user
+                ? `Order ${placed.order_no} is saved. Pay for it in Mine so the kitchen can start.`
+                : `Order ${placed.order_no} was not paid, so the kitchen has not started on it. Order again when you are ready to pay.`
+            );
             setCollected(true);
           }}
           onPaid={() => {

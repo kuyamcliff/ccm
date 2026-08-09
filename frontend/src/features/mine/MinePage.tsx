@@ -21,6 +21,9 @@ import { MomoDialog } from "~/features/pay/MomoDialog";
  */
 
 const ORDER_STATUS: Record<TakeawayOrder["status"], { label: string; tone: "neutral" | "good" | "warn" | "bad" | "hot" }> = {
+  /* Says what is missing rather than what happened, because the guest can fix
+     this one and the button underneath is how. */
+  awaiting_payment: { label: "Not paid", tone: "warn" },
   pending: { label: "Sent", tone: "warn" },
   confirmed: { label: "Accepted", tone: "hot" },
   ready: { label: "Ready to collect", tone: "good" },

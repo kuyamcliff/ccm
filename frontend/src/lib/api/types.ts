@@ -242,7 +242,16 @@ export interface OrderLine {
   id?: number;
 }
 
-export type OrderStatus = "pending" | "confirmed" | "ready" | "picked_up" | "cancelled";
+/* `awaiting_payment` is a real status a guest can see: it is where a takeaway
+   order sits between being placed and being paid for. The kitchen board never
+   shows it, but Mine does, because that is where the guest settles it. */
+export type OrderStatus =
+  | "awaiting_payment"
+  | "pending"
+  | "confirmed"
+  | "ready"
+  | "picked_up"
+  | "cancelled";
 
 export interface TakeawayOrder {
   id: number;
