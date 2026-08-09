@@ -191,8 +191,13 @@ function Orders({ orders }: { orders: Resource<TakeawayOrder[]> }) {
         icon="bag"
         title="No orders yet"
         action={
-          <LinkButton to="/order" tone="primary">
-            Order something
+          /* The menu, not the basket. With nothing in it the basket is an empty
+             state offering a link to the menu, which is a tap spent getting told
+             where to go. Worded differently from the button above it, the way
+             "Book one" is worded differently from "Book a table", because two
+             buttons carrying the same words read as one thing drawn twice. */
+          <LinkButton to="/menu" tone="primary">
+            Go to the menu
           </LinkButton>
         }
       >
@@ -333,9 +338,19 @@ export function MinePage() {
             {orderCount > 0 ? <span className="tab__count">{orderCount}</span> : null}
           </button>
         </div>
-        <LinkButton to="/book" tone="primary" size="sm" icon="plus">
-          Book a table
-        </LinkButton>
+        {/* The action follows the tab. This was one button offering to book a
+            table no matter which tab you were on, so the takeaway tab's only
+            way forward was to book a table instead. Both point at the start of
+            the thing they name: a takeaway order starts by choosing food. */}
+        {tab === "tables" ? (
+          <LinkButton to="/book" tone="primary" size="sm" icon="plus">
+            Book a table
+          </LinkButton>
+        ) : (
+          <LinkButton to="/menu" tone="primary" size="sm" icon="plus">
+            Order takeaway
+          </LinkButton>
+        )}
       </div>
 
       <div style={{ marginTop: "var(--s-5)" }}>

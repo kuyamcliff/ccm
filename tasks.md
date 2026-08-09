@@ -1,5 +1,29 @@
 # Tasks
 
+## Done (2026-08-09, the basket belonged to the browser)
+- [x] **A basket outlived the account that filled it.** Sign in, choose food,
+      sign out, and the items were still there for whoever opened the site
+      next. It was stored under one key with nothing saying whose it was.
+- [x] The lines are now written beside the id of the account that made them.
+      A basket comes back only to whoever put it there, and is emptied the
+      moment that account signs out, is signed out by a 401, or is replaced by
+      somebody else signing in on the same phone.
+- [x] A signed-out basket is stored under `null` and deliberately survives that
+      guest signing in, because choosing food and then signing in to pay for it
+      is the normal way to order here.
+- [x] `ccm.basket.v1` is removed on sight rather than left as an orphan. A
+      basket in progress when this ships is lost once, which is the price of
+      the old key having no owner to check.
+- [x] Mine's action button follows the tab. It was one button offering to book
+      a table on both tabs, so the takeaway tab's only way forward was to book
+      a table. It reads "Order takeaway" there now and goes to the menu, since
+      an order starts by choosing food.
+- [x] Driven in a real browser against a stubbed session: six basket cases
+      (boot, sign out, own basket returned, a second account, a guest signing
+      in, the old key) and both Mine tabs. All pass. Scripts are in the
+      session scratchpad, not the repo: they need a dev server and Playwright,
+      which is not a dependency here.
+
 ## Done (2026-08-09, Mine could not show a takeaway order)
 - [x] **`/api/takeaway/my-orders` was hiding the orders Mine exists to show.**
       It excluded `status != 'awaiting_payment'`, copied from the admin list
