@@ -225,6 +225,47 @@ const STEPS: Step[] = [
     sql: "ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at text",
   },
 
+  /* How many points a guest put against this bill.
+     The value they were worth is already inside `discount_fcfa`, so every total,
+     receipt and report that existed before this keeps adding up untouched. This
+     is the count to hand back if the payment does not complete, and clearing it
+     is what stops a redelivered webhook or a second cancellation crediting the
+     same points twice. */
+  {
+    name: "payments.points_spent",
+    sql: "ALTER TABLE payments ADD COLUMN IF NOT EXISTS points_spent integer NOT NULL DEFAULT 0",
+  },
+  {
+    name: "takeaway_orders.points_spent",
+    sql: "ALTER TABLE takeaway_orders ADD COLUMN IF NOT EXISTS points_spent integer NOT NULL DEFAULT 0",
+  },
+
+  /* What a gift card in particular covered, as opposed to `discount_fcfa`,
+     which is every discount added together.
+     Both refund paths handed the whole of `discount_fcfa` back to the card, so
+     an order that used a promo code as well credited the card with the promo's
+     value too. It only ever went unnoticed because `refundGiftCard` caps a
+     credit at the card's own headroom, which hid the excess on a card that had
+     not been spent elsewhere. Points made a third component, so the portions
+     are recorded rather than inferred. Backfilled to `discount_fcfa` for rows
+     written before this existed, which is what those refunds already assumed. */
+  {
+    name: "payments.gift_fcfa",
+    sql: "ALTER TABLE payments ADD COLUMN IF NOT EXISTS gift_fcfa integer",
+  },
+  {
+    name: "payments.gift_fcfa backfill",
+    sql: "UPDATE payments SET gift_fcfa = discount_fcfa WHERE gift_fcfa IS NULL",
+  },
+  {
+    name: "takeaway_orders.gift_fcfa",
+    sql: "ALTER TABLE takeaway_orders ADD COLUMN IF NOT EXISTS gift_fcfa integer",
+  },
+  {
+    name: "takeaway_orders.gift_fcfa backfill",
+    sql: "UPDATE takeaway_orders SET gift_fcfa = discount_fcfa WHERE gift_fcfa IS NULL",
+  },
+
   /* One tier above super admin. There was no such role before this feature,
      so the first boot after it ships has to create one: whoever has been
      `super_admin` the longest becomes the `owner`, once, and only if nobody

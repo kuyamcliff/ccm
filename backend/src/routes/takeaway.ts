@@ -17,6 +17,7 @@ import {
 } from "../lib/momo.js";
 import { evaluatePromo, releasePromoCode, usePromoCode } from "./promos.js";
 import { redeemGiftCard, refundGiftCard } from "./giftcards.js";
+import { attachPointsRef, awardPoints, refundPoints, spendPoints } from "./loyalty.js";
 import { generateOrderCode } from "../lib/bookingCode.js";
 
 export const takeawayRouter = Router();
@@ -41,6 +42,7 @@ takeawayRouter.post("/", orderLimit, async (req, res) => {
   const rawItems: unknown = req.body?.items;
   const promoCode = req.body?.promo_code ? String(req.body.promo_code).trim().toUpperCase() : null;
   const giftCode = req.body?.gift_card_code ? String(req.body.gift_card_code).trim().toUpperCase() : null;
+  const usePoints = req.body?.use_points === true;
   const userId = req.user?.id ?? null;
 
   if (name.length < 2 || name.length > 60) { res.status(400).json({ error: "Enter a name we can call out." }); return; }
@@ -85,15 +87,38 @@ takeawayRouter.post("/", orderLimit, async (req, res) => {
     promoDiscount = verdict.discount;
   }
 
+  /* Points go on after the promo and before the gift card, so a gift card is
+     only drawn down for what is still owed once everything free has been used.
+     Value on a card was paid for by somebody; points were not. */
+  let pointsSpent = 0;
+  let pointsValue = 0;
+  let pointsLedgerId: number | null = null;
+  if (usePoints && userId) {
+    const spend = await spendPoints(userId, Math.max(0, subtotal - promoDiscount), {
+      type: "takeaway",
+      id: null,
+    });
+    pointsSpent = spend.points;
+    pointsValue = spend.value_fcfa;
+    pointsLedgerId = spend.ledger_id ?? null;
+  }
+
+  const releasePoints = (why: string) =>
+    pointsSpent > 0 ? refundPoints(userId, pointsSpent, { type: why, id: null }) : Promise.resolve(0);
+
   let giftTaken = 0;
   if (giftCode) {
-    const remaining = Math.max(0, subtotal - promoDiscount);
+    const remaining = Math.max(0, subtotal - promoDiscount - pointsValue);
     if (remaining <= 0) {
-      res.status(400).json({ error: "There is nothing left to pay once the promo code is applied, so the gift card was not used." });
+      await releasePoints("takeaway_not_placed");
+      /* Says "the discounts" rather than "the promo code" because points can
+         now be part of what covered it. */
+      res.status(400).json({ error: "There is nothing left to pay once the other discounts are applied, so the gift card was not used." });
       return;
     }
     giftTaken = await redeemGiftCard(giftCode, remaining, { type: "takeaway", id: "pending" });
     if (giftTaken <= 0) {
+      await releasePoints("takeaway_not_placed");
       res.status(400).json({ error: "That gift card could not be used. Check the code and that it still has a balance." });
       return;
     }
@@ -103,13 +128,14 @@ takeawayRouter.post("/", orderLimit, async (req, res) => {
   if (promoCode) {
     if (!(await usePromoCode(promoCode))) {
       if (giftTaken > 0) await refundGiftCard(giftCode!, giftTaken, { type: "takeaway_promo_conflict", id: "pending" });
+      await releasePoints("takeaway_promo_conflict");
       res.status(410).json({ error: "This code has reached its usage limit." });
       return;
     }
     appliedPromo = promoCode;
   }
 
-  const discount = promoDiscount + giftTaken;
+  const discount = promoDiscount + pointsValue + giftTaken;
 
   const total = Math.max(0, subtotal - discount);
 
@@ -124,23 +150,30 @@ takeawayRouter.post("/", orderLimit, async (req, res) => {
   const info = await db
     .prepare(
       `INSERT INTO takeaway_orders (user_id, name, phone, items_json, total_fcfa, pickup_time, note,
-                                    promo_code, gift_card_code, discount_fcfa, order_no, status, payment_status, paid_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                                    promo_code, gift_card_code, discount_fcfa, gift_fcfa, points_spent, order_no, status, payment_status, paid_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       userId, name, phone, JSON.stringify(lines), total, pickup_time, note,
-      appliedPromo, appliedGift, discount, orderNo,
+      appliedPromo, appliedGift, discount, giftTaken, pointsSpent, orderNo,
       settled ? "pending" : "awaiting_payment",
       settled ? "paid" : "unpaid",
       settled ? new Date().toISOString().replace("T", " ").slice(0, 19) : null
     );
 
+  const orderId = Number(info.lastInsertRowid);
+  /* The ledger row was written before the order had an id, because the order's
+     total is what the discount produced. It gets the number now. */
+  if (pointsSpent > 0) await attachPointsRef(pointsLedgerId, orderId);
+
   res.status(201).json({
     ok: true,
-    id: Number(info.lastInsertRowid),
+    id: orderId,
     order_no: orderNo,
     subtotal,
     discount_fcfa: discount,
+    points_spent: pointsSpent,
+    points_value_fcfa: pointsValue,
     total_fcfa: total,
     payment_required: !settled,
     status: settled ? "pending" : "awaiting_payment",
@@ -302,10 +335,10 @@ takeawayRouter.get("/pay/:reference/status", async (req, res) => {
   const order = (await db
     .prepare(
       `SELECT id, order_no, total_fcfa, payment_status, momo_reference, pay_requested_at,
-              fail_reason, momo_transaction_id
+              fail_reason, momo_transaction_id, user_id
        FROM takeaway_orders WHERE momo_reference = ?`
     )
-    .get(reference)) as OrderPayRow | undefined;
+    .get(reference)) as (OrderPayRow & { user_id: number | null }) | undefined;
 
   if (!order) { res.status(404).json({ error: "Payment not found." }); return; }
 
@@ -321,7 +354,7 @@ takeawayRouter.get("/pay/:reference/status", async (req, res) => {
         // Conditional so a second poll cannot re-stamp an already-paid order.
         // Payment is also what admits the order to the kitchen queue: until
         // now its status was `awaiting_payment` and no board showed it.
-        await db.prepare(
+        const settled = await db.prepare(
           `UPDATE takeaway_orders
            SET payment_status = 'paid',
                paid_at = now_text(),
@@ -329,6 +362,15 @@ takeawayRouter.get("/pay/:reference/status", async (req, res) => {
                status = CASE WHEN status = 'awaiting_payment' THEN 'pending' ELSE status END
            WHERE id = ? AND payment_status != 'paid'`
         ).run(trx.financialTransactionId, order.id);
+
+        /* Points for the sale, on the transition only — this endpoint is
+           polled every three seconds while the guest approves, and a reward
+           handed out once per poll is a balance that grows by standing still.
+           A booking earns at the door instead, because a deposit is a held
+           table and not yet a meal; a takeaway that has been paid for is. */
+        if (settled.changes === 1 && order.user_id) {
+          await awardPoints(order.user_id, order.total_fcfa, "Takeaway order", "takeaway", order.id);
+        }
         status = "completed";
         message = null;
       } else if (trx.status === "FAILED" || remaining === 0) {
@@ -408,11 +450,16 @@ takeawayRouter.patch("/:id/status", requireAdmin, requireScope("takeaway"), asyn
   }
 
   const order = (await db
-    .prepare("SELECT id, order_no, status, phone, user_id, promo_code, gift_card_code, discount_fcfa FROM takeaway_orders WHERE id = ?")
+    .prepare(
+      `SELECT id, order_no, status, phone, user_id, promo_code, gift_card_code,
+              discount_fcfa, gift_fcfa, points_spent
+       FROM takeaway_orders WHERE id = ?`
+    )
     .get(id)) as
     | {
         id: number; order_no: string; status: string; phone: string | null; user_id: number | null;
         promo_code: string | null; gift_card_code: string | null; discount_fcfa: number;
+        gift_fcfa: number | null; points_spent: number;
       }
     | undefined;
   if (!order) { res.status(404).json({ error: "Order not found." }); return; }
@@ -431,11 +478,21 @@ takeawayRouter.patch("/:id/status", requireAdmin, requireScope("takeaway"), asyn
     });
   }
 
-  // Cancelling gives the customer their promo use and gift card value back.
+  // Cancelling gives the customer their promo use, gift card value and points
+  // back. `points_spent` is zeroed as it is credited, so a second cancellation
+  // of the same order cannot hand the same points over twice.
   if (status === "cancelled" && order.status !== "cancelled") {
     if (order.promo_code) await releasePromoCode(order.promo_code);
-    if (order.gift_card_code && order.discount_fcfa > 0) {
-      await refundGiftCard(order.gift_card_code, order.discount_fcfa, { type: "takeaway_cancelled", id: order.id });
+    const giftPortion = order.gift_fcfa ?? order.discount_fcfa;
+    if (order.gift_card_code && giftPortion > 0) {
+      await refundGiftCard(order.gift_card_code, giftPortion, { type: "takeaway_cancelled", id: order.id });
+    }
+    if (order.points_spent > 0) {
+      const given = await refundPoints(order.user_id, order.points_spent, {
+        type: "takeaway_cancelled",
+        id: order.id,
+      });
+      if (given > 0) await db.prepare("UPDATE takeaway_orders SET points_spent = 0 WHERE id = ?").run(order.id);
     }
   }
 

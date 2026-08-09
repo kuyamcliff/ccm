@@ -64,6 +64,8 @@ export const bookingApi = {
     momoPhone: string;
     promoCode?: string;
     giftCardCode?: string;
+    /** Spends as much of the guest's points balance as the rules allow. */
+    usePoints?: boolean;
     wallet?: string;
     /** The same value on every retry of one attempt, so a request that was
      *  sent twice is charged once. */
@@ -77,6 +79,7 @@ export const bookingApi = {
         wallet: input.wallet || undefined,
         promoCode: input.promoCode || undefined,
         giftCardCode: input.giftCardCode || undefined,
+        usePoints: input.usePoints || undefined,
       },
       { "Idempotency-Key": input.idempotencyKey }
     ),

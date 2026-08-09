@@ -3,9 +3,10 @@ import { Link } from "react-router-dom";
 import { api, SLOTS } from "~/lib/api";
 import { ApiError } from "~/lib/http";
 import { money, normalisePhone, timeLabel } from "~/lib/format";
+import { pointsOffer } from "~/lib/loyalty";
 import { useAction, useResource } from "~/lib/useResource";
 import { Button, IconButton, LinkButton } from "~/ui/Button";
-import { PhoneField, SelectField, TextAreaField, TextField } from "~/ui/Field";
+import { PhoneField, SelectField, Switch, TextAreaField, TextField } from "~/ui/Field";
 import { Icon } from "~/ui/Icon";
 import { Photo } from "~/ui/Photo";
 import { Money } from "~/ui/Bits";
@@ -34,6 +35,8 @@ interface Placed {
   order_no: string;
   total_fcfa: number;
   discount_fcfa: number;
+  points_spent: number;
+  points_value_fcfa: number;
   payment_required: boolean;
 }
 
@@ -42,6 +45,8 @@ export function OrderPage() {
   const basket = useBasket();
   const toast = useToast();
   const menu = useResource(() => api.site.menu(), []);
+  /* Only a signed-in guest has any, and the endpoint needs a session. */
+  const loyalty = useResource(() => (user ? api.me.loyalty() : Promise.resolve(null)), [user?.id]);
 
   const [name, setName] = useState(user?.name ?? "");
   const [phone, setPhone] = useState("");
@@ -49,6 +54,7 @@ export function OrderPage() {
   const [note, setNote] = useState("");
   const [promo, setPromo] = useState("");
   const [gift, setGift] = useState("");
+  const [usePoints, setUsePoints] = useState(true);
   const [problem, setProblem] = useState<string | null>(null);
 
   const [placed, setPlaced] = useState<Placed | null>(null);
@@ -77,6 +83,12 @@ export function OrderPage() {
   }
 
   const { lines, subtotal, dropped } = basket.price(menu.data ?? []);
+
+  /* The order is priced again by the server when it is placed, so this is a
+     preview like every other figure on the page. */
+  const offer = pointsOffer(loyalty.data, subtotal);
+  const pointsOff = offer && usePoints ? offer.value : 0;
+  const dueNow = Math.max(0, subtotal - pointsOff);
 
   /* Paid, or nothing left to pay. This is the code the counter asks for. */
   if (collected && placed) {
@@ -122,6 +134,14 @@ export function OrderPage() {
                   </li>
                 ))}
               </ul>
+              {placed.points_spent > 0 ? (
+                <div className="row row--between">
+                  <span className="muted">Points used</span>
+                  <span className="fine">
+                    {placed.points_spent} points, - <Money value={placed.points_value_fcfa} />
+                  </span>
+                </div>
+              ) : null}
               <div className="row row--between total-row">
                 <strong>Paid</strong>
                 <strong>
@@ -191,6 +211,7 @@ export function OrderPage() {
       note: note.trim() || undefined,
       promo_code: user && promo.trim() ? promo.trim() : undefined,
       gift_card_code: user && gift.trim() ? gift.trim() : undefined,
+      use_points: Boolean(offer) && usePoints,
     });
 
     if (!result) {
@@ -315,6 +336,23 @@ export function OrderPage() {
               onChange={(e) => setNote(e.target.value)}
             />
 
+            {/*
+              On by default, for the reason it is on in the payment sheet: a
+              guest looking at a bill wants their points off it. Still a switch,
+              because a guest saving them is entitled to.
+            */}
+            {offer ? (
+              <Switch
+                checked={usePoints}
+                onChange={setUsePoints}
+                label={
+                  <>
+                    Use {offer.points} points, <Money value={offer.value} /> off
+                  </>
+                }
+              />
+            ) : null}
+
             {user ? (
               <div className="grid--two">
                 <TextField
@@ -359,10 +397,16 @@ export function OrderPage() {
               <span className="muted">Takeaway</span>
               <span className="fine">Free</span>
             </div>
+            {pointsOff > 0 ? (
+              <div className="row row--between">
+                <span className="muted">Points</span>
+                <span className="fine">- <Money value={pointsOff} /></span>
+              </div>
+            ) : null}
             <div className="row row--between total-row">
               <strong>To pay</strong>
               <strong className="checkout__total">
-                <Money value={subtotal} />
+                <Money value={dueNow} />
               </strong>
             </div>
             <p className="fine faint">
@@ -395,7 +439,7 @@ export function OrderPage() {
         <div className="page row row--between">
           <span className="stack stack--tight">
             <span className="label">To pay</span>
-            <strong className="basket-bar__total">{money(subtotal)} FCFA</strong>
+            <strong className="basket-bar__total">{money(dueNow)} FCFA</strong>
           </span>
           <Button tone="primary" busy={place.busy} onClick={submit} icon="wallet">
             Pay Now

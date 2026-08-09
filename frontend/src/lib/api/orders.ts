@@ -11,6 +11,9 @@ export const orderApi = {
     note?: string;
     promo_code?: string;
     gift_card_code?: string;
+    /** Spends as much of the guest's points balance as the rules allow. The
+     *  server decides how many that is; the browser only says yes. */
+    use_points?: boolean;
   }) =>
     http.post<{
       ok: true;
@@ -18,6 +21,8 @@ export const orderApi = {
       order_no: string;
       subtotal: number;
       discount_fcfa: number;
+      points_spent: number;
+      points_value_fcfa: number;
       total_fcfa: number;
       /** False only when a discount covered the order entirely. */
       payment_required: boolean;

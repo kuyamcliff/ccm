@@ -1,5 +1,5 @@
 import { fetchFile, http } from "../http";
-import type { AdminScope, LoginOutcome, LoyaltyLedgerEntry, ReceiptSummary, Role, User } from "./types";
+import type { AdminScope, Loyalty, LoginOutcome, ReceiptSummary, Role, User } from "./types";
 
 /** Sessions, the account, and everything filed under it. */
 export const meApi = {
@@ -74,7 +74,7 @@ export const meApi = {
 
   receipts: () => http.get<{ receipts: ReceiptSummary[] }>("/api/account/receipts").then((r) => r.receipts),
 
-  loyalty: () => http.get<{ points_balance: number; ledger: LoyaltyLedgerEntry[] }>("/api/loyalty"),
+  loyalty: () => http.get<Loyalty>("/api/loyalty"),
 
   /** PDF for a settled booking. */
   bookingReceiptFile: (reservationId: number) => fetchFile(`/api/receipts/${reservationId}`),

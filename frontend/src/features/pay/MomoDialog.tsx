@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "~/lib/api";
 import type { MomoStatus } from "~/lib/api";
 import { ApiError } from "~/lib/http";
 import { normalisePhone, phoneLabel } from "~/lib/format";
+import { pointsOffer } from "~/lib/loyalty";
+import { useResource } from "~/lib/useResource";
+import { useSession } from "~/state/session";
 import { Button } from "~/ui/Button";
-import { PhoneField, TextField } from "~/ui/Field";
+import { PhoneField, Switch, TextField } from "~/ui/Field";
 import { Icon } from "~/ui/Icon";
 import { Money } from "~/ui/Bits";
 import { Notice } from "~/ui/Feedback";
@@ -29,6 +33,7 @@ export interface PaymentDriver {
     momoPhone: string;
     promoCode?: string;
     giftCardCode?: string;
+    usePoints?: boolean;
     /** Identifies one attempt across every retry of it. */
     idempotencyKey: string;
   }) => Promise<{
@@ -60,10 +65,12 @@ interface Props {
 const POLL_MS = 3000;
 
 export function MomoDialog({ open, onClose, onPaid, amountFcfa, title, what, driver }: Props) {
+  const { user } = useSession();
   const [phase, setPhase] = useState<Phase>("form");
   const [phone, setPhone] = useState("");
   const [promo, setPromo] = useState("");
   const [gift, setGift] = useState("");
+  const [usePoints, setUsePoints] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [reference, setReference] = useState<string | null>(null);
@@ -71,6 +78,20 @@ export function MomoDialog({ open, onClose, onPaid, amountFcfa, title, what, dri
   const [charged, setCharged] = useState(amountFcfa);
 
   const timers = useRef<{ poll?: ReturnType<typeof setInterval>; tick?: ReturnType<typeof setInterval> }>({});
+
+  /* Only asked for where the sheet can actually offer it: a signed-in guest on
+     a flow that takes discounts here. Takeaway settles its discounts when the
+     order is placed, a page earlier, so this would be a second place to spend
+     the same points. */
+  const canSpendPoints = Boolean(user) && Boolean(driver.allowDiscounts);
+  /* Asked again each time the sheet opens, because the balance moves: paying
+     for the last thing earned points, and spending them here takes them away. */
+  const loyalty = useResource(
+    () => (canSpendPoints && open ? api.me.loyalty() : Promise.resolve(null)),
+    [canSpendPoints, open]
+  );
+
+  const offer = pointsOffer(loyalty.data, amountFcfa);
 
   /* The current attempt's idempotency key. Cleared when an attempt finishes
      for good, so a guest who genuinely wants to try again after a decline gets
@@ -171,6 +192,7 @@ export function MomoDialog({ open, onClose, onPaid, amountFcfa, title, what, dri
         momoPhone: digits,
         promoCode: promo.trim() || undefined,
         giftCardCode: gift.trim() || undefined,
+        usePoints: Boolean(offer) && usePoints,
         idempotencyKey: attemptKey.current,
       });
       setCharged(result.amount_fcfa);
@@ -250,7 +272,14 @@ export function MomoDialog({ open, onClose, onPaid, amountFcfa, title, what, dri
         <>
           <div className="pay-total">
             <span className="label">Amount</span>
-            <Money value={amountFcfa} className="pay-total__value" />
+            {/* Follows the switch, so the figure above the button is the figure
+                the prompt will ask for rather than the one before the points
+                came off. A promo code or gift card cannot be previewed this way
+                because only the server knows what either is worth. */}
+            <Money
+              value={Math.max(0, amountFcfa - (offer && usePoints ? offer.value : 0))}
+              className="pay-total__value"
+            />
           </div>
 
           <PhoneField
@@ -260,6 +289,25 @@ export function MomoDialog({ open, onClose, onPaid, amountFcfa, title, what, dri
             onChange={setPhone}
             required
           />
+
+          {/*
+            Switched on by default. A guest who has earned points and is looking
+            at a bill wants them off it; making them ask is the friction that
+            left the balance unspent in the first place. It is still a switch
+            rather than a silent deduction, because somebody saving for
+            something bigger is entitled to keep them.
+          */}
+          {offer ? (
+            <Switch
+              checked={usePoints}
+              onChange={setUsePoints}
+              label={
+                <>
+                  Use {offer.points} points, <Money value={offer.value} /> off
+                </>
+              }
+            />
+          ) : null}
 
           {driver.allowDiscounts ? (
             <>

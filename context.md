@@ -114,6 +114,46 @@ steps limited too, TOTP is real, and every staff capability is enforced by
 `requireAdmin` / `requireScope` on the server. What the console hides is
 convenience, never the check.
 
+## Points
+A guest earns one point per 100 FCFA they pay, and can put them against a
+booking deposit or a takeaway order. Before 2026-08-09 they could only be
+earned: `awardPoints` had one caller, an admin marking a reservation complete,
+and no checkout could spend them, so the balance on the account page was a
+promise nothing else in the product kept.
+
+`lib/loyalty.ts` holds the arithmetic and touches no database, which is what
+lets `npm run check:loyalty` assert it without one. `routes/loyalty.ts` holds
+everything that does: the rules, the spend, the refund and the award.
+
+Three numbers, all in `site_settings` and all editable in Desk > Details, so
+changing what the scheme costs is not a deploy: what a point is worth (5 FCFA),
+how many are needed before any can be spent (100), and the most of one bill
+they may cover (50%). The last is the one that protects a busy night — however
+many somebody has saved, half of every bill still arrives as money.
+
+Points are spent the way a gift card is spent, deliberately: deducted with a
+conditional UPDATE inside a transaction so two open checkouts cannot spend the
+same balance, recorded on the payment or the order in `points_spent`, and given
+back when the payment fails, expires, is abandoned or the order is cancelled.
+The browser previews the discount with `frontend/src/lib/loyalty.ts`, which
+mirrors the server's sum, but the server quotes again against the balance it
+can see and what it deducts is what comes off.
+
+Earning is at different moments on the two paths, and the difference is
+intentional. A takeaway earns when the money lands, because a paid order is a
+sale. A booking still earns when an admin marks it complete, because a deposit
+is a held table and not yet a meal, and a no-show should not be rewarded.
+
+The order of discounts is promo, then points, then gift card. Value on a card
+was paid for by somebody; points were not, so the card is drawn down last and
+only for what is still owed.
+
+While this was being written, `discount_fcfa` was being handed back to the gift
+card in full by both refund paths, which credited a card with the promo code's
+value too. It only escaped notice because `refundGiftCard` caps a credit at the
+card's own headroom. Points made a third component of that total, so
+`gift_fcfa` now records what the card itself covered and the refunds use it.
+
 ## Payments
 Two wallets behind one shape. `lib/wallets.ts` is the interface, `lib/momo.ts`
 and `lib/orange.ts` the implementations, and a wallet with no credentials is

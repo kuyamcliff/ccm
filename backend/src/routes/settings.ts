@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, transaction } from "../db.js";
 import { requireAuth, requireAdmin, requireScope } from "../auth.js";
 import { DEPOSIT_KEY, LATE_CANCEL_KEY, MAX_PRICE_FCFA } from "../lib/pricing.js";
+import { MAX_SHARE_KEY, MIN_REDEEM_KEY, POINT_VALUE_KEY } from "../lib/loyalty.js";
 
 export const settingsRouter = Router();
 
@@ -25,12 +26,23 @@ const EDITABLE_KEYS = [
   "fb_url",
   DEPOSIT_KEY,
   LATE_CANCEL_KEY,
+  POINT_VALUE_KEY,
+  MIN_REDEEM_KEY,
+  MAX_SHARE_KEY,
 ] as const;
 
-/* Settings that are money. They arrive as strings like every other setting, but
-   a typo in one of these is a wrong figure charged to a guest, so they are
-   parsed and bounded here rather than trusted. */
-const MONEY_KEYS = new Set<string>([DEPOSIT_KEY, LATE_CANCEL_KEY]);
+/* Settings that are numbers. They arrive as strings like every other setting,
+   but a typo in one of these is a wrong figure charged to a guest, so they are
+   parsed and bounded here rather than trusted.
+   Each carries its own ceiling. Bounding a percentage by the money ceiling
+   would accept a rule saying points may cover 900,000% of a bill. */
+const NUMBER_KEYS = new Map<string, { max: number; unit: string }>([
+  [DEPOSIT_KEY, { max: MAX_PRICE_FCFA, unit: "FCFA" }],
+  [LATE_CANCEL_KEY, { max: MAX_PRICE_FCFA, unit: "FCFA" }],
+  [POINT_VALUE_KEY, { max: 1000, unit: "FCFA" }],
+  [MIN_REDEEM_KEY, { max: 1_000_000, unit: "points" }],
+  [MAX_SHARE_KEY, { max: 100, unit: "percent" }],
+]);
 
 const MAX_VALUE_LENGTH = 400;
 
@@ -52,11 +64,14 @@ settingsRouter.patch("/", requireAuth, requireAdmin, requireScope("settings"), a
       return;
     }
 
-    if (MONEY_KEYS.has(key)) {
+    const numeric = NUMBER_KEYS.get(key);
+    if (numeric) {
       // Tolerate "2,500" and "2500 FCFA", since that is how a price gets typed.
       const amount = Number(value.replace(/[^\d.-]/g, ""));
-      if (!Number.isFinite(amount) || amount < 0 || amount > MAX_PRICE_FCFA) {
-        res.status(400).json({ error: `"${key}" must be an amount between 0 and ${MAX_PRICE_FCFA.toLocaleString("en-US")} FCFA.` });
+      if (!Number.isFinite(amount) || amount < 0 || amount > numeric.max) {
+        res.status(400).json({
+          error: `"${key}" must be between 0 and ${numeric.max.toLocaleString("en-US")} ${numeric.unit}.`,
+        });
         return;
       }
       entries.push([key, String(Math.round(amount))]);
