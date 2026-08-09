@@ -412,10 +412,26 @@ takeawayRouter.get("/my-orders", async (req, res) => {
   if (!userId) { res.json({ orders: [] }); return; }
   const orders = await db
     .prepare(
+      /*
+       * Everything the guest has ordered, including what they have not paid
+       * for yet.
+       *
+       * This used to exclude `awaiting_payment`, copied from the admin list
+       * above, where excluding it is right: the kitchen board must not show
+       * orders nobody has paid for. Here it was wrong, and it made Mine say
+       * "No orders yet" to somebody who had just placed one.
+       *
+       * The two audiences want opposite things. This is the guest's own record
+       * of what they asked for, and it is the only place they can settle an
+       * order they closed the payment sheet on — Mine renders "not paid yet"
+       * and a Pay now button for exactly this row, and the checkout's own
+       * parting message tells them to come here and do it. None of that could
+       * ever run, because the row it was written for never arrived.
+       */
       `SELECT id, order_no, name, items_json, total_fcfa, discount_fcfa, pickup_time, status,
               payment_status, paid_at, collected_at, created_at
        FROM takeaway_orders
-       WHERE user_id = ? AND status != 'awaiting_payment'
+       WHERE user_id = ?
        ORDER BY created_at DESC LIMIT 20`
     )
     .all(userId);

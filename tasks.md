@@ -1,5 +1,26 @@
 # Tasks
 
+## Done (2026-08-09, Mine could not show a takeaway order)
+- [x] **`/api/takeaway/my-orders` was hiding the orders Mine exists to show.**
+      It excluded `status != 'awaiting_payment'`, copied from the admin list
+      above it, where excluding it is correct: the kitchen board must not show
+      orders nobody has paid for. On the guest's own list it meant an order
+      placed and not yet paid never arrived, so Mine said "No orders yet" to
+      somebody who had just ordered.
+- [x] The Orders panel has always rendered "This order is not paid yet, so the
+      kitchen has not started on it" and a Pay now button for exactly that row,
+      and the checkout's parting message tells the guest to go to Mine and pay.
+      None of it could ever run. Both work now.
+- [x] `awaiting_payment` is in the `OrderStatus` type and the badge map, which
+      is what stopped an unlabelled status crashing the panel that renders it.
+      It reads "Not paid".
+- [x] Two promises the checkout made to signed-out guests that it could not
+      keep: the confirmation said the code was saved in Mine, and the toast on
+      abandoning payment sent them to Mine to settle it. An order placed
+      without an account has no `user_id`, so it is in neither. Both now say
+      what is actually true, and the confirmation tells them the code on screen
+      is the only copy.
+
 ## Done (2026-08-09, points can be spent)
 - [x] **The loyalty scheme has a second half now.** Points were earned by one
       admin action and could never be spent by anybody, so the balance on the
