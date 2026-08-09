@@ -75,6 +75,9 @@ export interface SiteSettings {
      back, rather than pulling them out here. */
   booking_deposit_fcfa?: string;
   late_cancel_fee_fcfa?: string;
+  loyalty_point_value_fcfa?: string;
+  loyalty_min_redeem_points?: string;
+  loyalty_max_redeem_percent?: string;
 }
 
 export interface MenuItem {
@@ -275,10 +278,12 @@ export interface MomoPrompt {
   status: "pending" | "completed";
   amount_fcfa: number;
   discount_fcfa: number;
+  /** Points actually taken. The value they were worth is inside `discount_fcfa`. */
+  points_spent: number;
   method: string;
   momo_phone?: string;
   expires_in_seconds?: number;
-  /** True when a promo or gift card covered the whole amount. */
+  /** True when a discount covered the whole amount. */
   zero_cost: boolean;
 }
 
@@ -319,6 +324,28 @@ export interface LoyaltyLedgerEntry {
   amount: number;
   reason: string;
   created_at: string;
+}
+
+/** The scheme's numbers, set by the owner rather than written into the app. */
+export interface LoyaltyRules {
+  /** What one point takes off a bill. */
+  point_value_fcfa: number;
+  /** Below this a balance cannot be spent at all. */
+  min_redeem_points: number;
+  /** The most of any one bill points may cover. */
+  max_redeem_percent: number;
+  /** Spend that earns a point. */
+  fcfa_per_point: number;
+}
+
+export interface Loyalty {
+  points_balance: number;
+  /** What the whole balance is worth, so nothing has to do the sum on screen. */
+  value_fcfa: number;
+  /** False while the balance is under the floor for spending it. */
+  spendable: boolean;
+  rules: LoyaltyRules;
+  ledger: LoyaltyLedgerEntry[];
 }
 
 export interface PromoCode {

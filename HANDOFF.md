@@ -36,7 +36,7 @@ to ask a developer for is in there.
 | Messages | The support chat, live. Hand a conversation to another member of staff. |
 | Guests | Accounts. The owner can make somebody staff or block them. |
 | Insights | The last thirty days against the thirty before. |
-| Details | Your phone number, address, hours and social links. These feed the whole site. |
+| Details | Your phone number, address, hours and social links. These feed the whole site. Also what a loyalty point is worth. |
 | Terms and privacy | Your own wording, edited here. |
 | Audit log | Who did what. Owner only. |
 
@@ -51,6 +51,11 @@ footer, the help page and the contact links. Nothing is hard-coded any more.
 - Cancel themselves. More than an hour before, the deposit comes back.
 - Order for collection, pay ahead, and show a code at the counter.
 - Join the queue from their phone when the place is full.
+- Earn a point for every 100 FCFA they pay, and spend them at the checkout on
+  a deposit or an order. You set what a point is worth in **Details**, along
+  with how many they need before spending any and the most of one bill points
+  are allowed to cover. Half is a sensible ceiling: the rest still comes in as
+  money.
 - Leave one review, edit it, add a photo, reply to other people's.
 - Send in photos for the gallery, ask about an event, message you.
 
@@ -84,6 +89,9 @@ photographs of your own grill and plates, uploaded there.
 ## What is tested
 - `backend/scripts/smoke.ts` exercises every endpoint. Run it with the backend
   up: `cd backend && npm run smoke`.
+- `cd backend && npm run check:loyalty` checks the points sums on their own: it
+  needs no database and no internet, and it fails if points could ever cover
+  more of a bill than you allow, or take more off than was deducted.
 - The rebuilt frontend was driven in a real browser against a real database:
   signing in, booking a table through all three steps, ordering from the menu,
   paying, replying to a review from the console, and checking a code at the

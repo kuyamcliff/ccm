@@ -23,24 +23,31 @@ export const DEFAULT_LATE_CANCEL_FCFA = 1500;
 export const MAX_PRICE_FCFA = 1_000_000;
 
 /**
- * Reads one money setting.
+ * Reads one whole-number setting.
  *
  * Anything unparseable falls back rather than throwing: a corrupted row must
  * not stop somebody booking a table, and the default is a price the restaurant
  * has actually charged.
+ *
+ * `ceiling` is what makes this safe to point at a setting that is not money.
+ * A percentage read with the money ceiling would accept 900,000%.
  */
-async function readMoney(key: string, fallback: number): Promise<number> {
+export async function readSetting(key: string, fallback: number, ceiling = MAX_PRICE_FCFA): Promise<number> {
   try {
     const row = (await db.prepare("SELECT value FROM site_settings WHERE key = ?").get(key)) as
       | { value: string }
       | undefined;
     if (!row) return fallback;
     const parsed = Number(String(row.value).replace(/[^\d.-]/g, ""));
-    if (!Number.isFinite(parsed) || parsed < 0 || parsed > MAX_PRICE_FCFA) return fallback;
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > ceiling) return fallback;
     return Math.round(parsed);
   } catch {
     return fallback;
   }
+}
+
+function readMoney(key: string, fallback: number): Promise<number> {
+  return readSetting(key, fallback, MAX_PRICE_FCFA);
 }
 
 /** What a guest pays now to hold a table. Comes off the bill. */

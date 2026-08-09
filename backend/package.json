@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "smoke": "tsx scripts/smoke.ts",
     "check:rules": "tsx scripts/check-password-rules.ts",
+    "check:loyalty": "tsx scripts/check-loyalty.ts",
     "momo:provision": "tsx scripts/momo-provision.ts"
   },
   "dependencies": {

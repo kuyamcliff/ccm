@@ -9,6 +9,7 @@ import type { Wallet, WalletId } from "../lib/wallets.js";
 import * as ledger from "../lib/paymentLedger.js";
 import { redeemGiftCard, refundGiftCard } from "./giftcards.js";
 import { evaluatePromo, releasePromoCode, usePromoCode } from "./promos.js";
+import { refundPoints, spendPoints } from "./loyalty.js";
 import { rateLimit } from "../middleware/security.js";
 import { getDepositFcfa } from "../lib/pricing.js";
 import { notify } from "../lib/notify.js";
@@ -152,15 +153,36 @@ async function failPayment(
   });
 
   const row = (await db
-    .prepare("SELECT promo_code, gift_card_code, discount_fcfa, redeemed_at FROM payments WHERE id = ?")
-    .get(paymentId)) as PaymentRow | undefined;
+    .prepare(
+      /* LEFT, not an inner join. The guest is only needed to hand points back;
+         a payment whose booking somehow cannot be resolved must still return
+         the promo use and the gift card value it was holding, which an inner
+         join would have quietly stopped doing. */
+      `SELECT p.promo_code, p.gift_card_code, p.discount_fcfa, p.gift_fcfa, p.points_spent,
+              p.redeemed_at, r.user_id
+       FROM payments p LEFT JOIN reservations r ON p.reservation_id = r.id
+       WHERE p.id = ?`
+    )
+    .get(paymentId)) as
+    | (PaymentRow & { gift_fcfa: number | null; points_spent: number; user_id: number | null })
+    | undefined;
   if (!row?.redeemed_at) return;
 
   if (row.promo_code) await releasePromoCode(row.promo_code);
-  if (row.gift_card_code && row.discount_fcfa > 0) {
-    await refundGiftCard(row.gift_card_code, row.discount_fcfa, { type: "payment_failed", id: paymentId });
+  /* Only what the card itself covered. `discount_fcfa` is every discount added
+     together, and handing all of it back to the card credited it with the promo
+     code's value too. See the `gift_fcfa` note in migrate-schema.ts. */
+  const giftPortion = row.gift_fcfa ?? row.discount_fcfa;
+  if (row.gift_card_code && giftPortion > 0) {
+    await refundGiftCard(row.gift_card_code, giftPortion, { type: "payment_failed", id: paymentId });
   }
-  await db.prepare("UPDATE payments SET redeemed_at = NULL WHERE id = ?").run(paymentId);
+  if (row.points_spent > 0) {
+    await refundPoints(row.user_id, row.points_spent, { type: "payment_failed", id: paymentId });
+  }
+  /* Clearing `redeemed_at` is the single-shot guard for all three: this whole
+     block is skipped on any later call, so a webhook redelivered after the
+     modal already gave up cannot hand the same value back twice. */
+  await db.prepare("UPDATE payments SET redeemed_at = NULL, points_spent = 0 WHERE id = ?").run(paymentId);
 }
 
 /** Seconds left in the customer's approval window for a pending payment. */
@@ -277,7 +299,7 @@ const statusLimit = rateLimit("payment-status", {
  */
 function describePayment(row: {
   id: number; reference: string; status: string; amount_fcfa: number;
-  discount_fcfa: number; method: string; momo_phone: string; created_at: string;
+  discount_fcfa: number; points_spent: number; method: string; momo_phone: string; created_at: string;
 }) {
   return {
     payment_id: row.id,
@@ -285,6 +307,7 @@ function describePayment(row: {
     status: row.status === "initiated" ? "pending" : row.status,
     amount_fcfa: row.amount_fcfa,
     discount_fcfa: row.discount_fcfa,
+    points_spent: row.points_spent,
     method: row.method,
     momo_phone: row.momo_phone || null,
     expires_in_seconds: row.status === "pending" ? secondsRemaining(row.created_at) : 0,
@@ -296,6 +319,7 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
   const reservationId = Number(req.body?.reservationId);
   const promoCode = String(req.body?.promoCode ?? "").trim().toUpperCase();
   const giftCardCode = String(req.body?.giftCardCode ?? "").trim().toUpperCase();
+  const usePoints = req.body?.usePoints === true;
 
   if (!Number.isInteger(reservationId) || reservationId < 1) {
     res.status(400).json({ error: "Invalid reservation." });
@@ -325,8 +349,8 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
 
   const replay = (await db
     .prepare(
-      `SELECT p.id, p.reference, p.status, p.amount_fcfa, p.discount_fcfa, p.method,
-              p.momo_phone, p.created_at, r.user_id
+      `SELECT p.id, p.reference, p.status, p.amount_fcfa, p.discount_fcfa, p.points_spent,
+              p.method, p.momo_phone, p.created_at, r.user_id
        FROM payments p JOIN reservations r ON p.reservation_id = r.id
        WHERE p.idempotency_key = ?`
     )
@@ -396,20 +420,35 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
     }
   }
 
+  /* Points before the gift card, so a card is only drawn down for what is still
+     owed once everything free has been used. Value on a card was paid for by
+     somebody; points were not. */
+  let pointsSpent = 0;
+  let pointsDiscount = 0;
+  if (usePoints) {
+    const spend = await spendPoints(req.user!.id, Math.max(0, chargeable - promoDiscount), {
+      type: "reservation",
+      id: reservationId,
+    });
+    pointsSpent = spend.points;
+    pointsDiscount = spend.value_fcfa;
+  }
+
   let giftDiscount = 0;
   let claimedGift: string | null = null;
-  const giftTarget = Math.max(0, chargeable - promoDiscount);
+  const giftTarget = Math.max(0, chargeable - promoDiscount - pointsDiscount);
   if (giftCardCode && giftTarget > 0) {
     giftDiscount = await redeemGiftCard(giftCardCode, giftTarget, { type: "reservation", id: reservationId });
     if (giftDiscount > 0) claimedGift = giftCardCode;
   }
 
-  const totalDiscount = promoDiscount + giftDiscount;
+  const totalDiscount = promoDiscount + pointsDiscount + giftDiscount;
   const amountDue = Math.max(0, chargeable - totalDiscount);
 
   const releaseClaims = async () => {
     if (claimedPromo) await releasePromoCode(claimedPromo);
     if (claimedGift) await refundGiftCard(claimedGift, giftDiscount, { type: "validation_failed", id: reservationId });
+    if (pointsSpent > 0) await refundPoints(req.user!.id, pointsSpent, { type: "validation_failed", id: reservationId });
   };
 
   // ── Fully covered by discount: nothing to charge ──
@@ -418,10 +457,11 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
     const info = await db
       .prepare(
         `INSERT INTO payments (reservation_id, amount_fcfa, momo_phone, status, reference, type, method,
-                               promo_code, gift_card_code, discount_fcfa, redeemed_at, idempotency_key)
-         VALUES (?, 0, '', 'completed', ?, 'reservation', 'free', ?, ?, ?, now_text(), ?)`
+                               promo_code, gift_card_code, discount_fcfa, gift_fcfa, points_spent,
+                               redeemed_at, idempotency_key)
+         VALUES (?, 0, '', 'completed', ?, 'reservation', 'free', ?, ?, ?, ?, ?, now_text(), ?)`
       )
-      .run(reservationId, reference, claimedPromo, claimedGift, totalDiscount, idempotencyKey);
+      .run(reservationId, reference, claimedPromo, claimedGift, totalDiscount, giftDiscount, pointsSpent, idempotencyKey);
 
     const paymentId = Number(info.lastInsertRowid);
     await ledger.record({ paymentId, status: "completed", source: "checkout", detail: "covered by discount" });
@@ -436,6 +476,7 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
       status: "completed",
       amount_fcfa: 0,
       discount_fcfa: totalDiscount,
+      points_spent: pointsSpent,
       method: "free",
       zero_cost: true,
     });
@@ -480,12 +521,13 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
     const info = await db
       .prepare(
         `INSERT INTO payments (reservation_id, amount_fcfa, momo_phone, status, reference, type, method,
-                               promo_code, gift_card_code, discount_fcfa, redeemed_at, idempotency_key)
-         VALUES (?, ?, ?, 'initiated', ?, 'reservation', ?, ?, ?, ?, now_text(), ?)`
+                               promo_code, gift_card_code, discount_fcfa, gift_fcfa, points_spent,
+                               redeemed_at, idempotency_key)
+         VALUES (?, ?, ?, 'initiated', ?, 'reservation', ?, ?, ?, ?, ?, ?, now_text(), ?)`
       )
       .run(
         reservationId, amountDue, `+${msisdn}`, reference, wallet.id,
-        claimedPromo, claimedGift, totalDiscount, idempotencyKey
+        claimedPromo, claimedGift, totalDiscount, giftDiscount, pointsSpent, idempotencyKey
       );
     paymentId = Number(info.lastInsertRowid);
   } catch (err) {
@@ -496,7 +538,8 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
       await releaseClaims();
       const winner = (await db
         .prepare(
-          `SELECT id, reference, status, amount_fcfa, discount_fcfa, method, momo_phone, created_at
+          `SELECT id, reference, status, amount_fcfa, discount_fcfa, points_spent, method,
+                  momo_phone, created_at
            FROM payments WHERE idempotency_key = ?`
         )
         .get(idempotencyKey)) as Parameters<typeof describePayment>[0] | undefined;
@@ -532,6 +575,13 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
     }
   } catch (err) {
     await releaseClaims();
+    /* The row is still `initiated` here, which `failPayment` deliberately will
+       not act on, so the discounts have just been handed back by
+       `releaseClaims` and nothing else will. Clearing the record of them is
+       what stops a later reconciliation returning the same value again. */
+    await db
+      .prepare("UPDATE payments SET redeemed_at = NULL, points_spent = 0 WHERE id = ?")
+      .run(paymentId);
     await failPayment(paymentId, "PROVIDER_REFUSED", { source: "checkout" });
 
     const configuration = err instanceof MomoError ? err.configuration : false;
@@ -558,6 +608,7 @@ paymentsRouter.post("/initiate", initiateLimit, async (req, res) => {
     status: "pending",
     amount_fcfa: amountDue,
     discount_fcfa: totalDiscount,
+    points_spent: pointsSpent,
     method: wallet.id,
     momo_phone: `+${msisdn}`,
     payment_url: paymentUrl,

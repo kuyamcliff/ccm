@@ -145,6 +145,19 @@ check(
 const delReview = await call("DELETE", "/api/reviews/mine");
 check("delete own review", delReview.status === 200, delReview);
 
+const loyalty = await call("GET", "/api/loyalty");
+check(
+  "loyalty reports a balance and the rules behind it",
+  loyalty.status === 200 &&
+    loyalty.data?.points_balance === 0 &&
+    typeof loyalty.data?.rules?.point_value_fcfa === "number" &&
+    loyalty.data.rules.point_value_fcfa > 0,
+  loyalty
+);
+/* A brand new account cannot spend, which is the floor doing its job. Without
+   this the checkout would offer a switch that takes nothing off. */
+check("a new account has nothing to spend yet", loyalty.data?.spendable === false, loyalty);
+
 const logout = await call("POST", "/api/auth/logout");
 check("logout", logout.status === 200, logout);
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "~/lib/api";
-import { dayLabel, stampLabel, timeLabel } from "~/lib/format";
+import { dayLabel, money, stampLabel, timeLabel } from "~/lib/format";
 import { useAction, useResource } from "~/lib/useResource";
 import { Button, LinkButton } from "~/ui/Button";
 import { TextField } from "~/ui/Field";
@@ -475,7 +475,20 @@ function Rewards() {
         ) : (
           <>
             <p className="points mono">{loyalty.data?.points_balance ?? 0}</p>
-            <p className="fine muted">One point for every 100 FCFA you spend with us. Ask at the counter to use them.</p>
+            {/* The balance in money, because a point is a number nobody can
+                value on sight, and the rules underneath so the figure is not a
+                claim the guest has to take on trust. */}
+            <p className="fine muted">
+              {loyalty.data && loyalty.data.value_fcfa > 0 ? (
+                <>
+                  Worth <Money value={loyalty.data.value_fcfa} /> off a bill.{" "}
+                </>
+              ) : null}
+              One point for every {money(loyalty.data?.rules.fcfa_per_point ?? 100)} FCFA you spend.
+              {loyalty.data && !loyalty.data.spendable
+                ? ` They can be used once you have ${loyalty.data.rules.min_redeem_points}.`
+                : " They come off when you book a table or pay for an order."}
+            </p>
             {(loyalty.data?.ledger ?? []).length > 0 ? (
               <ul className="stack stack--tight" style={{ marginTop: "var(--s-3)" }}>
                 {(loyalty.data?.ledger ?? []).slice(0, 8).map((entry, index) => (

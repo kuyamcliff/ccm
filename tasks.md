@@ -1,5 +1,38 @@
 # Tasks
 
+## Done (2026-08-09, points can be spent)
+- [x] **The loyalty scheme has a second half now.** Points were earned by one
+      admin action and could never be spent by anybody, so the balance on the
+      account page was a promise the rest of the product did not keep, and the
+      copy under it said to ask at the counter for something the counter had no
+      way to honour.
+- [x] Spending, at both checkouts: the booking deposit through the payment
+      sheet and the takeaway order when it is placed. A switch, on by default,
+      saying how many points and what they take off. The amount above the Pay
+      Now button is the amount that will be charged.
+- [x] Earning on takeaway as well, on the transition to paid rather than per
+      poll. Bookings still earn at completion, because a deposit is a held
+      table and not a meal.
+- [x] Rules the owner sets in Desk > Details rather than a developer: what a
+      point is worth, the floor before any can be spent, and the share of a
+      bill they may cover. Bounded per key on the way in, because the money
+      ceiling would have accepted a rule saying points cover 900,000%.
+- [x] Spent like a gift card: conditional deduction inside a transaction, so
+      two checkouts on two devices cannot spend the same balance, and returned
+      whenever the payment fails, expires, is abandoned or the order is
+      cancelled. `points_spent` is cleared as it is credited, so a redelivered
+      webhook cannot hand the same points back twice.
+- [x] `npm run check:loyalty` asserts the arithmetic without a database: that
+      points never cover more than the cap, never more than the bill, never
+      more than the balance, and that what is deducted always equals what comes
+      off. That is why `lib/loyalty.ts` imports nothing.
+- [x] Fixed on the way past, because this change would have made it worse:
+      both gift card refunds handed back the whole of `discount_fcfa`, so an
+      order that also used a promo code credited the card with the promo's
+      value. `gift_fcfa` records what the card itself covered.
+- [x] Typecheck clean both sides, production build clean, `check:loyalty`
+      green. Not yet exercised against a live database or a real wallet.
+
 ## Done (2026-07-31, v3 frontend rebuild)
 - [x] Deleted frontend/ entirely and scaffolded a new Vite + React 19 + TS app
 - [x] New design language, Charcoal and Ember, in `styles/tokens.css`

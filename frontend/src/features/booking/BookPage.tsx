@@ -385,6 +385,7 @@ export function BookPage() {
                   momoPhone: input.momoPhone,
                   promoCode: input.promoCode,
                   giftCardCode: input.giftCardCode,
+                  usePoints: input.usePoints,
                   idempotencyKey: input.idempotencyKey,
                 })
                 .then((prompt) => ({

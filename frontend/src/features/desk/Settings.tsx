@@ -39,6 +39,24 @@ const FIELDS: { key: keyof SiteSettings; label: string; hint?: string; type?: st
     hint: "Kept when somebody cancels inside the hour, because the table sat empty.",
     type: "number",
   },
+  {
+    key: "loyalty_point_value_fcfa",
+    label: "What a point is worth, FCFA",
+    hint: "Guests earn one point per 100 FCFA they spend. At 5 FCFA a point you are giving a regular 5% back.",
+    type: "number",
+  },
+  {
+    key: "loyalty_min_redeem_points",
+    label: "Points needed before they can be spent",
+    hint: "A floor, so the reward is worth having rather than 15 FCFA off.",
+    type: "number",
+  },
+  {
+    key: "loyalty_max_redeem_percent",
+    label: "Most of a bill points may cover, percent",
+    hint: "The rest still arrives as money. 50 means a guest can never pay for more than half an order in points.",
+    type: "number",
+  },
 ];
 
 export function Settings() {
