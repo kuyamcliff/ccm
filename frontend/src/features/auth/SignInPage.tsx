@@ -39,9 +39,6 @@ export function SignInPage() {
   }, []);
 
   const afterSignIn = (role?: string) => {
-    /* A staff login from the development site opens the development console.
-       With BrowserRouter's /admin basename, /admin here becomes
-       https://clipfx.me/admin/admin. */
     if (role === "admin" || role === "super_admin" || role === "owner") {
       navigate("/admin", { replace: true });
       return;
@@ -95,7 +92,7 @@ export function SignInPage() {
               {canPasskey ? (
                 <>
                   <p className="auth__or"><span>or</span></p>
-                  <Button type="button" tone="ghost" block busy={passkeyBusy} onClick={async () => { setProblem(null); setPasskeyBusy(true); try { await signInWithPasskey(); await refresh(); const current = await import("~/lib/api").then(({ api }) => api.me.current()); afterSignIn(current?.role); } catch (err) { if (err instanceof PasskeyError && err.cancelled) return; setProblem(err instanceof Error ? err.message : "That did not work."); } finally { setPasskeyBusy(false); } }}>
+                  <Button type="button" tone="ghost" block busy={passkeyBusy} onClick={async () => { setProblem(null); setPasskeyBusy(true); try { const signedInUser = await signInWithPasskey(); await refresh(); afterSignIn(signedInUser.role); } catch (err) { if (err instanceof PasskeyError && err.cancelled) return; setProblem(err instanceof Error ? err.message : "That did not work."); } finally { setPasskeyBusy(false); } }}>
                     <Icon name="key" size={18} />
                     Use a passkey
                   </Button>
