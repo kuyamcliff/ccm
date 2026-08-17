@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { RouteMeta } from "./RouteMeta";
 import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
@@ -30,7 +31,7 @@ const LegalPageView = lazy(() => import("~/features/legal/LegalPageView").then((
 const NotFound = lazy(() => import("~/features/misc/NotFound").then((m) => ({ default: m.NotFound })));
 const Desk = lazy(() => import("~/features/desk/DeskRoutes").then((m) => ({ default: m.DeskRoutes })));
 
-const unavailableScreen: React.CSSProperties = {
+const unavailableScreen: CSSProperties = {
   minHeight: "100vh",
   display: "grid",
   placeItems: "center",
@@ -98,7 +99,7 @@ function CustomerRoutes() {
         <Route path="*" element={<NotFound />} />
       </Route>
 
-      {/* Under the /admin basename this route becomes /admin/admin. */}
+      {/* With basename=/admin, this route is /admin/admin. */}
       <Route
         path="admin/*"
         element={
