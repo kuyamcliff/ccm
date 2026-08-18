@@ -18,6 +18,7 @@ import { Inbox } from "./Inbox";
 import { Guests } from "./Guests";
 import { Insights } from "./Insights";
 import { Settings } from "./Settings";
+import { OwnerSiteControl } from "./OwnerSiteControl";
 import { LegalAdmin } from "./LegalAdmin";
 import { AuditLog } from "./AuditLog";
 import { Access } from "./Access";
@@ -25,14 +26,6 @@ import { NotFound } from "~/features/misc/NotFound";
 
 import "~/styles/desk.css";
 
-/**
- * The console's routes.
- *
- * The whole tree is one lazy chunk, loaded the first time a member of staff
- * opens /desk, so a diner never downloads it. The audit log is owner-only but
- * is still routed for everyone: the server refuses it either way, and hiding a
- * route was never access control.
- */
 export function DeskRoutes() {
   return (
     <Routes>
@@ -55,6 +48,7 @@ export function DeskRoutes() {
         <Route path="guests" element={<Guests />} />
         <Route path="insights" element={<Insights />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="site-control" element={<OwnerSiteControl />} />
         <Route path="legal" element={<LegalAdmin />} />
         <Route path="log" element={<AuditLog />} />
         <Route path="access" element={<Access />} />
