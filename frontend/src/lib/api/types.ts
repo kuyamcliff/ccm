@@ -1,32 +1,16 @@
-/**
- * The shape of everything the API returns.
- *
- * These mirror the server's SQL rows, so display formatting stays in the UI layer.
- */
-
 export type Role = "user" | "admin" | "super_admin" | "owner";
 export interface User { id: number; name: string; email: string; role: Role; }
-
-export type AdminScope =
-  | "door" | "bookings" | "takeaway" | "queue" | "floor" | "menu" | "offers" | "gallery" | "reviews"
-  | "events" | "payments" | "promos" | "giftcards" | "messages" | "guests" | "insights" | "settings" | "legal";
+export type AdminScope = "door" | "bookings" | "takeaway" | "queue" | "floor" | "menu" | "offers" | "gallery" | "reviews" | "events" | "payments" | "promos" | "giftcards" | "messages" | "guests" | "insights" | "settings" | "legal";
+export type AdminAction = "view" | "create" | "edit" | "delete" | "cancel" | "refund" | "export" | "manage";
 export interface ScopeInfo { key: AdminScope; label: string; hint: string; }
-export interface StaffAccess { id: number; name: string; email: string; role: "admin" | "super_admin"; banned_at: string | null; created_at: string; scopes: Record<AdminScope, boolean>; }
+export interface StaffAccess { id: number; name: string; email: string; role: "admin" | "super_admin"; banned_at: string | null; created_at: string; scopes: Record<AdminScope, boolean>; actions: Record<AdminScope, Record<AdminAction, boolean>>; }
 export type LoginOutcome = { user: User } | { requires_2fa: true; challenge: string };
 export function isTwoFactorChallenge(value: LoginOutcome): value is { requires_2fa: true; challenge: string } { return "requires_2fa" in value; }
-
-export interface SiteSettings {
-  phone?: string; address?: string; city?: string; region?: string; hours?: string;
-  tiktok_url?: string; ig_url?: string; fb_url?: string; site_config_json?: string;
-  booking_deposit_fcfa?: string; late_cancel_fee_fcfa?: string; loyalty_point_value_fcfa?: string;
-  loyalty_min_redeem_points?: string; loyalty_max_redeem_percent?: string;
-}
-
+export interface SiteSettings { phone?: string; address?: string; city?: string; region?: string; hours?: string; tiktok_url?: string; ig_url?: string; fb_url?: string; site_config_json?: string; booking_deposit_fcfa?: string; late_cancel_fee_fcfa?: string; loyalty_point_value_fcfa?: string; loyalty_min_redeem_points?: string; loyalty_max_redeem_percent?: string; }
 export interface MenuItem { id: number; category: string; name: string; description: string; price_fcfa: number | null; price_label: string | null; image_url: string | null; position: number; is_active: number; dietary_tags: string; }
 export type FixtureKind = "grill" | "tv" | "bar" | "door" | "toilets" | "kitchen" | "speaker" | "plant";
 export interface FloorFixture { id: number; kind: FixtureKind; label: string; pos_x: number; pos_y: number; width: number; height: number; }
 export interface DiningTable { id: number; label: string; capacity: number; zone: string; pos_x: number; pos_y: number; active: number; available?: boolean; }
-
 export type BookingStatus = "pending_payment" | "confirmed" | "cancelled" | "completed";
 export type PaymentState = "unpaid" | "paid" | "refunded";
 export interface Booking { id: number; date: string; time: string; party_size: number; phone: string; note: string; status: BookingStatus; payment_status: PaymentState; cancellation_fee_fcfa: number; ccm_code: string | null; cancelled_at: string | null; cancel_reason: string | null; checked_in_at: string | null; table_label?: string | null; table_zone?: string | null; created_at: string; amount_fcfa?: number | null; discount_fcfa?: number | null; pay_method?: string | null; pay_reference?: string | null; items_json?: string | null; items_total_fcfa?: number | null; deposit_fcfa?: number | null; }
