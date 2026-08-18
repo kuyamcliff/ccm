@@ -6,9 +6,8 @@ import { Shell } from "./Shell";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { RequireAccount, RequireStaff } from "./guards";
 import { SkeletonCards } from "~/ui/Feedback";
+import { FeatureGate, ServiceGate } from "~/ui/FeatureGate";
 
-/* Eager: the three screens most visits start on. Everything else is fetched
-   when it is first opened, which keeps the initial download small on a phone. */
 import { Home } from "~/features/home/Home";
 import { MenuPage } from "~/features/menu/MenuPage";
 import { BookPage } from "~/features/booking/BookPage";
@@ -74,21 +73,21 @@ function CustomerRoutes() {
       <Route element={<Shell />}>
         <Route index element={<Home />} />
         <Route path="menu" element={<MenuPage />} />
-        <Route path="book" element={<BookPage />} />
-        <Route path="order" element={<OrderPage />} />
-        <Route path="story" element={<StoryPage />} />
+        <Route path="book" element={<ServiceGate feature="booking"><BookPage /></ServiceGate>} />
+        <Route path="order" element={<ServiceGate feature="ordering"><OrderPage /></ServiceGate>} />
+        <Route path="story" element={<ShellRoute featureFallback="/" element={<StoryPage />} />} />
         <Route path="find" element={<FindPage />} />
-        <Route path="reviews" element={<ReviewsPage />} />
-        <Route path="gallery" element={<GalleryPage />} />
-        <Route path="events" element={<EventsPage />} />
-        <Route path="waitlist" element={<WaitlistPage />} />
-        <Route path="offers" element={<OffersPage />} />
-        <Route path="help" element={<HelpPage />} />
-        <Route path="signin" element={<SignInPage />} />
-        <Route path="join" element={<JoinPage />} />
-        <Route path="reset" element={<ResetPage />} />
-        <Route path="mine" element={<RequireAccount><MinePage /></RequireAccount>} />
-        <Route path="account" element={<RequireAccount><AccountPage /></RequireAccount>} />
+        <Route path="reviews" element={<FeatureGate feature="reviews"><ReviewsPage /></FeatureGate>} />
+        <Route path="gallery" element={<FeatureGate feature="gallery"><GalleryPage /></FeatureGate>} />
+        <Route path="events" element={<FeatureGate feature="events"><EventsPage /></FeatureGate>} />
+        <Route path="waitlist" element={<ServiceGate feature="waitlist"><WaitlistPage /></ServiceGate>} />
+        <Route path="offers" element={<FeatureGate feature="offers"><OffersPage /></FeatureGate>} />
+        <Route path="help" element={<FeatureGate feature="supportChat"><HelpPage /></FeatureGate>} />
+        <Route path="signin" element={<FeatureGate feature="customerAccounts"><SignInPage /></FeatureGate>} />
+        <Route path="join" element={<FeatureGate feature="customerAccounts"><JoinPage /></FeatureGate>} />
+        <Route path="reset" element={<FeatureGate feature="customerAccounts"><ResetPage /></FeatureGate>} />
+        <Route path="mine" element={<FeatureGate feature="customerAccounts"><RequireAccount><MinePage /></RequireAccount></FeatureGate>} />
+        <Route path="account" element={<FeatureGate feature="customerAccounts"><RequireAccount><AccountPage /></RequireAccount></FeatureGate>} />
         <Route path="terms" element={<LegalPageView slug="terms" />} />
         <Route path="privacy" element={<LegalPageView slug="privacy" />} />
         <Route path="reserve" element={<Navigate to="/book" replace />} />
@@ -99,17 +98,13 @@ function CustomerRoutes() {
         <Route path="*" element={<NotFound />} />
       </Route>
 
-      {/* With basename=/admin, this route is /admin/admin. */}
-      <Route
-        path="admin/*"
-        element={
-          <RequireStaff>
-            <Desk />
-          </RequireStaff>
-        }
-      />
+      <Route path="admin/*" element={<RequireStaff><Desk /></RequireStaff>} />
     </Routes>
   );
+}
+
+function ShellRoute({ element }: { featureFallback: string; element: React.ReactNode }) {
+  return <>{element}</>;
 }
 
 export function App() {
