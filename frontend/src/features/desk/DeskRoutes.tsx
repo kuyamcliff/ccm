@@ -18,7 +18,7 @@ import { Inbox } from "./Inbox";
 import { Guests } from "./Guests";
 import { Insights } from "./Insights";
 import { Settings } from "./Settings";
-import { SiteControl } from "./SiteControl";
+import { OwnerSiteControl } from "./OwnerSiteControl";
 import { LegalAdmin } from "./LegalAdmin";
 import { AuditLog } from "./AuditLog";
 import { Access } from "./Access";
@@ -48,7 +48,7 @@ export function DeskRoutes() {
         <Route path="guests" element={<Guests />} />
         <Route path="insights" element={<Insights />} />
         <Route path="settings" element={<Settings />} />
-        <Route path="site-control" element={<SiteControl />} />
+        <Route path="site-control" element={<OwnerSiteControl />} />
         <Route path="legal" element={<LegalAdmin />} />
         <Route path="log" element={<AuditLog />} />
         <Route path="access" element={<Access />} />
