@@ -1,64 +1,32 @@
 /**
  * The shape of everything the API returns.
  *
- * These mirror the server's SQL rows, which is why booleans arrive as 0 or 1
- * and every timestamp is a "YYYY-MM-DD HH:MM:SS" string in UTC. Nothing is
- * prettied up here — the display layer does that, once, on the way to a screen.
+ * These mirror the server's SQL rows, so display formatting stays in the UI layer.
  */
 
 export type Role = "user" | "admin" | "super_admin" | "owner";
 
-export interface User {
-  id: number;
-  name: string;
-  email: string;
-  role: Role;
-}
+export interface User { id: number; name: string; email: string; role: Role; }
 
 export type AdminScope =
   | "door" | "bookings" | "takeaway" | "queue" | "floor" | "menu" | "offers" | "gallery" | "reviews"
   | "events" | "payments" | "promos" | "giftcards" | "messages" | "guests" | "insights" | "settings" | "legal";
-
 export interface ScopeInfo { key: AdminScope; label: string; hint: string; }
-
-export interface StaffAccess {
-  id: number;
-  name: string;
-  email: string;
-  role: "admin" | "super_admin";
-  banned_at: string | null;
-  created_at: string;
-  scopes: Record<AdminScope, boolean>;
-}
-
+export interface StaffAccess { id: number; name: string; email: string; role: "admin" | "super_admin"; banned_at: string | null; created_at: string; scopes: Record<AdminScope, boolean>; }
 export type LoginOutcome = { user: User } | { requires_2fa: true; challenge: string };
-export function isTwoFactorChallenge(value: LoginOutcome): value is { requires_2fa: true; challenge: string } {
-  return "requires_2fa" in value;
-}
+export function isTwoFactorChallenge(value: LoginOutcome): value is { requires_2fa: true; challenge: string } { return "requires_2fa" in value; }
 
 export interface SiteSettings {
-  phone?: string;
-  address?: string;
-  city?: string;
-  region?: string;
-  hours?: string;
-  tiktok_url?: string;
-  ig_url?: string;
-  fb_url?: string;
-  site_config_json?: string;
-  booking_deposit_fcfa?: string;
-  late_cancel_fee_fcfa?: string;
-  loyalty_point_value_fcfa?: string;
-  loyalty_min_redeem_points?: string;
-  loyalty_max_redeem_percent?: string;
+  phone?: string; address?: string; city?: string; region?: string; hours?: string;
+  tiktok_url?: string; ig_url?: string; fb_url?: string; site_config_json?: string;
+  booking_deposit_fcfa?: string; late_cancel_fee_fcfa?: string; loyalty_point_value_fcfa?: string;
+  loyalty_min_redeem_points?: string; loyalty_max_redeem_percent?: string;
 }
 
 export interface MenuItem {
-  id: number; category: string; name: string; description: string;
-  price_fcfa: number | null; price_label: string | null; image_url: string | null;
-  position: number; is_active: number; dietary_tags: string;
+  id: number; category: string; name: string; description: string; price_fcfa: number | null; price_label: string | null;
+  image_url: string | null; position: number; is_active: number; dietary_tags: string;
 }
-
 export type FixtureKind = "grill" | "tv" | "bar" | "door" | "toilets" | "kitchen" | "speaker" | "plant";
 export interface FloorFixture { id: number; kind: FixtureKind; label: string; pos_x: number; pos_y: number; width: number; height: number; }
 export interface DiningTable { id: number; label: string; capacity: number; zone: string; pos_x: number; pos_y: number; active: number; available?: boolean; }
@@ -66,12 +34,10 @@ export interface DiningTable { id: number; label: string; capacity: number; zone
 export type BookingStatus = "pending_payment" | "confirmed" | "cancelled" | "completed";
 export type PaymentState = "unpaid" | "paid" | "refunded";
 export interface Booking {
-  id: number; date: string; time: string; party_size: number; phone: string; note: string;
-  status: BookingStatus; payment_status: PaymentState; cancellation_fee_fcfa: number;
-  ccm_code: string | null; cancelled_at: string | null; cancel_reason: string | null; checked_in_at: string | null;
-  table_label?: string | null; table_zone?: string | null; created_at: string;
-  amount_fcfa?: number | null; discount_fcfa?: number | null; pay_method?: string | null; pay_reference?: string | null;
-  items_json?: string | null; items_total_fcfa?: number | null; deposit_fcfa?: number | null;
+  id: number; date: string; time: string; party_size: number; phone: string; note: string; status: BookingStatus; payment_status: PaymentState;
+  cancellation_fee_fcfa: number; ccm_code: string | null; cancelled_at: string | null; cancel_reason: string | null; checked_in_at: string | null;
+  table_label?: string | null; table_zone?: string | null; created_at: string; amount_fcfa?: number | null; discount_fcfa?: number | null;
+  pay_method?: string | null; pay_reference?: string | null; items_json?: string | null; items_total_fcfa?: number | null; deposit_fcfa?: number | null;
 }
 
 export interface ReviewReply { id: number; review_id: number; user_id: number; author: string; text: string; created_at: string; }
@@ -80,7 +46,6 @@ export interface Review {
   media_urls: string[]; likes: number; dislikes: number; user_vote: "like" | "dislike" | null; replies: ReviewReply[];
   admin_reply: string | null; admin_reply_at: string | null; is_verified_diner: boolean;
 }
-
 export interface Offer { id: number; title: string; description: string; badge: string; icon: string; valid_until: string | null; is_active: number; sort_order: number; created_at: string; }
 export interface GalleryPhoto { id: number; user_id: number | null; submitter_name: string; caption: string; image_url: string; is_featured: number; is_approved: number; created_at: string; }
 export const EVENT_TYPES = ["birthday", "corporate", "private_dining", "wedding", "other"] as const;
@@ -94,19 +59,9 @@ export interface TakeawayOrder { id: number; order_no: string; name: string; pho
 export interface Payment { id: number; status: "pending" | "completed" | "failed"; amount_fcfa: number; reference: string; type: string; method?: string; }
 
 export interface MomoPrompt {
-  payment_id: number;
-  reference: string;
-  status: "pending" | "completed";
-  amount_fcfa: number;
-  discount_fcfa: number;
-  points_spent: number;
-  method: string;
-  momo_phone?: string;
-  payment_url?: string | null;
-  expires_in_seconds?: number;
-  zero_cost: boolean;
+  payment_id: number; reference: string; status: "pending" | "completed"; amount_fcfa: number; discount_fcfa: number; points_spent: number;
+  method: string; momo_phone?: string; payment_url?: string | null; expires_in_seconds?: number; zero_cost: boolean;
 }
-
 export interface MomoStatus { reference: string; status: "pending" | "completed" | "failed"; amount_fcfa: number; discount_fcfa: number; method: string; message: string | null; expires_in_seconds: number; }
 export interface ReceiptSummary { id: number; date: string; time: string; party_size: number; status: string; payment_status: string; ccm_code: string | null; table_label: string | null; amount_fcfa: number | null; pay_method: string | null; created_at: string; }
 export interface LegalPage { slug: "terms" | "privacy"; title: string; body: string; updated_at: string; }
@@ -129,12 +84,16 @@ export interface VerifyResult { outcome: VerifyOutcome; message: string; source:
 export interface DeskUser { id: number; name: string; email: string; role: Role; banned_at: string | null; created_at: string; }
 export interface DeskStats { totalReservations: number; todayReservations: number; totalUsers: number; pendingPayments: number; totalRevenue: number; }
 export interface DeskAnalytics {
-  revenueByDay: { day: string; revenue: number; payments: number }[];
-  peakHours: { hour: string; count: number }[];
-  newUsersByDay: { day: string; count: number }[];
-  reviewSummary: { avg_rating: number | null; total: number };
-  topMenuItems: { name: string; qty: number; revenue: number }[];
-  busiestDays: { weekday: number; count: number }[];
-  window30: { bookings: number; covers: number; cancelled: number; arrived: number };
-  previous: { bookings: number; covers: number; revenue: number };
+  revenueByDay: { day: string; revenue: number; payments: number }[]; peakHours: { hour: string; count: number }[]; newUsersByDay: { day: string; count: number }[];
+  reviewSummary: { avg_rating: number | null; total: number }; topMenuItems: { name: string; qty: number; revenue: number }[]; busiestDays: { weekday: number; count: number }[];
+  window30: { bookings: number; covers: number; cancelled: number; arrived: number }; previous: { bookings: number; covers: number; revenue: number };
 }
+export interface AuditEntry { id: number; actor_id: number | null; actor_name: string; action: string; target_type: string; target_id: string | null; detail: string; created_at: string; }
+export type DeskBooking = Booking & { user_name: string; user_email: string };
+export type DeskTable = DiningTable & {
+  today_count: number; booking_id: number | null; booking_time: string | null; booking_party: number | null; booking_status: "confirmed" | "pending_payment" | null;
+  booking_code: string | null; booking_phone: string | null; booking_note: string | null; booking_checked_in: string | null; booking_name: string | null;
+};
+export type DeskPayment = Payment & { res_date: string; res_time: string; user_name: string };
+export type DeskReceipt = ReceiptSummary & { user_name: string; user_email: string; pay_reference: string | null };
+export type DeskOrder = TakeawayOrder & { user_name: string | null };
