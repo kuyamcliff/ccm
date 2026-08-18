@@ -28,6 +28,22 @@ function Favourites() {
   return <section className="section page"><Reveal className="section-head"><hr className="heat-rule" /><h2 className="display display--xl">{locale === "fr" ? "Les plats préférés" : "What people order"}</h2><p className="lead">{locale === "fr" ? "Tout est grillé à la commande. Le prix affiché est le prix que vous payez." : "Everything goes on the fire when you order it, so give it a little time. The price here is the price you pay."}</p></Reveal>{loading ? <div className="dish-grid">{[0, 1, 2, 3].map((n) => <Skeleton key={n} height="12rem" radius="var(--r-md)" />)}</div> : <Reveal className="dish-grid">{items.map((item) => <article key={item.id} className="dish"><div className="dish__photo"><Photo src={item.image_url} alt={item.name} /></div><div className="dish__body"><h3 className="dish__name">{item.name}</h3><p className="fine muted dish__note">{item.description}</p><p className="dish__price">{item.price_fcfa !== null ? <Money value={item.price_fcfa} /> : <span>{item.price_label}</span>}</p></div></article>)}</Reveal>}<div className="row" style={{ marginTop: "var(--s-5)" }}><LinkButton to="/menu" tone="ghost" iconEnd="arrow-right">{locale === "fr" ? "Voir tout le menu" : "See the whole menu"}</LinkButton></div></section>;
 }
 
+function OfferHighlight() {
+  const { data, loading } = useResource(() => api.site.offers(), []);
+  const { locale } = useLocale();
+  const offer = data?.find((item) => item.is_active === 1) ?? data?.[0] ?? null;
+  if (!loading && !offer) return null;
+  return <section className="section page"><Reveal className="section-head"><hr className="heat-rule" /><h2 className="display display--xl">{locale === "fr" ? "En ce moment" : "Right now"}</h2><p className="lead">{locale === "fr" ? "Une offre choisie par l'équipe." : "One offer worth knowing about."}</p></Reveal>{loading ? <Skeleton height="9rem" radius="var(--r-lg)" /> : <article className="card stack" style={{ gap: "var(--s-3)" }}><div className="row row--between row--top"><div><p className="label hot">{offer!.badge || (locale === "fr" ? "Offre" : "Offer")}</p><h3 className="display display--lg" style={{ marginTop: "var(--s-2)" }}>{offer!.title}</h3></div>{offer!.valid_until ? <span className="fine faint">{locale === "fr" ? "Jusqu'au" : "Until"} {new Date(offer!.valid_until).toLocaleDateString(locale === "fr" ? "fr-FR" : "en-GB", { day: "numeric", month: "short" })}</span> : null}</div><p className="muted">{offer!.description}</p><div className="row"><LinkButton to="/offers" tone="primary" iconEnd="arrow-right">{locale === "fr" ? "Voir l'offre" : "See the offer"}</LinkButton></div></article>}</section>;
+}
+
+function GalleryHighlight() {
+  const { data, loading } = useResource(() => api.site.gallery(), []);
+  const { locale } = useLocale();
+  const photos = (data ?? []).filter((item) => item.is_approved === 1).slice(0, 3);
+  if (!loading && photos.length === 0) return null;
+  return <section className="section page"><Reveal className="section-head"><hr className="heat-rule" /><h2 className="display display--xl">{locale === "fr" ? "À la maison" : "A look around"}</h2><p className="lead">{locale === "fr" ? "Quelques images du lieu et de ce qui sort du grill." : "A few glimpses of the place and what comes off the grill."}</p></Reveal>{loading ? <div className="dish-grid">{[0, 1, 2].map((n) => <Skeleton key={n} height="10rem" radius="var(--r-md)" />)}</div> : <Reveal className="dish-grid">{photos.map((photo) => <Link key={photo.id} to="/gallery" className="dish"><div className="dish__photo"><Photo src={photo.image_url} alt={photo.caption || (locale === "fr" ? "Photo de Cam Chop Meat" : "Cam Chop Meat photo")} /></div><div className="dish__body"><p className="fine muted">{photo.caption || (locale === "fr" ? "Voir la galerie" : "See the gallery")}</p></div></Link>)}</Reveal>}<div className="row" style={{ marginTop: "var(--s-5)" }}><LinkButton to="/gallery" tone="ghost" iconEnd="arrow-right">{locale === "fr" ? "Voir la galerie" : "See the gallery"}</LinkButton></div></section>;
+}
+
 function Ways() {
   const { depositFcfa, siteConfig } = useVenue();
   const { locale } = useLocale();
@@ -58,9 +74,21 @@ function FindUs() {
 }
 
 export function Home() {
-  const { user, ready } = useSession(); const { data } = useResource(() => api.site.highlights(), []); const { siteConfig } = useVenue();
+  const { user, ready } = useSession();
+  const { data } = useResource(() => api.site.highlights(), []);
+  const { siteConfig } = useVenue();
   const images = (data?.topItems ?? []).flatMap((item) => (item.image_url ? [item.image_url] : []));
   const prices = (data?.topItems ?? []).map((item) => item.price_fcfa).filter((v): v is number => typeof v === "number" && v > 0);
-  const lowestPrice = prices.length ? Math.min(...prices) : null; const signedIn = ready && user !== null;
-  return <>{siteConfig.homepage.hero ? (signedIn ? <YourStuff name={user.name} /> : <Hero images={images} lowestPrice={lowestPrice} />) : null}{siteConfig.homepage.featured ? <Favourites /> : null}{siteConfig.homepage.ways ? <Ways /> : null}{siteConfig.homepage.accountCta && siteConfig.features.customerAccounts && !signedIn ? <WhyAnAccount /> : null}{siteConfig.homepage.reviews && siteConfig.features.reviews ? <WordOfMouth /> : null}{siteConfig.homepage.location ? <FindUs /> : null}</>;
+  const lowestPrice = prices.length ? Math.min(...prices) : null;
+  const signedIn = ready && user !== null;
+  return <>
+    {siteConfig.homepage.hero ? (signedIn ? <YourStuff name={user.name} /> : <Hero images={images} lowestPrice={lowestPrice} />) : null}
+    {siteConfig.homepage.featured ? <Favourites /> : null}
+    {siteConfig.homepage.offer && siteConfig.features.offers ? <OfferHighlight /> : null}
+    {siteConfig.homepage.ways ? <Ways /> : null}
+    {siteConfig.homepage.gallery && siteConfig.features.gallery ? <GalleryHighlight /> : null}
+    {siteConfig.homepage.accountCta && siteConfig.features.customerAccounts && !signedIn ? <WhyAnAccount /> : null}
+    {siteConfig.homepage.reviews && siteConfig.features.reviews ? <WordOfMouth /> : null}
+    {siteConfig.homepage.location ? <FindUs /> : null}
+  </>;
 }
