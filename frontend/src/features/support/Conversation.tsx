@@ -6,46 +6,67 @@ import { Icon } from "~/ui/Icon";
 import { Skeleton } from "~/ui/Feedback";
 import { useSession } from "~/state/session";
 import { useConversation } from "./useConversation";
+import { useLocale } from "~/state/locale";
+import { useVenue } from "~/state/venue";
 
-/**
- * The chat itself, used both in the floating sheet and on the help page.
- *
- * A signed-out visitor is asked for a name once, up front, because "Guest"
- * replying to "Guest" is unworkable at the desk end.
- */
 export function Conversation({ active, compact }: { active: boolean; compact?: boolean }) {
   const { user } = useSession();
+  const { locale, t } = useLocale();
+  const { siteConfig } = useVenue();
   const chat = useConversation(active);
   const [draft, setDraft] = useState("");
   const [name, setName] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Follow the conversation down as it grows, the way a messaging app does.
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "nearest" });
   }, [chat.messages.length, chat.typing]);
 
   const needsName = !user && chat.messages.length === 0;
+  const quiet = !chat.staffed;
+
+  function useQuickMessage(message: string) {
+    setDraft(message);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
 
   return (
     <div className={`chat${compact ? " chat--compact" : ""}`}>
       <div className="chat__status fine">
         <span className="helper__dot" data-staffed={chat.staffed} aria-hidden="true" />
-        {chat.staffed ? "Someone is at the desk" : "Nobody at the desk right now"}
+        {chat.staffed ? t("supportOnline") : t("supportOffline")}
         {!chat.connected && !chat.loading ? <span className="faint push">Reconnecting</span> : null}
       </div>
 
-      <div className="chat__log" role="log" aria-live="polite" aria-label="Conversation">
+      <div className="chat__log" role="log" aria-live="polite" aria-label={t("messageUs")}>
         {chat.loading ? (
           <div className="stack">
             <Skeleton height="3rem" radius="var(--r-md)" />
             <Skeleton height="3rem" width="70%" radius="var(--r-md)" />
           </div>
         ) : chat.messages.length === 0 ? (
-          <p className="chat__intro muted">
-            Ask us anything. Bookings, an order that has gone quiet, whether there is goat left tonight.
-            {!chat.staffed ? " Nobody is on right now, so this may sit until the morning." : ""}
-          </p>
+          <div className="stack stack--tight">
+            <p className="chat__intro muted">
+              {locale === "fr"
+                ? "Posez-nous une question sur votre réservation, votre commande, le menu ou votre visite."
+                : "Ask us about a booking, an order, the menu, opening hours or your visit."}
+            </p>
+            {quiet ? (
+              <p className="fine faint">
+                {siteConfig.support.afterHoursMessage[locale]} {t("usuallyReplies")} {siteConfig.support.responseMinutes} min.
+              </p>
+            ) : (
+              <p className="fine faint">{t("usuallyReplies")} {siteConfig.support.responseMinutes} min.</p>
+            )}
+            <div className="chat__quick" aria-label={locale === "fr" ? "Questions rapides" : "Quick help"}>
+              <button type="button" onClick={() => useQuickMessage(t("bookingHelp"))}>{t("bookingHelp")}</button>
+              <button type="button" onClick={() => useQuickMessage(t("orderHelp"))}>{t("orderHelp")}</button>
+              <button type="button" onClick={() => useQuickMessage(t("paymentIssue"))}>{t("paymentIssue")}</button>
+              <button type="button" onClick={() => useQuickMessage(t("locationHelp"))}>{t("locationHelp")}</button>
+              <button type="button" onClick={() => useQuickMessage(t("menuHelp"))}>{t("menuHelp")}</button>
+            </div>
+          </div>
         ) : (
           chat.messages.map((message) => (
             <div key={message.id} className={`bubble bubble--${message.sender}`} data-kind={message.kind}>
@@ -83,8 +104,8 @@ export function Conversation({ active, compact }: { active: boolean; compact?: b
       >
         {needsName ? (
           <TextField
-            label="Your name"
-            placeholder="So we know who we are talking to"
+            label={locale === "fr" ? "Votre nom" : "Your name"}
+            placeholder={locale === "fr" ? "Pour que nous sachions à qui nous répondons" : "So we know who we are talking to"}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -92,28 +113,27 @@ export function Conversation({ active, compact }: { active: boolean; compact?: b
 
         <div className="chat__row">
           <label className="sr-only" htmlFor="chat-draft">
-            Your message
+            {locale === "fr" ? "Votre message" : "Your message"}
           </label>
           <textarea
+            ref={inputRef}
             id="chat-draft"
             className="textarea chat__input"
             rows={1}
-            placeholder="Type your message"
+            placeholder={locale === "fr" ? "Écrivez votre message" : "Type your message"}
             value={draft}
             onChange={(e) => {
               setDraft(e.target.value);
               chat.nudgeTyping();
             }}
             onKeyDown={(event) => {
-              // Enter sends, Shift+Enter breaks the line. On a phone the button
-              // is there for anyone whose keyboard has no Enter.
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 event.currentTarget.form?.requestSubmit();
               }
             }}
           />
-          <Button type="submit" tone="primary" busy={chat.sending} disabled={!draft.trim()} aria-label="Send">
+          <Button type="submit" tone="primary" busy={chat.sending} disabled={!draft.trim()} aria-label={locale === "fr" ? "Envoyer" : "Send"}>
             <Icon name="send" size={18} />
           </Button>
         </div>
