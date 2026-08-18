@@ -10,6 +10,7 @@ import { migrateSchema } from "./lib/migrate-schema.js";
 import { migrateUxControls } from "./lib/migrate-ux-controls.js";
 import { backfillLegacyBookingCodes } from "./lib/bookingCode.js";
 import { rateLimit, sameOriginOnly, securityHeaders } from "./middleware/security.js";
+import { requireSiteFeature } from "./middleware/siteFeatures.js";
 import { initTelegramLogger, flushTelegramLogs } from "./lib/telegramLogger.js";
 import { authRouter } from "./routes/auth.js";
 import { reservationsRouter } from "./routes/reservations.js";
@@ -50,42 +51,17 @@ app.disable("x-powered-by");
 app.set("etag", "strong");
 app.use(securityHeaders);
 app.use(compression());
-
-app.use((req, res, next) => {
-  const start = Date.now();
-  res.on("finish", () => {
-    const ms = Date.now() - start;
-    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms`);
-  });
-  next();
-});
-
-app.use("/uploads", express.static(UPLOAD_DIR, {
-  immutable: true,
-  maxAge: "365d",
-  index: false,
-  dotfiles: "deny",
-  setHeaders: (res) => res.setHeader("X-Content-Type-Options", "nosniff"),
-}));
-
-app.use(express.json({
-  limit: "12mb",
-  verify: (req, _res, buf) => {
-    if (req.url?.startsWith("/api/payments/webhook/")) (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
-  },
-}));
+app.use((req, res, next) => { const start = Date.now(); res.on("finish", () => console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`)); next(); });
+app.use("/uploads", express.static(UPLOAD_DIR, { immutable: true, maxAge: "365d", index: false, dotfiles: "deny", setHeaders: (res) => res.setHeader("X-Content-Type-Options", "nosniff") }));
+app.use(express.json({ limit: "12mb", verify: (req, _res, buf) => { if (req.url?.startsWith("/api/payments/webhook/")) (req as express.Request & { rawBody?: Buffer }).rawBody = buf; } }));
 app.use(cookieParser());
 app.use(attachUser);
 app.use(sameOriginOnly);
 app.use("/api", rateLimit("global", { windowMs: 60 * 1000, max: 300, message: "You are sending requests very quickly. Slow down and try again." }));
 
-app.get("/api/health", async (_req, res) => {
-  res.setHeader("Cache-Control", "no-store");
-  try { await db.prepare("SELECT 1").get(); res.json({ ok: true, database: "up", uptime_seconds: Math.round(process.uptime()) }); }
-  catch (err) { console.error("[health] database check failed", err); res.status(503).json({ ok: false, database: "down" }); }
-});
-
+app.get("/api/health", async (_req, res) => { res.setHeader("Cache-Control", "no-store"); try { await db.prepare("SELECT 1").get(); res.json({ ok: true, database: "up", uptime_seconds: Math.round(process.uptime()) }); } catch (err) { console.error("[health] database check failed", err); res.status(503).json({ ok: false, database: "down" }); } });
 app.use("/api/auth", authRouter);
+app.post("/api/reservations", requireSiteFeature("booking"));
 app.use("/api/reservations", reservationsRouter);
 app.use("/api/reviews", reviewsRouter);
 app.use("/api/tables", tablesRouter);
@@ -102,6 +78,7 @@ app.use("/api/waitlist", waitlistRouter);
 app.use("/api/gallery", galleryRouter);
 app.use("/api/events", eventsRouter);
 app.use("/api/gift-cards", giftCardsRouter);
+app.post("/api/takeaway", requireSiteFeature("ordering"));
 app.use("/api/takeaway", takeawayPaymentsRouter);
 app.use("/api/takeaway", takeawayRouter);
 app.use("/api/verify", verifyRouter);
@@ -110,38 +87,13 @@ app.use("/api/support", supportRouter);
 app.use("/api/recovery", recoveryRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/access", accessRouter);
-
 app.use("/api", (_req, res) => res.status(404).json({ error: "Not found." }));
 app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (err && typeof err === "object" && "type" in err) {
-    const type = (err as { type: string }).type;
-    if (type === "entity.too.large") { res.status(413).json({ error: "That file is too large. Keep uploads under 6 MB." }); return; }
-    if (type === "entity.parse.failed") { res.status(400).json({ error: "That request was malformed." }); return; }
-  }
-  if (err && typeof err === "object" && "code" in err) {
-    const code = String((err as { code: unknown }).code);
-    if (code === "ECONNABORTED" || code === "ECONNRESET" || code === "EPIPE") return;
-    if (["55P03", "40001", "40P01", "53300"].includes(code)) {
-      console.error(`[db-busy] ${req.method} ${req.originalUrl}`);
-      res.setHeader("Retry-After", "2");
-      res.status(503).json({ error: "We are very busy right now. Try that again in a moment." });
-      return;
-    }
-  }
-  console.error(`[error] ${req.method} ${req.originalUrl}`, err);
-  if (res.headersSent) { next(err); return; }
-  res.status(500).json({ error: "Something broke on our side. Try again." });
+  if (err && typeof err === "object" && "type" in err) { const type = (err as { type: string }).type; if (type === "entity.too.large") { res.status(413).json({ error: "That file is too large. Keep uploads under 6 MB." }); return; } if (type === "entity.parse.failed") { res.status(400).json({ error: "That request was malformed." }); return; } }
+  if (err && typeof err === "object" && "code" in err) { const code = String((err as { code: unknown }).code); if (code === "ECONNABORTED" || code === "ECONNRESET" || code === "EPIPE") return; if (["55P03", "40001", "40P01", "53300"].includes(code)) { res.setHeader("Retry-After", "2"); res.status(503).json({ error: "We are very busy right now. Try that again in a moment." }); return; } }
+  console.error(`[error] ${req.method} ${req.originalUrl}`, err); if (res.headersSent) { next(err); return; } res.status(500).json({ error: "Something broke on our side. Try again." });
 });
-
 const server = app.listen(PORT, () => console.log(`Camchop backend listening on http://localhost:${PORT}`));
 server.requestTimeout = 60_000; server.headersTimeout = 20_000; server.keepAliveTimeout = 65_000; server.timeout = 0;
-
-async function shutdown(signal: string) {
-  console.log(`\n[${signal}] shutting down`);
-  server.close(async () => { await flushTelegramLogs(); pool.end().finally(() => process.exit(0)); });
-  setTimeout(() => process.exit(1), 10_000).unref();
-}
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("unhandledRejection", (reason) => console.error("[unhandledRejection]", reason));
-process.on("uncaughtException", (err) => { console.error("[uncaughtException]", err); shutdown("uncaughtException"); });
+async function shutdown(signal: string) { console.log(`\n[${signal}] shutting down`); server.close(async () => { await flushTelegramLogs(); pool.end().finally(() => process.exit(0)); }); setTimeout(() => process.exit(1), 10_000).unref(); }
+process.on("SIGTERM", () => shutdown("SIGTERM")); process.on("SIGINT", () => shutdown("SIGINT")); process.on("unhandledRejection", (reason) => console.error("[unhandledRejection]", reason)); process.on("uncaughtException", (err) => { console.error("[uncaughtException]", err); shutdown("uncaughtException"); });
