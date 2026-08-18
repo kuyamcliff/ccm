@@ -15,6 +15,8 @@ import { useBasket } from "~/state/basket";
 import { BookingPass } from "./BookingPass";
 import { MomoDialog } from "~/features/pay/MomoDialog";
 
+import "~/styles/order-timeline.css";
+
 const ORDER_STATUS: Record<TakeawayOrder["status"], { label: { en: string; fr: string }; tone: "neutral" | "good" | "warn" | "bad" | "hot" }> = {
   awaiting_payment: { label: { en: "Not paid", fr: "Non payé" }, tone: "warn" },
   pending: { label: { en: "Sent", fr: "Envoyée" }, tone: "warn" },
