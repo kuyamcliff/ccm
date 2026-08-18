@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { api, DEFAULT_DEPOSIT_FCFA, DEFAULT_LATE_CANCEL_FCFA } from "~/lib/api";
 import type { SiteSettings } from "~/lib/api";
 import { parseSiteConfig, type SiteConfig } from "~/lib/siteConfig";
@@ -38,23 +38,20 @@ function readMoney(raw: string | undefined, fallback: number): number {
 
 const VenueContext = createContext<VenueValue | null>(null);
 
-export function VenueProvider({ children }: { children: React.ReactNode }) {
+export function VenueProvider({ children }: { children: ReactNode }) {
   const { data, loading, reload } = useResource(() => api.site.settings(), []);
-
   const value = useMemo<VenueValue>(() => {
     const settings = data ?? {};
-    const rawConfig = (settings as SiteSettings & { site_config_json?: string }).site_config_json;
+    const rawConfig = settings.site_config_json;
     const siteConfig = parseSiteConfig(rawConfig);
     const phone = settings.phone?.trim() || null;
     const digits = phone ? phone.replace(/\D/g, "") : "";
     const international = digits.length === 9 ? `237${digits}` : digits;
-
     const socials = [
       { label: "TikTok", url: settings.tiktok_url },
       { label: "Instagram", url: settings.ig_url },
       { label: "Facebook", url: settings.fb_url },
     ].flatMap((entry) => (entry.url?.trim() ? [{ label: entry.label, url: entry.url.trim() }] : []));
-
     return {
       settings,
       siteConfig,
@@ -70,7 +67,6 @@ export function VenueProvider({ children }: { children: React.ReactNode }) {
       refresh: reload,
     };
   }, [data, loading, reload]);
-
   return <VenueContext.Provider value={value}>{children}</VenueContext.Provider>;
 }
 
