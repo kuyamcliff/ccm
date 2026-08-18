@@ -11,8 +11,10 @@ const labels: Record<FeatureName, { en: string; fr: string }> = {
 
 export function ServiceUnavailable({ feature, children }: { feature: FeatureName; children?: ReactNode }) {
   const { locale, t } = useLocale();
+  const { siteConfig } = useVenue();
   const label = labels[feature][locale];
-  return <div className="empty empty--service" role="status"><span className="empty__icon" aria-hidden="true"><Icon name="clock" size={28} /></span><p className="empty__title">{label}</p><p className="fine muted">{children ?? t("noFeature")}</p><div className="row row--wrap empty__actions"><Link className="btn btn--ghost" to="/menu">{t("menu")}</Link><Link className="btn btn--quiet" to="/help">{t("help")}</Link></div></div>;
+  const reason = children ?? t("noFeature");
+  return <div className="empty empty--service" role="status" aria-live="polite"><span className="empty__icon" aria-hidden="true"><Icon name="clock" size={28} /></span><p className="empty__title">{label}</p><p className="fine muted">{reason}</p><div className="row row--wrap empty__actions"><Link className="btn btn--ghost" to="/menu">{t("menu")}</Link>{siteConfig.support.enabled && siteConfig.features.supportChat ? <Link className="btn btn--quiet" to="/help">{t("help")}</Link> : null}</div></div>;
 }
 
 export function FeatureGate({ feature, children, fallback }: { feature: FeatureName; children: ReactNode; fallback?: ReactNode }) {
@@ -25,6 +27,9 @@ export function ServiceGate({ feature, children, fallback }: { feature: "orderin
   const { locale } = useLocale();
   const enabled = siteConfig.features[feature];
   const service = siteConfig.services[feature];
-  if (enabled && service.mode === "open") return <>{children}</>;
-  return <>{fallback ?? <ServiceUnavailable feature={feature}>{service.message[locale]}</ServiceUnavailable>}</>;
+  const businessClosed = siteConfig.business.mode === "closed";
+  const serviceOpen = enabled && service.mode === "open" && !businessClosed;
+  if (serviceOpen) return <>{children}</>;
+  const reason = businessClosed ? siteConfig.business.message[locale] : service.message[locale];
+  return <>{fallback ?? <ServiceUnavailable feature={feature}>{reason}</ServiceUnavailable>}</>;
 }
