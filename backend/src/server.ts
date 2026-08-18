@@ -29,6 +29,7 @@ import { waitlistRouter } from "./routes/waitlist.js";
 import { galleryRouter } from "./routes/gallery.js";
 import { eventsRouter } from "./routes/events.js";
 import { giftCardsRouter } from "./routes/giftcards.js";
+import { takeawayPaymentsRouter } from "./routes/takeawayPayments.js";
 import { takeawayRouter } from "./routes/takeaway.js";
 import { verifyRouter } from "./routes/verify.js";
 import { legalRouter } from "./routes/legal.js";
@@ -36,35 +37,20 @@ import { supportRouter } from "./routes/support.js";
 import { recoveryRouter } from "./routes/recovery.js";
 import { accessRouter } from "./routes/access.js";
 
-/* Initialize Telegram logging before anything else */
 initTelegramLogger();
-
-/* Columns and tables first: the migrations below write to rows this one
-   may have just added. */
 await migrateSchema();
 await migrateUxControls();
 await migrateInlineMedia();
 await backfillLegacyBookingCodes();
-
-/* After the migrations, so a table created moments ago is classified on the
-   same boot rather than the next one. */
 await loadIdColumns();
 
 const app = express();
-
-// Rate limits and cookie `secure` depend on the real client address, which only
-// arrives correctly when Express is told to trust the proxy in front of it.
 app.set("trust proxy", IS_PROD ? 1 : false);
 app.disable("x-powered-by");
 app.set("etag", "strong");
-
 app.use(securityHeaders);
 app.use(compression());
 
-/* Every request, not just errors — routed through console.log so the
-   Telegram logger (hooked into console.* above) forwards it like anything
-   else. Logged on 'finish' rather than at request start so the line carries
-   the actual status code and timing instead of just "request came in". */
 app.use((req, res, next) => {
   const start = Date.now();
   res.on("finish", () => {
@@ -74,61 +60,29 @@ app.use((req, res, next) => {
   next();
 });
 
-/* Uploads are content-addressed, so a given URL always names the same bytes and
-   can be cached in the browser indefinitely. */
-app.use(
-  "/uploads",
-  express.static(UPLOAD_DIR, {
-    immutable: true,
-    maxAge: "365d",
-    index: false,
-    dotfiles: "deny",
-    setHeaders: (res) => res.setHeader("X-Content-Type-Options", "nosniff"),
-  })
-);
+app.use("/uploads", express.static(UPLOAD_DIR, {
+  immutable: true,
+  maxAge: "365d",
+  index: false,
+  dotfiles: "deny",
+  setHeaders: (res) => res.setHeader("X-Content-Type-Options", "nosniff"),
+}));
 
-/* Uploads travel as base64, which inflates them by about a third; 12 MB of body
-   covers a 6 MB image with headroom without inviting memory-exhaustion. */
-/* The raw bytes are kept for webhook routes only, which have to verify an HMAC
-   over exactly what was sent rather than over a re-serialised object. Kept to
-   the webhook paths so an 12 MB photo upload is not held in memory twice. */
-app.use(
-  express.json({
-    limit: "12mb",
-    verify: (req, _res, buf) => {
-      if (req.url?.startsWith("/api/payments/webhook/")) {
-        (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
-      }
-    },
-  })
-);
+app.use(express.json({
+  limit: "12mb",
+  verify: (req, _res, buf) => {
+    if (req.url?.startsWith("/api/payments/webhook/")) (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+  },
+}));
 app.use(cookieParser());
 app.use(attachUser);
 app.use(sameOriginOnly);
+app.use("/api", rateLimit("global", { windowMs: 60 * 1000, max: 300, message: "You are sending requests very quickly. Slow down and try again." }));
 
-/* Blanket ceiling. Individual routes that are more expensive or more sensitive
-   set their own tighter limits on top of this. */
-app.use(
-  "/api",
-  rateLimit("global", {
-    windowMs: 60 * 1000,
-    max: 300,
-    message: "You are sending requests very quickly. Slow down and try again.",
-  })
-);
-
-/* Touches the database, so a monitor gets told when the process is up but the
-   store underneath it is not. A health check that only proves Express is
-   listening will happily report green through a total outage. */
 app.get("/api/health", async (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
-  try {
-    await db.prepare("SELECT 1").get();
-    res.json({ ok: true, database: "up", uptime_seconds: Math.round(process.uptime()) });
-  } catch (err) {
-    console.error("[health] database check failed", err);
-    res.status(503).json({ ok: false, database: "down" });
-  }
+  try { await db.prepare("SELECT 1").get(); res.json({ ok: true, database: "up", uptime_seconds: Math.round(process.uptime()) }); }
+  catch (err) { console.error("[health] database check failed", err); res.status(503).json({ ok: false, database: "down" }); }
 });
 
 app.use("/api/auth", authRouter);
@@ -148,6 +102,7 @@ app.use("/api/waitlist", waitlistRouter);
 app.use("/api/gallery", galleryRouter);
 app.use("/api/events", eventsRouter);
 app.use("/api/gift-cards", giftCardsRouter);
+app.use("/api/takeaway", takeawayPaymentsRouter);
 app.use("/api/takeaway", takeawayRouter);
 app.use("/api/verify", verifyRouter);
 app.use("/api/legal", legalRouter);
@@ -157,20 +112,12 @@ app.use("/api/admin", adminRouter);
 app.use("/api/access", accessRouter);
 
 app.use("/api", (_req, res) => res.status(404).json({ error: "Not found." }));
-
 app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (err && typeof err === "object" && "type" in err) {
     const type = (err as { type: string }).type;
-    if (type === "entity.too.large") {
-      res.status(413).json({ error: "That file is too large. Keep uploads under 6 MB." });
-      return;
-    }
-    if (type === "entity.parse.failed") {
-      res.status(400).json({ error: "That request was malformed." });
-      return;
-    }
+    if (type === "entity.too.large") { res.status(413).json({ error: "That file is too large. Keep uploads under 6 MB." }); return; }
+    if (type === "entity.parse.failed") { res.status(400).json({ error: "That request was malformed." }); return; }
   }
-
   if (err && typeof err === "object" && "code" in err) {
     const code = String((err as { code: unknown }).code);
     if (code === "ECONNABORTED" || code === "ECONNRESET" || code === "EPIPE") return;
@@ -181,36 +128,20 @@ app.use((err: unknown, req: express.Request, res: express.Response, next: expres
       return;
     }
   }
-
   console.error(`[error] ${req.method} ${req.originalUrl}`, err);
   if (res.headersSent) { next(err); return; }
   res.status(500).json({ error: "Something broke on our side. Try again." });
 });
 
-const server = app.listen(PORT, () =>
-  console.log(`Camchop backend listening on http://localhost:${PORT}`)
-);
-
-server.requestTimeout = 60_000;
-server.headersTimeout = 20_000;
-server.keepAliveTimeout = 65_000;
-server.timeout = 0;
+const server = app.listen(PORT, () => console.log(`Camchop backend listening on http://localhost:${PORT}`));
+server.requestTimeout = 60_000; server.headersTimeout = 20_000; server.keepAliveTimeout = 65_000; server.timeout = 0;
 
 async function shutdown(signal: string) {
   console.log(`\n[${signal}] shutting down`);
-  server.close(async () => {
-    await flushTelegramLogs();
-    pool.end().finally(() => process.exit(0));
-  });
+  server.close(async () => { await flushTelegramLogs(); pool.end().finally(() => process.exit(0)); });
   setTimeout(() => process.exit(1), 10_000).unref();
 }
-
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("unhandledRejection", (reason) => {
-  console.error("[unhandledRejection]", reason);
-});
-process.on("uncaughtException", (err) => {
-  console.error("[uncaughtException]", err);
-  shutdown("uncaughtException");
-});
+process.on("unhandledRejection", (reason) => console.error("[unhandledRejection]", reason));
+process.on("uncaughtException", (err) => { console.error("[uncaughtException]", err); shutdown("uncaughtException"); });
