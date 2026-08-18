@@ -5,25 +5,14 @@ import type { AdminScope } from "~/lib/api";
 import { Avatar } from "~/ui/Bits";
 import { IconButton } from "~/ui/Button";
 import { useSession } from "~/state/session";
-
-/**
- * The staff console shell.
- *
- * A different application wearing the same design language: denser, colder,
- * and built for someone standing at a counter with one hand free. The customer
- * site's bottom tab bar would be wrong here — there are twenty destinations,
- * not five — so navigation is a rail that becomes a drawer under 64rem.
- */
+import { NetworkStatus } from "~/ui/NetworkStatus";
 
 interface Item {
   to: string;
   label: string;
   icon: IconName;
-  /** Only the owner and super admins see these. */
   owner?: boolean;
-  /** Only the true owner sees this — above even a super admin. */
   topOwner?: boolean;
-  /** A plain admin the owner has locked out of this scope does not see it. */
   scope?: AdminScope;
 }
 
@@ -65,10 +54,11 @@ const GROUPS: { title: string; items: Item[] }[] = [
     ],
   },
   {
-    title: "Settings",
+    title: "Website",
     items: [
       { to: "/desk/insights", label: "Insights", icon: "chart", scope: "insights" },
       { to: "/desk/settings", label: "Details", icon: "settings", scope: "settings" },
+      { to: "/desk/site-control", label: "Site control", icon: "settings", scope: "settings" },
       { to: "/desk/legal", label: "Terms and privacy", icon: "receipt", scope: "legal" },
       { to: "/desk/log", label: "Audit log", icon: "shield", owner: true },
       { to: "/desk/access", label: "Access", icon: "lock", topOwner: true },
@@ -81,15 +71,12 @@ export function DeskShell() {
   const [drawer, setDrawer] = useState(false);
   const { pathname } = useLocation();
 
-  // A tap on a destination should close the drawer, not leave it covering the
-  // page it just opened.
   useEffect(() => setDrawer(false), [pathname]);
 
   return (
     <div className="desk">
-      <a className="skip-link" href="#desk-main">
-        Skip to content
-      </a>
+      <NetworkStatus />
+      <a className="skip-link" href="#desk-main">Skip to content</a>
 
       <header className="desk__bar">
         <IconButton
@@ -100,15 +87,17 @@ export function DeskShell() {
         />
         <Link to="/desk" className="brand">
           <img src="/mark.svg" alt="" className="brand__mark" width={28} height={28} />
-          <span className="brand__name">
-            Desk<span>.</span>
-          </span>
+          <span className="brand__name">Desk<span>.</span></span>
         </Link>
 
         <div className="push row">
           <Link to="/" className="btn btn--quiet btn--sm">
             <Icon name="external" size={16} />
             The site
+          </Link>
+          <Link to="/site-control" className="btn btn--quiet btn--sm">
+            <Icon name="settings" size={16} />
+            Site control
           </Link>
           <span className="desk__who">
             <Avatar name={user?.name ?? ""} />
