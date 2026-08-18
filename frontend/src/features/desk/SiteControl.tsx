@@ -7,7 +7,7 @@ import { TextAreaField, Switch } from "~/ui/Field";
 import { Notice } from "~/ui/Feedback";
 import { useToast } from "~/state/toast";
 import { useVenue } from "~/state/venue";
-import { DeskPage, Loaded } from "./parts";
+import { DeskPage } from "./parts";
 
 const featureRows: { key: FeatureName; label: string; hint: string }[] = [
   { key: "customerAccounts", label: "Customer accounts", hint: "Sign-in, bookings history, receipts and loyalty." },
@@ -26,6 +26,8 @@ const homeRows: { key: HomeSection; label: string; hint: string }[] = [
   { key: "hero", label: "Hero", hint: "The first visual and primary calls to action." },
   { key: "featured", label: "Featured dishes", hint: "Popular items on the homepage." },
   { key: "ways", label: "Quick ways in", hint: "Order, book and queue shortcuts." },
+  { key: "offer", label: "Offer of the day", hint: "One current promotion near the top of the homepage." },
+  { key: "gallery", label: "Gallery preview", hint: "A small photo strip linking into the full gallery." },
   { key: "accountCta", label: "Account invitation", hint: "The sign-in/create-account strip for visitors." },
   { key: "reviews", label: "Word of mouth", hint: "Featured customer review." },
   { key: "location", label: "Find us", hint: "Address, hours, phone and directions." },
@@ -41,18 +43,15 @@ export function SiteControl() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (settings.data) {
-      const raw = settings.data.site_config_json;
-      try { if (raw) setDraft(JSON.parse(raw)); }
-      catch { setDraft(DEFAULT_SITE_CONFIG); }
-    }
+    if (!settings.data) return;
+    try { setDraft(settings.data.site_config_json ? JSON.parse(settings.data.site_config_json) : DEFAULT_SITE_CONFIG); }
+    catch { setDraft(DEFAULT_SITE_CONFIG); }
   }, [settings.data]);
 
   const dirty = useMemo(() => {
     const raw = settings.data?.site_config_json;
     if (!raw) return JSON.stringify(draft) !== JSON.stringify(DEFAULT_SITE_CONFIG);
-    try { return JSON.stringify(JSON.parse(raw)) !== JSON.stringify(draft); }
-    catch { return true; }
+    try { return JSON.stringify(JSON.parse(raw)) !== JSON.stringify(draft); } catch { return true; }
   }, [draft, settings.data?.site_config_json]);
 
   const dependencyWarning = !draft.features.customerAccounts && (draft.features.booking || draft.features.loyalty)
@@ -64,8 +63,7 @@ export function SiteControl() {
     setBusy(true);
     try {
       await api.desk.settings.update({ site_config_json: JSON.stringify(draft) });
-      settings.reload();
-      venue.refresh();
+      settings.reload(); venue.refresh();
       toast.done("Site control saved. The customer preview updates from this configuration.");
     } catch (err) { toast.failed(err); }
     finally { setBusy(false); }
@@ -74,7 +72,7 @@ export function SiteControl() {
   function setMode(mode: SiteConfig["business"]["mode"]) { setDraft({ ...draft, business: { ...draft.business, mode } }); }
 
   return (
-    <DeskPage title="Site control" lead="Control customer-facing features, service availability, support and the live status of the restaurant.">
+    <DeskPage title="Site control" lead="Control customer-facing features, homepage sections, service availability, support and live restaurant state.">
       <div className="stack stack--loose">
         {dependencyWarning ? <Notice tone="warn" title="Feature dependency">{dependencyWarning}</Notice> : null}
 
@@ -93,7 +91,7 @@ export function SiteControl() {
             {featureRows.map((item) => <Switch key={item.key} checked={draft.features[item.key]} label={<span className="site-control__label"><strong>{item.label}</strong><span className="site-control__hint">{item.hint}</span></span>} onChange={() => setDraft({ ...draft, features: toggle(draft.features, item.key) })} />)}
           </section>
           <section className="card stack site-control__section site-control__section--half">
-            <div className="section-head"><h2 className="display display--md">Homepage sections</h2><p className="fine muted">Keep the homepage focused. These switches only affect customer-facing sections.</p></div>
+            <div className="section-head"><h2 className="display display--md">Homepage sections</h2><p className="fine muted">Choose exactly which content blocks customers see on the homepage.</p></div>
             {homeRows.map((item) => <Switch key={item.key} checked={draft.homepage[item.key]} label={<span className="site-control__label"><strong>{item.label}</strong><span className="site-control__hint">{item.hint}</span></span>} onChange={() => setDraft({ ...draft, homepage: toggle(draft.homepage, item.key) })} />)}
           </section>
         </div>
