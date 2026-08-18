@@ -7,7 +7,6 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { RequireAccount, RequireStaff } from "./guards";
 import { SkeletonCards } from "~/ui/Feedback";
 import { FeatureGate, ServiceGate } from "~/ui/FeatureGate";
-
 import { Home } from "~/features/home/Home";
 import { MenuPage } from "~/features/menu/MenuPage";
 import { BookPage } from "~/features/booking/BookPage";
@@ -30,98 +29,43 @@ const LegalPageView = lazy(() => import("~/features/legal/LegalPageView").then((
 const NotFound = lazy(() => import("~/features/misc/NotFound").then((m) => ({ default: m.NotFound })));
 const Desk = lazy(() => import("~/features/desk/DeskRoutes").then((m) => ({ default: m.DeskRoutes })));
 
-const unavailableScreen: CSSProperties = {
-  minHeight: "100vh",
-  display: "grid",
-  placeItems: "center",
-  padding: "2rem",
-  background: "#0A0A0A",
-  color: "#FFFFFF",
-  textAlign: "center",
-  fontFamily: "Inter, system-ui, sans-serif",
-};
-
+const unavailableScreen: CSSProperties = { minHeight: "100vh", display: "grid", placeItems: "center", padding: "2rem", background: "#0A0A0A", color: "#FFFFFF", textAlign: "center", fontFamily: "Inter, system-ui, sans-serif" };
 function NotAvailable() {
-  return (
-    <main style={unavailableScreen} aria-labelledby="not-available-title">
-      <section style={{ width: "min(100%, 34rem)" }}>
-        <p style={{ color: "#E31C23", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-          Coming soon
-        </p>
-        <h1 id="not-available-title" style={{ fontSize: "clamp(2.5rem, 9vw, 5rem)", lineHeight: 0.95, letterSpacing: "-0.055em", margin: "1rem 0" }}>
-          Not available yet.
-        </h1>
-        <p style={{ color: "rgba(255,255,255,0.62)", lineHeight: 1.65 }}>
-          CCM is still being finished behind the scenes. The site is temporarily unavailable while we put the final pieces in place.
-        </p>
-      </section>
-    </main>
-  );
+  return <main style={unavailableScreen} aria-labelledby="not-available-title"><section style={{ width: "min(100%, 34rem)" }}><p style={{ color: "#E31C23", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" }}>Coming soon</p><h1 id="not-available-title" style={{ fontSize: "clamp(2.5rem, 9vw, 5rem)", lineHeight: 0.95, letterSpacing: "-0.055em", margin: "1rem 0" }}>Not available yet.</h1><p style={{ color: "rgba(255,255,255,0.62)", lineHeight: 1.65 }}>CCM is still being finished behind the scenes. The site is temporarily unavailable while we put the final pieces in place.</p></section></main>;
 }
-
-function Loading() {
-  return (
-    <div className="page section">
-      <SkeletonCards count={2} height="9rem" />
-    </div>
-  );
-}
+function Loading() { return <div className="page section"><SkeletonCards count={2} height="9rem" /></div>; }
 
 function CustomerRoutes() {
-  return (
-    <Routes>
-      <Route element={<Shell />}>
-        <Route index element={<Home />} />
-        <Route path="menu" element={<MenuPage />} />
-        <Route path="book" element={<ServiceGate feature="booking"><BookPage /></ServiceGate>} />
-        <Route path="order" element={<ServiceGate feature="ordering"><OrderPage /></ServiceGate>} />
-        <Route path="story" element={<ShellRoute featureFallback="/" element={<StoryPage />} />} />
-        <Route path="find" element={<FindPage />} />
-        <Route path="reviews" element={<FeatureGate feature="reviews"><ReviewsPage /></FeatureGate>} />
-        <Route path="gallery" element={<FeatureGate feature="gallery"><GalleryPage /></FeatureGate>} />
-        <Route path="events" element={<FeatureGate feature="events"><EventsPage /></FeatureGate>} />
-        <Route path="waitlist" element={<ServiceGate feature="waitlist"><WaitlistPage /></ServiceGate>} />
-        <Route path="offers" element={<FeatureGate feature="offers"><OffersPage /></FeatureGate>} />
-        <Route path="help" element={<FeatureGate feature="supportChat"><HelpPage /></FeatureGate>} />
-        <Route path="signin" element={<FeatureGate feature="customerAccounts"><SignInPage /></FeatureGate>} />
-        <Route path="join" element={<FeatureGate feature="customerAccounts"><JoinPage /></FeatureGate>} />
-        <Route path="reset" element={<FeatureGate feature="customerAccounts"><ResetPage /></FeatureGate>} />
-        <Route path="mine" element={<FeatureGate feature="customerAccounts"><RequireAccount><MinePage /></RequireAccount></FeatureGate>} />
-        <Route path="account" element={<FeatureGate feature="customerAccounts"><RequireAccount><AccountPage /></RequireAccount></FeatureGate>} />
-        <Route path="terms" element={<LegalPageView slug="terms" />} />
-        <Route path="privacy" element={<LegalPageView slug="privacy" />} />
-        <Route path="reserve" element={<Navigate to="/book" replace />} />
-        <Route path="takeaway" element={<Navigate to="/order" replace />} />
-        <Route path="about" element={<Navigate to="/story" replace />} />
-        <Route path="contact" element={<Navigate to="/find" replace />} />
-        <Route path="my-tables" element={<Navigate to="/mine" replace />} />
-        <Route path="*" element={<NotFound />} />
-      </Route>
-
-      <Route path="admin/*" element={<RequireStaff><Desk /></RequireStaff>} />
-    </Routes>
-  );
-}
-
-function ShellRoute({ element }: { featureFallback: string; element: React.ReactNode }) {
-  return <>{element}</>;
+  return <Routes><Route element={<Shell />}>
+    <Route index element={<Home />} />
+    <Route path="menu" element={<MenuPage />} />
+    <Route path="book" element={<ServiceGate feature="booking"><BookPage /></ServiceGate>} />
+    <Route path="order" element={<ServiceGate feature="ordering"><OrderPage /></ServiceGate>} />
+    <Route path="story" element={<StoryPage />} />
+    <Route path="find" element={<FindPage />} />
+    <Route path="reviews" element={<FeatureGate feature="reviews"><ReviewsPage /></FeatureGate>} />
+    <Route path="gallery" element={<FeatureGate feature="gallery"><GalleryPage /></FeatureGate>} />
+    <Route path="events" element={<FeatureGate feature="events"><EventsPage /></FeatureGate>} />
+    <Route path="waitlist" element={<ServiceGate feature="waitlist"><WaitlistPage /></ServiceGate>} />
+    <Route path="offers" element={<FeatureGate feature="offers"><OffersPage /></FeatureGate>} />
+    <Route path="help" element={<FeatureGate feature="supportChat"><HelpPage /></FeatureGate>} />
+    <Route path="signin" element={<FeatureGate feature="customerAccounts"><SignInPage /></FeatureGate>} />
+    <Route path="join" element={<FeatureGate feature="customerAccounts"><JoinPage /></FeatureGate>} />
+    <Route path="reset" element={<FeatureGate feature="customerAccounts"><ResetPage /></FeatureGate>} />
+    <Route path="mine" element={<FeatureGate feature="customerAccounts"><RequireAccount><MinePage /></RequireAccount></FeatureGate>} />
+    <Route path="account" element={<FeatureGate feature="customerAccounts"><RequireAccount><AccountPage /></RequireAccount></FeatureGate>} />
+    <Route path="terms" element={<LegalPageView slug="terms" />} />
+    <Route path="privacy" element={<LegalPageView slug="privacy" />} />
+    <Route path="reserve" element={<Navigate to="/book" replace />} />
+    <Route path="takeaway" element={<Navigate to="/order" replace />} />
+    <Route path="about" element={<Navigate to="/story" replace />} />
+    <Route path="contact" element={<Navigate to="/find" replace />} />
+    <Route path="my-tables" element={<Navigate to="/mine" replace />} />
+    <Route path="*" element={<NotFound />} />
+  </Route><Route path="admin/*" element={<RequireStaff><Desk /></RequireStaff>} /></Routes>;
 }
 
 export function App() {
   const isDevelopmentSite = window.location.pathname === "/admin" || window.location.pathname.startsWith("/admin/");
-
-  return (
-    <ErrorBoundary>
-      {isDevelopmentSite ? (
-        <>
-          <RouteMeta />
-          <Suspense fallback={<Loading />}>
-            <CustomerRoutes />
-          </Suspense>
-        </>
-      ) : (
-        <NotAvailable />
-      )}
-    </ErrorBoundary>
-  );
+  return <ErrorBoundary>{isDevelopmentSite ? <><RouteMeta /><Suspense fallback={<Loading />}><CustomerRoutes /></Suspense></> : <NotAvailable />}</ErrorBoundary>;
 }
