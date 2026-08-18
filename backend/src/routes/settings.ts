@@ -13,8 +13,6 @@ settingsRouter.get("/", async (_req, res) => {
   res.json({ settings });
 });
 
-/* Keys the admin is allowed to write. Anything not listed here is ignored, so a
-   crafted request cannot invent settings the frontend never expects. */
 const EDITABLE_KEYS = [
   "phone",
   "address",
@@ -24,6 +22,7 @@ const EDITABLE_KEYS = [
   "tiktok_url",
   "ig_url",
   "fb_url",
+  "site_config_json",
   DEPOSIT_KEY,
   LATE_CANCEL_KEY,
   POINT_VALUE_KEY,
@@ -31,11 +30,6 @@ const EDITABLE_KEYS = [
   MAX_SHARE_KEY,
 ] as const;
 
-/* Settings that are numbers. They arrive as strings like every other setting,
-   but a typo in one of these is a wrong figure charged to a guest, so they are
-   parsed and bounded here rather than trusted.
-   Each carries its own ceiling. Bounding a percentage by the money ceiling
-   would accept a rule saying points may cover 900,000% of a bill. */
 const NUMBER_KEYS = new Map<string, { max: number; unit: string }>([
   [DEPOSIT_KEY, { max: MAX_PRICE_FCFA, unit: "FCFA" }],
   [LATE_CANCEL_KEY, { max: MAX_PRICE_FCFA, unit: "FCFA" }],
@@ -45,6 +39,7 @@ const NUMBER_KEYS = new Map<string, { max: number; unit: string }>([
 ]);
 
 const MAX_VALUE_LENGTH = 400;
+const MAX_CONFIG_LENGTH = 20_000;
 
 settingsRouter.patch("/", requireAuth, requireAdmin, requireScope("settings"), async (req, res) => {
   const updates = req.body as Record<string, unknown>;
@@ -56,9 +51,31 @@ settingsRouter.patch("/", requireAuth, requireAdmin, requireScope("settings"), a
   const written: string[] = [];
   const rejected: string[] = [];
   const entries: [string, string][] = [];
+
   for (const [key, value] of Object.entries(updates)) {
     if (!(EDITABLE_KEYS as readonly string[]).includes(key)) { rejected.push(key); continue; }
     if (typeof value !== "string") { rejected.push(key); continue; }
+
+    if (key === "site_config_json") {
+      if (value.length > MAX_CONFIG_LENGTH) {
+        res.status(400).json({ error: `"${key}" is too large. Keep the site configuration under ${MAX_CONFIG_LENGTH} characters.` });
+        return;
+      }
+      try {
+        const parsed = JSON.parse(value) as Record<string, unknown>;
+        if (!parsed || typeof parsed !== "object" || parsed.version !== 1) {
+          res.status(400).json({ error: "The site configuration is not a recognised CCM configuration." });
+          return;
+        }
+        entries.push([key, JSON.stringify(parsed)]);
+        written.push(key);
+      } catch {
+        res.status(400).json({ error: "The site configuration is not valid JSON." });
+        return;
+      }
+      continue;
+    }
+
     if (value.length > MAX_VALUE_LENGTH) {
       res.status(400).json({ error: `"${key}" is too long. Keep it under ${MAX_VALUE_LENGTH} characters.` });
       return;
@@ -66,7 +83,6 @@ settingsRouter.patch("/", requireAuth, requireAdmin, requireScope("settings"), a
 
     const numeric = NUMBER_KEYS.get(key);
     if (numeric) {
-      // Tolerate "2,500" and "2500 FCFA", since that is how a price gets typed.
       const amount = Number(value.replace(/[^\d.-]/g, ""));
       if (!Number.isFinite(amount) || amount < 0 || amount > numeric.max) {
         res.status(400).json({
@@ -88,8 +104,6 @@ settingsRouter.patch("/", requireAuth, requireAdmin, requireScope("settings"), a
     return;
   }
 
-  // All or nothing: a half-applied address change would leave the site showing
-  // the old town beside the new street.
   await transaction(async () => {
     const stmt = db.prepare(
       "INSERT INTO site_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
