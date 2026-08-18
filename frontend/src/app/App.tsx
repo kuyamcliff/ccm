@@ -30,9 +30,7 @@ const NotFound = lazy(() => import("~/features/misc/NotFound").then((m) => ({ de
 const Desk = lazy(() => import("~/features/desk/DeskRoutes").then((m) => ({ default: m.DeskRoutes })));
 
 const unavailableScreen: CSSProperties = { minHeight: "100vh", display: "grid", placeItems: "center", padding: "2rem", background: "#0A0A0A", color: "#FFFFFF", textAlign: "center", fontFamily: "Inter, system-ui, sans-serif" };
-function NotAvailable() {
-  return <main style={unavailableScreen} aria-labelledby="not-available-title"><section style={{ width: "min(100%, 34rem)" }}><p style={{ color: "#E31C23", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" }}>Coming soon</p><h1 id="not-available-title" style={{ fontSize: "clamp(2.5rem, 9vw, 5rem)", lineHeight: 0.95, letterSpacing: "-0.055em", margin: "1rem 0" }}>Not available yet.</h1><p style={{ color: "rgba(255,255,255,0.62)", lineHeight: 1.65 }}>CCM is still being finished behind the scenes. The site is temporarily unavailable while we put the final pieces in place.</p></section></main>;
-}
+function NotAvailable() { return <main style={unavailableScreen} aria-labelledby="not-available-title"><section style={{ width: "min(100%, 34rem)" }}><p style={{ color: "#E31C23", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" }}>Coming soon</p><h1 id="not-available-title" style={{ fontSize: "clamp(2.5rem, 9vw, 5rem)", lineHeight: 0.95, letterSpacing: "-0.055em", margin: "1rem 0" }}>Not available yet.</h1><p style={{ color: "rgba(255,255,255,0.62)", lineHeight: 1.65 }}>CCM is still being finished behind the scenes. The site is temporarily unavailable while we put the final pieces in place.</p></section></main>; }
 function Loading() { return <div className="page section"><SkeletonCards count={2} height="9rem" /></div>; }
 
 function CustomerRoutes() {
@@ -62,10 +60,7 @@ function CustomerRoutes() {
     <Route path="contact" element={<Navigate to="/find" replace />} />
     <Route path="my-tables" element={<Navigate to="/mine" replace />} />
     <Route path="*" element={<NotFound />} />
-  </Route><Route path="admin/*" element={<RequireStaff><Desk /></RequireStaff>} /></Routes>;
+  </Route><Route path="desk/*" element={<RequireStaff><Desk /></RequireStaff>} /></Routes>;
 }
 
-export function App() {
-  const isDevelopmentSite = window.location.pathname === "/admin" || window.location.pathname.startsWith("/admin/");
-  return <ErrorBoundary>{isDevelopmentSite ? <><RouteMeta /><Suspense fallback={<Loading />}><CustomerRoutes /></Suspense></> : <NotAvailable />}</ErrorBoundary>;
-}
+export function App() { const isDevelopmentSite = window.location.pathname === "/admin" || window.location.pathname.startsWith("/admin/"); return <ErrorBoundary>{isDevelopmentSite ? <><RouteMeta /><Suspense fallback={<Loading />}><CustomerRoutes /></Suspense></> : <NotAvailable />}</ErrorBoundary>; }
