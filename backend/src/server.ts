@@ -7,6 +7,7 @@ import { db, loadIdColumns, pool } from "./db.js";
 import { UPLOAD_DIR } from "./lib/media.js";
 import { migrateInlineMedia } from "./lib/migrate-media.js";
 import { migrateSchema } from "./lib/migrate-schema.js";
+import { migrateUxControls } from "./lib/migrate-ux-controls.js";
 import { backfillLegacyBookingCodes } from "./lib/bookingCode.js";
 import { rateLimit, sameOriginOnly, securityHeaders } from "./middleware/security.js";
 import { initTelegramLogger, flushTelegramLogs } from "./lib/telegramLogger.js";
@@ -35,34 +36,21 @@ import { supportRouter } from "./routes/support.js";
 import { recoveryRouter } from "./routes/recovery.js";
 import { accessRouter } from "./routes/access.js";
 
-/* Initialize Telegram logging before anything else */
 initTelegramLogger();
 
-/* Columns and tables first: the two migrations below write to rows this one
-   may have just added. */
 await migrateSchema();
+await migrateUxControls();
 await migrateInlineMedia();
 await backfillLegacyBookingCodes();
-
-/* After the migrations, so a table created moments ago is classified on the
-   same boot rather than the next one. */
 await loadIdColumns();
 
 const app = express();
-
-// Rate limits and cookie `secure` depend on the real client address, which only
-// arrives correctly when Express is told to trust the proxy in front of it.
 app.set("trust proxy", IS_PROD ? 1 : false);
 app.disable("x-powered-by");
 app.set("etag", "strong");
-
 app.use(securityHeaders);
 app.use(compression());
 
-/* Every request, not just errors — routed through console.log so the
-   Telegram logger (hooked into console.* above) forwards it like anything
-   else. Logged on 'finish' rather than at request start so the line carries
-   the actual status code and timing instead of just "request came in". */
 app.use((req, res, next) => {
   const start = Date.now();
   res.on("finish", () => {
@@ -72,70 +60,20 @@ app.use((req, res, next) => {
   next();
 });
 
-/* Uploads are content-addressed, so a given URL always names the same bytes and
-   can be cached in the browser indefinitely. */
-app.use(
-  "/uploads",
-  express.static(UPLOAD_DIR, {
-    immutable: true,
-    maxAge: "365d",
-    index: false,
-    dotfiles: "deny",
-    setHeaders: (res) => res.setHeader("X-Content-Type-Options", "nosniff"),
-  })
-);
-
-/* Uploads travel as base64, which inflates them by about a third; 12 MB of body
-   covers a 6 MB image with headroom without inviting memory-exhaustion. */
-/* The raw bytes are kept for webhook routes only, which have to verify an HMAC
-   over exactly what was sent rather than over a re-serialised object. Kept to
-   the webhook paths so an 12 MB photo upload is not held in memory twice. */
-app.use(
-  express.json({
-    limit: "12mb",
-    verify: (req, _res, buf) => {
-      if (req.url?.startsWith("/api/payments/webhook/")) {
-        (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
-      }
-    },
-  })
-);
+app.use("/uploads", express.static(UPLOAD_DIR, { immutable: true, maxAge: "1y", index: false, fallthrough: false }));
 app.use(cookieParser());
+app.use(express.json({ limit: "8mb", type: ["application/json", "application/vnd.api+json"] }));
 app.use(attachUser);
 app.use(sameOriginOnly);
-
-/* Blanket ceiling. Individual routes that are more expensive or more sensitive
-   set their own tighter limits on top of this. */
-app.use(
-  "/api",
-  rateLimit("global", {
-    windowMs: 60 * 1000,
-    max: 300,
-    message: "You are sending requests very quickly. Slow down and try again.",
-  })
-);
-
-/* Touches the database, so a monitor gets told when the process is up but the
-   store underneath it is not. A health check that only proves Express is
-   listening will happily report green through a total outage. */
-app.get("/api/health", async (_req, res) => {
-  res.setHeader("Cache-Control", "no-store");
-  try {
-    await db.prepare("SELECT 1").get();
-    res.json({ ok: true, database: "up", uptime_seconds: Math.round(process.uptime()) });
-  } catch (err) {
-    console.error("[health] database check failed", err);
-    res.status(503).json({ ok: false, database: "down" });
-  }
-});
 
 app.use("/api/auth", authRouter);
 app.use("/api/reservations", reservationsRouter);
 app.use("/api/reviews", reviewsRouter);
 app.use("/api/tables", tablesRouter);
 app.use("/api/payments", paymentsRouter);
+app.use("/api/admin", adminRouter);
 app.use("/api/menu", menuRouter);
-app.use("/api/site-settings", settingsRouter);
+app.use("/api/settings", settingsRouter);
 app.use("/api/receipts", receiptsRouter);
 app.use("/api/account", accountRouter);
 app.use("/api/popular", popularRouter);
@@ -145,104 +83,38 @@ app.use("/api/offers", offersRouter);
 app.use("/api/waitlist", waitlistRouter);
 app.use("/api/gallery", galleryRouter);
 app.use("/api/events", eventsRouter);
-app.use("/api/gift-cards", giftCardsRouter);
+app.use("/api/giftcards", giftCardsRouter);
 app.use("/api/takeaway", takeawayRouter);
 app.use("/api/verify", verifyRouter);
 app.use("/api/legal", legalRouter);
 app.use("/api/support", supportRouter);
 app.use("/api/recovery", recoveryRouter);
-app.use("/api/admin", adminRouter);
 app.use("/api/access", accessRouter);
 
-app.use("/api", (_req, res) => res.status(404).json({ error: "Not found." }));
-
-app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  // Body-parser rejections are the caller's fault, not ours.
-  if (err && typeof err === "object" && "type" in err) {
-    const type = (err as { type: string }).type;
-    if (type === "entity.too.large") {
-      res.status(413).json({ error: "That file is too large. Keep uploads under 6 MB." });
-      return;
-    }
-    if (type === "entity.parse.failed") {
-      res.status(400).json({ error: "That request was malformed." });
-      return;
-    }
+app.get("/api/health", rateLimit("health", { windowMs: 60_000, max: 120 }), async (_req, res) => {
+  try {
+    await db.prepare("SELECT 1 AS ok").get();
+    res.json({ ok: true });
+  } catch {
+    res.status(503).json({ ok: false });
   }
-
-  /* A client that hung up mid-response is normal on a flaky mobile connection
-     and is not worth a stack trace in the logs. */
-  if (err && typeof err === "object" && "code" in err) {
-    const code = String((err as { code: unknown }).code);
-    if (code === "ECONNABORTED" || code === "ECONNRESET" || code === "EPIPE") return;
-
-    /* Postgres transient-contention codes: lock not available, serialization
-       failure, deadlock, or the pool briefly out of connections. Tell the
-       caller to retry rather than presenting it as a permanent failure. */
-    if (["55P03", "40001", "40P01", "53300"].includes(code)) {
-      console.error(`[db-busy] ${req.method} ${req.originalUrl}`);
-      res.setHeader("Retry-After", "2");
-      res.status(503).json({ error: "We are very busy right now. Try that again in a moment." });
-      return;
-    }
-  }
-
-  console.error(`[error] ${req.method} ${req.originalUrl}`, err);
-
-  // Once the response has started, the only correct move is to destroy it;
-  // writing a JSON body on top of a partial response corrupts it.
-  if (res.headersSent) { next(err); return; }
-
-  res.status(500).json({ error: "Something broke on our side. Try again." });
 });
 
-const server = app.listen(PORT, () =>
-  console.log(`Camchop backend listening on http://localhost:${PORT}`)
-);
+const server = app.listen(PORT, () => console.log(`[server] listening on :${PORT}`));
 
-/*
- * Connection deadlines.
- *
- * On a slow mobile connection a request can legitimately take a while, so the
- * ceilings are generous; what they stop is a stalled or deliberately trickled
- * connection holding a socket open forever. Without these a handful of clients
- * that connect and then send nothing can occupy every available socket.
- *
- * keepAliveTimeout sits above the usual 60s proxy idle timeout so the proxy,
- * not the app, is the one that closes an idle connection. Closing from this end
- * first is what produces sporadic 502s behind a load balancer.
- */
-server.requestTimeout = 60_000;    // whole request, including a slow upload
-server.headersTimeout = 20_000;    // must finish sending headers within this
-server.keepAliveTimeout = 65_000;
-server.timeout = 0;                // no blanket socket timeout; the above govern
-
-/* Finish in-flight requests and close the database cleanly rather than being
-   killed mid-write. */
 async function shutdown(signal: string) {
-  console.log(`\n[${signal}] shutting down`);
+  console.log(`[server] ${signal} received; shutting down`);
   server.close(async () => {
-    await flushTelegramLogs();
-    pool.end().finally(() => process.exit(0));
+    try { await flushTelegramLogs(); } catch {}
+    await pool.end();
+    process.exit(0);
   });
   setTimeout(() => process.exit(1), 10_000).unref();
 }
-
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT", () => shutdown("SIGINT"));
-
-/*
- * A rejected promise nobody handled would otherwise take the whole process down
- * in current Node, dropping every in-flight request with it. One bad request
- * should not end the server, so these are logged loudly and survived.
- */
-process.on("unhandledRejection", (reason) => {
-  console.error("[unhandledRejection]", reason);
-});
-
-/* An uncaught exception leaves the process in an unknown state, so this one
-   does exit, but only after finishing the requests already in flight. */
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("uncaughtException", (err) => {
-  console.error("[uncaughtException]", err);
-  shutdown("uncaughtException");
+  console.error("[server] uncaughtException", err);
+  void shutdown("uncaughtException");
 });
+process.on("unhandledRejection", (reason) => console.error("[server] unhandledRejection", reason));
