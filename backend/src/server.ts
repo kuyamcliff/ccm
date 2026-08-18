@@ -10,7 +10,7 @@ import { migrateSchema } from "./lib/migrate-schema.js";
 import { migrateUxControls } from "./lib/migrate-ux-controls.js";
 import { backfillLegacyBookingCodes } from "./lib/bookingCode.js";
 import { rateLimit, sameOriginOnly, securityHeaders } from "./middleware/security.js";
-import { requireSiteFeature, requireSiteService } from "./middleware/siteFeatures.js";
+import { requireSiteService } from "./middleware/siteFeatures.js";
 import { initTelegramLogger, flushTelegramLogs } from "./lib/telegramLogger.js";
 import { authRouter } from "./routes/auth.js";
 import { reservationsRouter } from "./routes/reservations.js";
