@@ -6,13 +6,9 @@ import { BasketProvider } from "./state/basket";
 import { SessionProvider } from "./state/session";
 import { ToastProvider } from "./state/toast";
 import { VenueProvider } from "./state/venue";
+import { LocaleProvider } from "./state/locale";
+import { NetworkStatus } from "./ui/NetworkStatus";
 
-/*
- * The production site stays at the root and is intentionally unavailable.
- * The complete customer site lives behind /admin while CCM is being built.
- * BrowserRouter's basename means every existing internal Link/NavLink keeps
- * working without duplicating /admin throughout the application.
- */
 const developmentBasename =
   window.location.pathname === "/admin" || window.location.pathname.startsWith("/admin/")
     ? "/admin"
@@ -26,6 +22,7 @@ import "./styles/base.css";
 import "./styles/ui.css";
 import "./styles/shell.css";
 import "./styles/pages.css";
+import "./styles/preview-overrides.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root");
@@ -36,9 +33,12 @@ createRoot(root).render(
       <ToastProvider>
         <SessionProvider>
           <VenueProvider>
-            <BasketProvider>
-              <App />
-            </BasketProvider>
+            <LocaleProvider>
+              <BasketProvider>
+                <NetworkStatus />
+                <App />
+              </BasketProvider>
+            </LocaleProvider>
           </VenueProvider>
         </SessionProvider>
       </ToastProvider>

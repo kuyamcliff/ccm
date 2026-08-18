@@ -1,548 +1,98 @@
 /**
  * The shape of everything the API returns.
  *
- * These mirror the server's SQL rows, which is why booleans arrive as 0 or 1
- * and every timestamp is a "YYYY-MM-DD HH:MM:SS" string in UTC. Nothing is
- * prettied up here — the display layer does that, once, on the way to a screen.
+ * These mirror the server's SQL rows, so display formatting stays in the UI layer.
  */
 
 export type Role = "user" | "admin" | "super_admin" | "owner";
 
-export interface User {
-  id: number;
-  name: string;
-  email: string;
-  role: Role;
-}
+export interface User { id: number; name: string; email: string; role: Role; }
 
-/** One page or capability a plain admin can be locked out of. Mirrors
-    `ADMIN_SCOPES` in the server's `auth.ts` — the server is the source of
-    truth; this list is what the console reads to build the Access grid. */
 export type AdminScope =
-  | "door"
-  | "bookings"
-  | "takeaway"
-  | "queue"
-  | "floor"
-  | "menu"
-  | "offers"
-  | "gallery"
-  | "reviews"
-  | "events"
-  | "payments"
-  | "promos"
-  | "giftcards"
-  | "messages"
-  | "guests"
-  | "insights"
-  | "settings"
-  | "legal";
-
-export interface ScopeInfo {
-  key: AdminScope;
-  label: string;
-  hint: string;
-}
-
-export interface StaffAccess {
-  id: number;
-  name: string;
-  email: string;
-  role: "admin" | "super_admin";
-  banned_at: string | null;
-  created_at: string;
-  scopes: Record<AdminScope, boolean>;
-}
-
-/** A correct password does not always mean a session: 2FA can intervene. */
+  | "door" | "bookings" | "takeaway" | "queue" | "floor" | "menu" | "offers" | "gallery" | "reviews"
+  | "events" | "payments" | "promos" | "giftcards" | "messages" | "guests" | "insights" | "settings" | "legal";
+export interface ScopeInfo { key: AdminScope; label: string; hint: string; }
+export interface StaffAccess { id: number; name: string; email: string; role: "admin" | "super_admin"; banned_at: string | null; created_at: string; scopes: Record<AdminScope, boolean>; }
 export type LoginOutcome = { user: User } | { requires_2fa: true; challenge: string };
-
-export function isTwoFactorChallenge(value: LoginOutcome): value is { requires_2fa: true; challenge: string } {
-  return "requires_2fa" in value;
-}
+export function isTwoFactorChallenge(value: LoginOutcome): value is { requires_2fa: true; challenge: string } { return "requires_2fa" in value; }
 
 export interface SiteSettings {
-  phone?: string;
-  address?: string;
-  city?: string;
-  region?: string;
-  hours?: string;
-  tiktok_url?: string;
-  ig_url?: string;
-  fb_url?: string;
-  /* Money, but delivered as strings like every other setting — site_settings is
-     a key/value table. Read them through `useVenue`, which parses and falls
-     back, rather than pulling them out here. */
-  booking_deposit_fcfa?: string;
-  late_cancel_fee_fcfa?: string;
-  loyalty_point_value_fcfa?: string;
-  loyalty_min_redeem_points?: string;
-  loyalty_max_redeem_percent?: string;
+  phone?: string; address?: string; city?: string; region?: string; hours?: string;
+  tiktok_url?: string; ig_url?: string; fb_url?: string; site_config_json?: string;
+  booking_deposit_fcfa?: string; late_cancel_fee_fcfa?: string; loyalty_point_value_fcfa?: string;
+  loyalty_min_redeem_points?: string; loyalty_max_redeem_percent?: string;
 }
 
 export interface MenuItem {
-  id: number;
-  category: string;
-  name: string;
-  description: string;
-  price_fcfa: number | null;
-  /** Used when a dish is priced by weight or by market rate. */
-  price_label: string | null;
-  image_url: string | null;
-  position: number;
-  is_active: number;
-  /** JSON array as a string, e.g. '["spicy"]'. */
-  dietary_tags: string;
+  id: number; category: string; name: string; description: string; price_fcfa: number | null; price_label: string | null;
+  image_url: string | null; position: number; is_active: number; dietary_tags: string;
 }
-
-/** Everything in the room that is not a table. Drawn on the plan, never booked. */
 export type FixtureKind = "grill" | "tv" | "bar" | "door" | "toilets" | "kitchen" | "speaker" | "plant";
-
-export interface FloorFixture {
-  id: number;
-  kind: FixtureKind;
-  label: string;
-  pos_x: number;
-  pos_y: number;
-  width: number;
-  height: number;
-}
-
-export interface DiningTable {
-  id: number;
-  label: string;
-  capacity: number;
-  zone: string;
-  pos_x: number;
-  pos_y: number;
-  active: number;
-  /** Only present when the caller asked about a specific date and time. */
-  available?: boolean;
-}
+export interface FloorFixture { id: number; kind: FixtureKind; label: string; pos_x: number; pos_y: number; width: number; height: number; }
+export interface DiningTable { id: number; label: string; capacity: number; zone: string; pos_x: number; pos_y: number; active: number; available?: boolean; }
 
 export type BookingStatus = "pending_payment" | "confirmed" | "cancelled" | "completed";
 export type PaymentState = "unpaid" | "paid" | "refunded";
-
 export interface Booking {
-  id: number;
-  date: string;
-  time: string;
-  party_size: number;
-  phone: string;
-  note: string;
-  status: BookingStatus;
-  payment_status: PaymentState;
-  cancellation_fee_fcfa: number;
-  /** The code the guest shows at the door. Null until the booking is settled. */
-  ccm_code: string | null;
-  cancelled_at: string | null;
-  cancel_reason: string | null;
-  checked_in_at: string | null;
-  table_label?: string | null;
-  table_zone?: string | null;
-  created_at: string;
-  amount_fcfa?: number | null;
-  discount_fcfa?: number | null;
-  pay_method?: string | null;
-  pay_reference?: string | null;
-  /** Food and drink ordered with the table. A JSON array, as the server stores it. */
-  items_json?: string | null;
-  items_total_fcfa?: number | null;
-  /** What the deposit was when this booking was paid, not what it is today. */
-  deposit_fcfa?: number | null;
+  id: number; date: string; time: string; party_size: number; phone: string; note: string; status: BookingStatus; payment_status: PaymentState;
+  cancellation_fee_fcfa: number; ccm_code: string | null; cancelled_at: string | null; cancel_reason: string | null; checked_in_at: string | null;
+  table_label?: string | null; table_zone?: string | null; created_at: string; amount_fcfa?: number | null; discount_fcfa?: number | null;
+  pay_method?: string | null; pay_reference?: string | null; items_json?: string | null; items_total_fcfa?: number | null; deposit_fcfa?: number | null;
 }
 
-export interface ReviewReply {
-  id: number;
-  review_id: number;
-  user_id: number;
-  author: string;
-  text: string;
-  created_at: string;
-}
-
+export interface ReviewReply { id: number; review_id: number; user_id: number; author: string; text: string; created_at: string; }
 export interface Review {
-  id: number;
-  rating: number;
-  text: string;
-  author: string;
-  user_id: number;
-  created_at: string;
-  updated_at: string;
-  media_urls: string[];
-  likes: number;
-  dislikes: number;
-  user_vote: "like" | "dislike" | null;
-  replies: ReviewReply[];
-  admin_reply: string | null;
-  admin_reply_at: string | null;
-  /** True when this reviewer actually turned up to a booking. */
-  is_verified_diner: boolean;
+  id: number; rating: number; text: string; author: string; user_id: number; created_at: string; updated_at: string;
+  media_urls: string[]; likes: number; dislikes: number; user_vote: "like" | "dislike" | null; replies: ReviewReply[];
+  admin_reply: string | null; admin_reply_at: string | null; is_verified_diner: boolean;
 }
-
-export interface Offer {
-  id: number;
-  title: string;
-  description: string;
-  badge: string;
-  icon: string;
-  valid_until: string | null;
-  is_active: number;
-  sort_order: number;
-  created_at: string;
-}
-
-export interface GalleryPhoto {
-  id: number;
-  user_id: number | null;
-  submitter_name: string;
-  caption: string;
-  image_url: string;
-  is_featured: number;
-  is_approved: number;
-  created_at: string;
-}
-
+export interface Offer { id: number; title: string; description: string; badge: string; icon: string; valid_until: string | null; is_active: number; sort_order: number; created_at: string; }
+export interface GalleryPhoto { id: number; user_id: number | null; submitter_name: string; caption: string; image_url: string; is_featured: number; is_approved: number; created_at: string; }
 export const EVENT_TYPES = ["birthday", "corporate", "private_dining", "wedding", "other"] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
+export interface EventEnquiry { id: number; user_id: number | null; name: string; email: string; phone: string; event_type: EventType; date: string; time: string; guest_count: number; note: string; status: "pending" | "confirmed" | "cancelled"; created_at: string; }
+export interface WaitlistEntry { id: number; name: string; phone: string; party_size: number; note: string; status: "waiting" | "notified" | "seated" | "cancelled" | "no_show"; joined_at: string; notified_at: string | null; seated_at: string | null; }
 
-export interface EventEnquiry {
-  id: number;
-  user_id: number | null;
-  name: string;
-  email: string;
-  phone: string;
-  event_type: EventType;
-  date: string;
-  time: string;
-  guest_count: number;
-  note: string;
-  status: "pending" | "confirmed" | "cancelled";
-  created_at: string;
-}
+export interface OrderLine { name: string; qty: number; price: number; id?: number; }
+export type OrderStatus = "awaiting_payment" | "pending" | "confirmed" | "ready" | "picked_up" | "cancelled";
+export interface TakeawayOrder { id: number; order_no: string; name: string; phone: string; items_json: string; total_fcfa: number; pickup_time: string; note: string; status: OrderStatus; promo_code: string | null; gift_card_code: string | null; discount_fcfa: number; payment_status?: PaymentState; created_at: string; }
+export interface Payment { id: number; status: "pending" | "completed" | "failed"; amount_fcfa: number; reference: string; type: string; method?: string; }
 
-export interface WaitlistEntry {
-  id: number;
-  name: string;
-  phone: string;
-  party_size: number;
-  note: string;
-  status: "waiting" | "notified" | "seated" | "cancelled" | "no_show";
-  joined_at: string;
-  notified_at: string | null;
-  seated_at: string | null;
-}
-
-/** A line of food or drink — on a takeaway, or ordered ahead with a table. */
-export interface OrderLine {
-  name: string;
-  qty: number;
-  price: number;
-  /** The menu item it came from. Absent on rows written before pre-ordering. */
-  id?: number;
-}
-
-/* `awaiting_payment` is a real status a guest can see: it is where a takeaway
-   order sits between being placed and being paid for. The kitchen board never
-   shows it, but Mine does, because that is where the guest settles it. */
-export type OrderStatus =
-  | "awaiting_payment"
-  | "pending"
-  | "confirmed"
-  | "ready"
-  | "picked_up"
-  | "cancelled";
-
-export interface TakeawayOrder {
-  id: number;
-  order_no: string;
-  name: string;
-  phone: string;
-  /** JSON array of OrderLine, as stored. */
-  items_json: string;
-  total_fcfa: number;
-  pickup_time: string;
-  note: string;
-  status: OrderStatus;
-  promo_code: string | null;
-  gift_card_code: string | null;
-  discount_fcfa: number;
-  payment_status?: PaymentState;
-  created_at: string;
-}
-
-export interface Payment {
-  id: number;
-  status: "pending" | "completed" | "failed";
-  amount_fcfa: number;
-  reference: string;
-  type: string;
-  method?: string;
-}
-
-/** What comes back after a mobile-money prompt is pushed to a handset. */
 export interface MomoPrompt {
-  payment_id: number;
-  reference: string;
-  status: "pending" | "completed";
-  amount_fcfa: number;
-  discount_fcfa: number;
-  /** Points actually taken. The value they were worth is inside `discount_fcfa`. */
-  points_spent: number;
-  method: string;
-  momo_phone?: string;
-  expires_in_seconds?: number;
-  /** True when a discount covered the whole amount. */
-  zero_cost: boolean;
+  payment_id: number; reference: string; status: "pending" | "completed"; amount_fcfa: number; discount_fcfa: number; points_spent: number;
+  method: string; momo_phone?: string; payment_url?: string | null; expires_in_seconds?: number; zero_cost: boolean;
 }
+export interface MomoStatus { reference: string; status: "pending" | "completed" | "failed"; amount_fcfa: number; discount_fcfa: number; method: string; message: string | null; expires_in_seconds: number; }
+export interface ReceiptSummary { id: number; date: string; time: string; party_size: number; status: string; payment_status: string; ccm_code: string | null; table_label: string | null; amount_fcfa: number | null; pay_method: string | null; created_at: string; }
+export interface LegalPage { slug: "terms" | "privacy"; title: string; body: string; updated_at: string; }
+export interface LoyaltyLedgerEntry { amount: number; reason: string; created_at: string; }
+export interface LoyaltyRules { point_value_fcfa: number; min_redeem_points: number; max_redeem_percent: number; fcfa_per_point: number; }
+export interface Loyalty { points_balance: number; value_fcfa: number; spendable: boolean; rules: LoyaltyRules; ledger: LoyaltyLedgerEntry[]; }
+export interface PromoCode { id: number; code: string; type: "percent" | "flat"; value: number; description: string; min_spend_fcfa: number; max_uses: number | null; uses_count: number; expires_at: string | null; is_active: number; created_at: string; }
+export interface GiftCard { id: number; code: string; initial_value_fcfa: number; remaining_value_fcfa: number; is_active: number; created_at: string; }
 
-export interface MomoStatus {
-  reference: string;
-  status: "pending" | "completed" | "failed";
-  amount_fcfa: number;
-  discount_fcfa: number;
-  method: string;
-  /** Plain-language explanation, present when something went wrong. */
-  message: string | null;
-  expires_in_seconds: number;
-}
+export interface SupportMessage { id: number; thread_id: number; sender: "user" | "admin" | "system"; author_name: string; body: string; kind: "chat" | "system"; created_at: string; }
+export interface SupportThread { id: number; subject: string; status: string; last_message_at: string; unread_for_user: number; created_at: string; }
+export interface DeskThread { id: number; display_name: string; subject: string; status: string; last_message_at: string; unread_for_admin: number; created_at: string; user_email: string | null; user_name: string | null; last_body: string | null; message_count: number; assigned_admin_id: number | null; assigned_admin_name: string | null; visitor_online: boolean; }
+export interface TypingState { who: "user" | "admin"; name: string; }
 
-export interface ReceiptSummary {
-  id: number;
-  date: string;
-  time: string;
-  party_size: number;
-  status: string;
-  payment_status: string;
-  ccm_code: string | null;
-  table_label: string | null;
-  amount_fcfa: number | null;
-  pay_method: string | null;
-  created_at: string;
-}
+export interface VerifiedBooking { id: number; code: string; guest_name: string; date: string; time: string; party_size: number; phone: string; note: string | null; table_label: string | null; status: string; payment_status: string; amount_fcfa: number | null; checked_in_at: string | null; checked_in_by: string | null; }
+export interface VerifiedOrder { id: number; code: string; customer_name: string; phone: string; items: OrderLine[]; pickup_time: string; note: string | null; total_fcfa: number; discount_fcfa: number; status: string; payment_status: string; collected_at: string | null; collected_by: string | null; created_at: string; }
+export type VerifyOutcome = "valid" | "unpaid" | "not_yet" | "not_ready" | "expired" | "already_used" | "cancelled" | "not_found" | "forged" | "unreadable";
+export interface VerifyResult { outcome: VerifyOutcome; message: string; source: "scan" | "manual"; kind?: "reservation" | "takeaway"; booking?: VerifiedBooking; order?: VerifiedOrder; }
 
-export interface LegalPage {
-  slug: "terms" | "privacy";
-  title: string;
-  /** Plain text. "## " opens a heading; a blank line separates paragraphs. */
-  body: string;
-  updated_at: string;
-}
-
-export interface LoyaltyLedgerEntry {
-  amount: number;
-  reason: string;
-  created_at: string;
-}
-
-/** The scheme's numbers, set by the owner rather than written into the app. */
-export interface LoyaltyRules {
-  /** What one point takes off a bill. */
-  point_value_fcfa: number;
-  /** Below this a balance cannot be spent at all. */
-  min_redeem_points: number;
-  /** The most of any one bill points may cover. */
-  max_redeem_percent: number;
-  /** Spend that earns a point. */
-  fcfa_per_point: number;
-}
-
-export interface Loyalty {
-  points_balance: number;
-  /** What the whole balance is worth, so nothing has to do the sum on screen. */
-  value_fcfa: number;
-  /** False while the balance is under the floor for spending it. */
-  spendable: boolean;
-  rules: LoyaltyRules;
-  ledger: LoyaltyLedgerEntry[];
-}
-
-export interface PromoCode {
-  id: number;
-  code: string;
-  type: "percent" | "flat";
-  value: number;
-  description: string;
-  min_spend_fcfa: number;
-  max_uses: number | null;
-  uses_count: number;
-  expires_at: string | null;
-  is_active: number;
-  created_at: string;
-}
-
-export interface GiftCard {
-  id: number;
-  code: string;
-  initial_value_fcfa: number;
-  remaining_value_fcfa: number;
-  is_active: number;
-  created_at: string;
-}
-
-/* ── Support desk ─────────────────────────────────────────────────────── */
-
-export interface SupportMessage {
-  id: number;
-  thread_id: number;
-  sender: "user" | "admin" | "system";
-  author_name: string;
-  body: string;
-  /** `system` marks a line the desk wrote itself, such as a handover. */
-  kind: "chat" | "system";
-  created_at: string;
-}
-
-export interface SupportThread {
-  id: number;
-  subject: string;
-  status: string;
-  last_message_at: string;
-  unread_for_user: number;
-  created_at: string;
-}
-
-export interface DeskThread {
-  id: number;
-  display_name: string;
-  subject: string;
-  status: string;
-  last_message_at: string;
-  unread_for_admin: number;
-  created_at: string;
-  user_email: string | null;
-  user_name: string | null;
-  last_body: string | null;
-  message_count: number;
-  assigned_admin_id: number | null;
-  assigned_admin_name: string | null;
-  visitor_online: boolean;
-}
-
-export interface TypingState {
-  who: "user" | "admin";
-  name: string;
-}
-
-/* ── Door ─────────────────────────────────────────────────────────────── */
-
-export interface VerifiedBooking {
-  id: number;
-  code: string;
-  guest_name: string;
-  date: string;
-  time: string;
-  party_size: number;
-  phone: string;
-  note: string | null;
-  table_label: string | null;
-  status: string;
-  payment_status: string;
-  amount_fcfa: number | null;
-  checked_in_at: string | null;
-  checked_in_by: string | null;
-}
-
-export interface VerifiedOrder {
-  id: number;
-  code: string;
-  customer_name: string;
-  phone: string;
-  items: OrderLine[];
-  pickup_time: string;
-  note: string | null;
-  total_fcfa: number;
-  discount_fcfa: number;
-  status: string;
-  payment_status: string;
-  collected_at: string | null;
-  collected_by: string | null;
-  created_at: string;
-}
-
-export type VerifyOutcome =
-  | "valid"
-  | "unpaid"
-  | "not_yet"
-  | "not_ready"
-  | "expired"
-  | "already_used"
-  | "cancelled"
-  | "not_found"
-  | "forged"
-  | "unreadable";
-
-export interface VerifyResult {
-  /** `valid` means admit or hand over; everything else needs a human decision. */
-  outcome: VerifyOutcome;
-  message: string;
-  source: "scan" | "manual";
-  kind?: "reservation" | "takeaway";
-  booking?: VerifiedBooking;
-  order?: VerifiedOrder;
-}
-
-/* ── Staff console ────────────────────────────────────────────────────── */
-
-export interface DeskUser {
-  id: number;
-  name: string;
-  email: string;
-  role: Role;
-  banned_at: string | null;
-  created_at: string;
-}
-
-export interface DeskStats {
-  totalReservations: number;
-  todayReservations: number;
-  totalUsers: number;
-  pendingPayments: number;
-  totalRevenue: number;
-}
-
+export interface DeskUser { id: number; name: string; email: string; role: Role; banned_at: string | null; created_at: string; }
+export interface DeskStats { totalReservations: number; todayReservations: number; totalUsers: number; pendingPayments: number; totalRevenue: number; }
 export interface DeskAnalytics {
-  revenueByDay: { day: string; revenue: number; payments: number }[];
-  peakHours: { hour: string; count: number }[];
-  newUsersByDay: { day: string; count: number }[];
-  reviewSummary: { avg_rating: number | null; total: number };
-  topMenuItems: { name: string; qty: number; revenue: number }[];
-  busiestDays: { weekday: number; count: number }[];
-  window30: { bookings: number; covers: number; cancelled: number; arrived: number };
-  /** The same length of window immediately before, for direction of travel. */
-  previous: { bookings: number; covers: number; revenue: number };
+  revenueByDay: { day: string; revenue: number; payments: number }[]; peakHours: { hour: string; count: number }[]; newUsersByDay: { day: string; count: number }[];
+  reviewSummary: { avg_rating: number | null; total: number }; topMenuItems: { name: string; qty: number; revenue: number }[]; busiestDays: { weekday: number; count: number }[];
+  window30: { bookings: number; covers: number; cancelled: number; arrived: number }; previous: { bookings: number; covers: number; revenue: number };
 }
-
-export interface AuditEntry {
-  id: number;
-  actor_id: number | null;
-  actor_name: string;
-  action: string;
-  target_type: string;
-  target_id: string | null;
-  detail: string;
-  created_at: string;
-}
-
+export interface AuditEntry { id: number; actor_id: number | null; actor_name: string; action: string; target_type: string; target_id: string | null; detail: string; created_at: string; }
 export type DeskBooking = Booking & { user_name: string; user_email: string };
-/**
- * A table on the console's plan, carrying today's booking if it has one.
- *
- * Every `booking_*` field is null together or set together — they come from
- * one lateral join on the earliest booking still standing for today — so
- * `booking_id` alone is enough to tell whether this table is spoken for.
- */
 export type DeskTable = DiningTable & {
-  today_count: number;
-  booking_id: number | null;
-  booking_time: string | null;
-  booking_party: number | null;
-  booking_status: "confirmed" | "pending_payment" | null;
-  booking_code: string | null;
-  booking_phone: string | null;
-  booking_note: string | null;
-  booking_checked_in: string | null;
-  booking_name: string | null;
+  today_count: number; booking_id: number | null; booking_time: string | null; booking_party: number | null; booking_status: "confirmed" | "pending_payment" | null;
+  booking_code: string | null; booking_phone: string | null; booking_note: string | null; booking_checked_in: string | null; booking_name: string | null;
 };
 export type DeskPayment = Payment & { res_date: string; res_time: string; user_name: string };
 export type DeskReceipt = ReceiptSummary & { user_name: string; user_email: string; pay_reference: string | null };

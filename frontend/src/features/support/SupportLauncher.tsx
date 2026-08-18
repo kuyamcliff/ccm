@@ -3,54 +3,50 @@ import { useLocation } from "react-router-dom";
 import { Icon } from "~/ui/Icon";
 import { Sheet } from "~/ui/Sheet";
 import { Conversation } from "./Conversation";
+import { useVenue } from "~/state/venue";
+import { useLocale } from "~/state/locale";
 
-/**
- * The floating way in to support.
- *
- * Hidden on the help page (where the same conversation is already the whole
- * page) and inside the staff console, which has its own desk. The chat itself
- * only connects once the sheet is opened, so an idle visitor never holds a
- * stream open.
- */
 export function SupportLauncher() {
   const [open, setOpen] = useState(false);
-  const [past, setPast] = useState(false);
   const { pathname } = useLocation();
+  const { siteConfig, phone, phoneHref, whatsappHref } = useVenue();
+  const { t, locale } = useLocale();
+  const [readyToShow, setReadyToShow] = useState(false);
 
-  /*
-   * It stays out of the way of the first screen.
-   *
-   * A floating button over the hero is the single most template-looking thing
-   * a restaurant site can do, and nobody has a question before they have seen
-   * the place. It fades in once the visitor has scrolled, which is also when
-   * they have started reading and might have one.
-   */
   useEffect(() => {
-    let queued = false;
-    const onScroll = () => {
-      if (queued) return;
-      queued = true;
-      requestAnimationFrame(() => {
-        setPast(window.scrollY > 400);
-        queued = false;
-      });
-    };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [pathname]);
+    const timer = setTimeout(() => setReadyToShow(true), 500);
+    return () => clearTimeout(timer);
+  }, []);
 
+  if (!siteConfig.support.enabled) return null;
   if (pathname.startsWith("/help") || pathname.startsWith("/desk")) return null;
+  if (!readyToShow) return null;
+
+  const hasChat = siteConfig.features.supportChat;
+  const hasDirect = (siteConfig.support.phone && phoneHref) || (siteConfig.support.whatsapp && whatsappHref);
+  if (!hasChat && !hasDirect) return null;
 
   return (
     <>
-      <button type="button" className="helper" data-shown={past} onClick={() => setOpen(true)}>
+      <button type="button" className="helper" onClick={() => setOpen(true)} aria-label={t("messageUs")}>
         <Icon name="message" size={18} />
-        Message us
+        {t("messageUs")}
       </button>
 
-      <Sheet open={open} onClose={() => setOpen(false)} title="Message us">
-        <Conversation active={open} compact />
+      <Sheet open={open} onClose={() => setOpen(false)} title={t("needHelp")}>
+        <div className="stack stack--loose">
+          <div className="stack stack--tight">
+            <p className="display display--md">{locale === "fr" ? "Comment pouvons-nous vous aider ?" : "How can we help?"}</p>
+            <p className="fine muted">{siteConfig.support.staffed ? `${t("usuallyReplies")} ${siteConfig.support.responseMinutes} min.` : siteConfig.support.afterHoursMessage[locale]}</p>
+          </div>
+
+          <div className="actions">
+            {siteConfig.support.phone && phoneHref ? <a className="btn btn--ghost" href={phoneHref}><Icon name="phone" size={18} />{locale === "fr" ? "Appeler" : "Call"}{phone ? ` · ${phone}` : ""}</a> : null}
+            {siteConfig.support.whatsapp && whatsappHref ? <a className="btn btn--ghost" href={whatsappHref} target="_blank" rel="noreferrer noopener"><Icon name="message" size={18} />WhatsApp</a> : null}
+          </div>
+
+          {hasChat ? <Conversation active={open} compact /> : <p className="fine muted">{locale === "fr" ? "Utilisez l'un des contacts ci-dessus pour nous joindre." : "Use one of the contact options above to reach us."}</p>}
+        </div>
       </Sheet>
     </>
   );
