@@ -2,11 +2,13 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "~/lib/api";
 import type { Booking, TakeawayOrder } from "~/lib/api";
+import { ApiError } from "~/lib/http";
 import { dayLabel, parseLines, stampLabel, timeLabel } from "~/lib/format";
 import { type Resource, useResource } from "~/lib/useResource";
 import { Button, LinkButton } from "~/ui/Button";
 import { Badge, Money } from "~/ui/Bits";
 import { EmptyState, ErrorState, Notice, SkeletonCards } from "~/ui/Feedback";
+import { Icon } from "~/ui/Icon";
 import { useConfirm } from "~/ui/Sheet";
 import { useToast } from "~/state/toast";
 import { useVenue } from "~/state/venue";
@@ -14,8 +16,6 @@ import { useLocale } from "~/state/locale";
 import { useBasket } from "~/state/basket";
 import { BookingPass } from "./BookingPass";
 import { MomoDialog } from "~/features/pay/MomoDialog";
-
-import "~/styles/order-timeline.css";
 
 const ORDER_STATUS: Record<TakeawayOrder["status"], { label: { en: string; fr: string }; tone: "neutral" | "good" | "warn" | "bad" | "hot" }> = {
   awaiting_payment: { label: { en: "Not paid", fr: "Non payé" }, tone: "warn" },
@@ -25,17 +25,8 @@ const ORDER_STATUS: Record<TakeawayOrder["status"], { label: { en: string; fr: s
   picked_up: { label: { en: "Collected", fr: "Retirée" }, tone: "neutral" },
   cancelled: { label: { en: "Cancelled", fr: "Annulée" }, tone: "bad" },
 };
-
-const TIMELINE = ["pending", "confirmed", "ready", "picked_up"] as const;
-function timelineIndex(status: TakeawayOrder["status"]): number { if (status === "awaiting_payment") return -1; if (status === "cancelled") return -2; return TIMELINE.indexOf(status as (typeof TIMELINE)[number]); }
 function downloadBlob(blob: Blob, filename: string) { const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url); }
-
-function OrderTimeline({ status, locale }: { status: TakeawayOrder["status"]; locale: "en" | "fr" }) {
-  const current = timelineIndex(status);
-  if (status === "cancelled") return <Notice tone="bad">{locale === "fr" ? "Cette commande a été annulée." : "This order was cancelled."}</Notice>;
-  const labels = locale === "fr" ? ["Reçue", "Acceptée", "Prête", "Retirée"] : ["Received", "Accepted", "Ready", "Collected"];
-  return <ol className="order-timeline" aria-label={locale === "fr" ? "Progression de la commande" : "Order progress"}>{labels.map((label, index) => <li key={label} data-state={index < current ? "done" : index === current ? "current" : "todo"}><span className="order-timeline__dot" aria-hidden="true" /><span>{label}</span></li>)}</ol>;
-}
+function hasMenuId(line: { id?: number; name: string; qty: number; price: number }): line is { id: number; name: string; qty: number; price: number } { return Number.isInteger(line.id) && (line.id ?? 0) > 0; }
 
 function Bookings({ bookings }: { bookings: Resource<Booking[]> }) {
   const { depositFcfa } = useVenue(); const toast = useToast(); const { confirm, confirmElement } = useConfirm(); const [payFor, setPayFor] = useState<Booking | null>(null); const { locale } = useLocale();
@@ -52,7 +43,7 @@ function Bookings({ bookings }: { bookings: Resource<Booking[]> }) {
 function Orders({ orders }: { orders: Resource<TakeawayOrder[]> }) {
   const toast = useToast(); const [payFor, setPayFor] = useState<TakeawayOrder | null>(null); const { locale } = useLocale(); const { add, clear } = useBasket(); const navigate = useNavigate(); const menu = useResource(() => api.site.menu(), []);
   const orderAgain = (order: TakeawayOrder) => {
-    const lines = parseLines(order.items_json).filter((line) => Number.isInteger(line.id));
+    const lines = parseLines(order.items_json).filter(hasMenuId);
     if (lines.length === 0) { toast.say(locale === "fr" ? "Les articles de cette ancienne commande ne peuvent pas être ajoutés automatiquement. Ouvrez le menu pour recommencer." : "Those older items cannot be restored automatically. Open the menu to order again."); navigate("/menu"); return; }
     if (menu.data) {
       const validIds = new Set(menu.data.filter((item) => item.is_active === 1 && item.price_fcfa !== null).map((item) => item.id));
@@ -67,7 +58,7 @@ function Orders({ orders }: { orders: Resource<TakeawayOrder[]> }) {
   if (orders.error) return <ErrorState error={orders.error} onRetry={orders.reload} />;
   const rows = orders.data ?? [];
   if (rows.length === 0) return <EmptyState icon="bag" title={locale === "fr" ? "Aucune commande" : "No orders yet"} action={<LinkButton to="/menu" tone="primary">{locale === "fr" ? "Voir le menu" : "Go to the menu"}</LinkButton>}>{locale === "fr" ? "Commandez à l'avance et retirez votre repas sans attendre." : "Order ahead and collect it without queueing."}</EmptyState>;
-  return <div className="stack">{rows.map((order) => { const status = ORDER_STATUS[order.status]; const lines = parseLines(order.items_json); const unpaid = order.payment_status !== "paid" && order.status !== "cancelled"; return <article key={order.id} className="card stack"><div className="row row--between row--wrap"><div><p className="label">Order</p><p className="mono pass__code">{order.order_no}</p></div><Badge tone={status.tone}>{status.label[locale]}</Badge></div><OrderTimeline status={order.status} locale={locale} /><ul className="lines">{lines.map((line, index) => <li key={`${line.name}-${index}`}><span className="mono lines__qty">{line.qty}</span><span>{line.name}</span><Money value={line.price * line.qty} className="push" /></li>)}</ul><div className="row row--between"><span className="muted">{locale === "fr" ? "Retrait à" : "Collect at"} {timeLabel(order.pickup_time)}</span><strong><Money value={order.total_fcfa} /></strong></div>{unpaid ? <Notice tone="warn">{locale === "fr" ? "Cette commande n'est pas encore payée. La cuisine ne l'a pas commencée." : "This order is not paid yet, so the kitchen has not started on it."}</Notice> : null}<div className="row row--wrap">{unpaid ? <Button tone="primary" size="sm" icon="wallet" onClick={() => setPayFor(order)}>{locale === "fr" ? "Payer maintenant" : "Pay now"}</Button> : <><Button size="sm" tone="ghost" icon="download" onClick={async () => { try { downloadBlob(await api.me.orderReceiptFile(order.order_no), `${order.order_no}.pdf`); } catch (err) { toast.failed(err); } }}>{locale === "fr" ? "Reçu" : "Receipt"}</Button>{order.status !== "cancelled" ? <Button size="sm" tone="quiet" icon="bag" onClick={() => orderAgain(order)}>{locale === "fr" ? "Commander encore" : "Order again"}</Button> : null}</>}<span className="fine faint push">{locale === "fr" ? "Commandée" : "Ordered"} {stampLabel(order.created_at)}</span></div></article>; })}{payFor ? <MomoDialog open amountFcfa={payFor.total_fcfa} title={locale === "fr" ? "Payer la commande" : "Pay for your order"} what={`Order ${payFor.order_no}, ${locale === "fr" ? "retrait à" : "collect at"} ${timeLabel(payFor.pickup_time)}`} driver={{ start: (input) => api.orders.pay(payFor.order_no, input.momoPhone, input.wallet, input.idempotencyKey).then((prompt) => ({ reference: prompt.reference, amount_fcfa: prompt.amount_fcfa, expires_in_seconds: prompt.expires_in_seconds, payment_url: prompt.payment_url })), poll: api.orders.paymentStatus, abandon: api.orders.abandonPayment }} onClose={() => setPayFor(null)} onPaid={() => { setPayFor(null); toast.done(locale === "fr" ? "Paiement reçu. Nous commençons la préparation." : "Paid. We will start on it."); orders.reload(); }} /> : null}</div>;
+  return <div className="stack">{rows.map((order) => { const status = ORDER_STATUS[order.status]; const lines = parseLines(order.items_json); const unpaid = order.payment_status !== "paid" && order.status !== "cancelled"; return <article key={order.id} className="card stack"><div className="row row--between row--wrap"><div><p className="label">Order</p><p className="mono pass__code">{order.order_no}</p></div><Badge tone={status.tone}>{status.label[locale]}</Badge></div><ul className="lines">{lines.map((line, index) => <li key={`${line.name}-${index}`}><span className="mono lines__qty">{line.qty}</span><span>{line.name}</span><Money value={line.price * line.qty} className="push" /></li>)}</ul><div className="row row--between"><span className="muted">{locale === "fr" ? "Retrait à" : "Collect at"} {timeLabel(order.pickup_time)}</span><strong><Money value={order.total_fcfa} /></strong></div>{unpaid ? <Notice tone="warn">{locale === "fr" ? "Cette commande n'est pas payée. La cuisine ne l'a pas commencée." : "This order is not paid yet, so the kitchen has not started on it."}</Notice> : null}<div className="row row--wrap">{unpaid ? <Button tone="primary" size="sm" icon="wallet" onClick={() => setPayFor(order)}>{locale === "fr" ? "Payer maintenant" : "Pay now"}</Button> : <><Button size="sm" tone="ghost" icon="download" onClick={async () => { try { downloadBlob(await api.me.orderReceiptFile(order.order_no), `${order.order_no}.pdf`); } catch (err) { toast.failed(err); } }}>{locale === "fr" ? "Reçu" : "Receipt"}</Button>{order.status !== "cancelled" ? <Button size="sm" tone="quiet" icon="bag" onClick={() => orderAgain(order)}>{locale === "fr" ? "Commander encore" : "Order again"}</Button> : null}</>}<span className="fine faint push">{locale === "fr" ? "Commandée" : "Ordered"} {stampLabel(order.created_at)}</span></div></article>; })}{payFor ? <MomoDialog open amountFcfa={payFor.total_fcfa} title={locale === "fr" ? "Payer la commande" : "Pay for your order"} what={`Order ${payFor.order_no}, ${locale === "fr" ? "retrait à" : "collect at"} ${timeLabel(payFor.pickup_time)}`} driver={{ start: (input) => api.orders.pay(payFor.order_no, input.momoPhone, input.wallet, input.idempotencyKey).then((prompt) => ({ reference: prompt.reference, amount_fcfa: prompt.amount_fcfa, expires_in_seconds: prompt.expires_in_seconds, payment_url: prompt.payment_url })), poll: api.orders.paymentStatus, abandon: api.orders.abandonPayment }} onClose={() => setPayFor(null)} onPaid={() => { setPayFor(null); toast.done(locale === "fr" ? "Paiement reçu. Nous commençons la préparation." : "Paid. We will start on it."); orders.reload(); }} /> : null}</div>;
 }
 
 function activeBookingCount(rows: Booking[] | null): number { return (rows ?? []).filter((b) => b.status === "confirmed" || b.status === "pending_payment").length; }
@@ -75,5 +66,5 @@ function activeOrderCount(rows: TakeawayOrder[] | null): number { return (rows ?
 
 export function MinePage() {
   const [tab, setTab] = useState<"tables" | "orders">("tables"); const { locale } = useLocale(); const bookings = useResource(() => api.booking.mine(), []); const orders = useResource(() => api.orders.mine(), []); const tableCount = activeBookingCount(bookings.data); const orderCount = activeOrderCount(orders.data);
-  return <div className="page section"><div className="section-head"><hr className="heat-rule" /><h1 className="display display--xl">{locale === "fr" ? "Mes visites" : "My visits"}</h1></div><div className="row row--between row--wrap"><div className="tabs" role="tablist" aria-label={locale === "fr" ? "Ce que vous avez avec nous" : "What you have with us"}><button type="button" role="tab" className="tab" aria-selected={tab === "tables"} onClick={() => setTab("tables")}>{locale === "fr" ? "Tables" : "Tables"} {tableCount ? `(${tableCount})` : ""}</button><button type="button" role="tab" className="tab" aria-selected={tab === "orders"} onClick={() => setTab("orders")}>{locale === "fr" ? "Commandes" : "Orders"} {orderCount ? `(${orderCount})` : ""}</button></div></div>{tab === "tables" ? <Bookings bookings={bookings} /> : <Orders orders={orders} />}</div>;
+  return <div className="page section"><div className="section-head"><hr className="heat-rule" /><h1 className="display display--xl">{locale === "fr" ? "Mes visites" : "My visits"}</h1></div><div className="row row--between row--wrap"><div className="tabs" role="tablist" aria-label={locale === "fr" ? "Ce que vous avez avec nous" : "What you have with us"}><button type="button" role="tab" className="tab" aria-selected={tab === "tables"}>{locale === "fr" ? "Tables" : "Tables"} {tableCount ? `(${tableCount})` : ""}</button><button type="button" role="tab" className="tab" aria-selected={tab === "orders"}>{locale === "fr" ? "Commandes" : "Orders"} {orderCount ? `(${orderCount})` : ""}</button></div></div>{tab === "tables" ? <Bookings bookings={bookings} /> : <Orders orders={orders} />}</div>;
 }
