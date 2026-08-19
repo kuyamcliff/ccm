@@ -49,6 +49,39 @@
   }
 }
 
+/*
+ * The hero before anybody has uploaded a photograph.
+ *
+ * The heights above reserve most of the first screen for the picture, which is
+ * right when there is one and indefensible when there is not: a restaurant
+ * that has not added photos yet got 384px of empty black, with the headline
+ * and both buttons pushed off the bottom of the phone. The first thing a
+ * hungry visitor saw was nothing at all.
+ *
+ * With no picture the strip shrinks to the address it carries, and the padding
+ * replaces the height the hero borrows back from the transparent top bar.
+ */
+.hero__media--bare {
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  padding-top: calc(var(--topbar-h) + var(--safe-t) + var(--s-3));
+}
+
+.hero__media--bare .hero__eyebrow {
+  position: static;
+  margin-inline: var(--gutter);
+  /* Nothing behind it to sit on top of any more. */
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding-inline: 0;
+}
+
+.hero__media--bare::after {
+  content: none;
+}
+
 .hero__frames {
   position: absolute;
   inset: 0;
