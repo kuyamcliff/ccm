@@ -176,7 +176,7 @@ export function BasketProvider({ children }: { children: ReactNode }) {
         const item = byId.get(line.id);
         // A dish taken off the menu, or one priced by the market rather than
         // by the plate, cannot be ordered ahead.
-        if (!item || item.is_active !== 1 || item.price_fcfa === null) {
+        if (!item || item.is_active !== 1 || item.price_fcfa == null) {
           dropped += 1;
           continue;
         }

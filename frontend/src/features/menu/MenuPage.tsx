@@ -21,7 +21,7 @@ function Dish({ item }: { item: MenuItem }) {
   const { add, lines } = useBasket();
   const inBasket = lines.find((line) => line.id === item.id)?.qty ?? 0;
   const tags = parseTags(item.dietary_tags);
-  const orderable = item.price_fcfa !== null;
+  const orderable = item.price_fcfa != null;
 
   return (
     <article className="row-item">
@@ -47,7 +47,7 @@ function Dish({ item }: { item: MenuItem }) {
             on the right and a long dish name is squeezed into two words by a
             column it is not competing with. */}
         <p className="row-item__price">
-          {item.price_fcfa !== null ? <Money value={item.price_fcfa} /> : <span className="fine">{item.price_label}</span>}
+          {item.price_fcfa != null ? <Money value={item.price_fcfa} /> : <span className="fine">{item.price_label}</span>}
         </p>
       </div>
 

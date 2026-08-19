@@ -267,9 +267,17 @@
 
 .stat__value {
   font-size: 1.375rem;
-  line-height: 1;
+  line-height: 1.15;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+/* `.money` is nowrap everywhere else, on purpose — a price in a table row or
+   a receipt should never break. A stat card is narrower than either, and a
+   lifetime total is the one figure here big enough to outgrow it; letting
+   just the unit drop under the number here keeps the number itself whole. */
+.stat__value .money {
+  white-space: normal;
 }
 
 .delta {
@@ -303,7 +311,10 @@
 .chart-grid {
   display: grid;
   gap: var(--s-4);
-  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  /* `min(20rem, 100%)` rather than a bare 20rem: on the narrowest phones this
+     site supports, a 320px floor is wider than the column has to give, and an
+     auto-fit track never shrinks below its floor — it pushes the page instead. */
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
 }
 
 .chart-grid__wide {
@@ -1061,7 +1072,11 @@
      the right-hand half where it wrapped to five lines. */
   .desk-table .table td {
     display: grid;
-    grid-template-columns: 5rem 1fr;
+    /* `1fr` alone means `minmax(auto, 1fr)`: the column still floors at its
+       content's min-content, so one unbroken value — a long SKU, an email —
+       holds the column open and widens the whole page. `minmax(0, 1fr)` lets
+       it shrink the rest of the way and wrap instead. */
+    grid-template-columns: 5rem minmax(0, 1fr);
     align-items: baseline;
     gap: var(--s-2);
     padding: 0.2rem 0;

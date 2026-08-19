@@ -416,6 +416,11 @@ h4 {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+  /* A table's auto layout treats `width` as a floor, not a cap: its columns
+     still size to their content and the box renders at that content width
+     regardless of the 1px above, widening the whole page. Fixed layout makes
+     the 1px the real width, the same as it is for every other element here. */
+  table-layout: fixed;
 }
 
 /* Keyboard users get past the navigation on every page. */
