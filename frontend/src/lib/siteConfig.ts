@@ -64,6 +64,9 @@ export interface SiteConfig {
   };
   payments: { mtn: boolean; orange: boolean };
   announcement: { enabled: boolean; tone: "info" | "good" | "warn"; message: LocalizedMessage };
+  /** The site closed to customers while the owner works on it. Staff always
+      get through, so turning this on can never lock them out of turning it off. */
+  maintenance: { enabled: boolean; message: LocalizedMessage };
 }
 
 export const DEFAULT_SITE_CONFIG: SiteConfig = {
@@ -95,6 +98,13 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   },
   payments: { mtn: true, orange: true },
   announcement: { enabled: false, tone: "info", message: { en: "", fr: "" } },
+  maintenance: {
+    enabled: false,
+    message: {
+      en: "We are making some changes and will be back shortly. The grill is still on — call us if you need us.",
+      fr: "Nous faisons quelques changements et revenons très vite. Le grill tourne toujours — appelez-nous si besoin.",
+    },
+  },
 };
 
 function localized(value: unknown, fallback: LocalizedMessage): LocalizedMessage {
@@ -117,6 +127,7 @@ export function parseSiteConfig(raw?: string): SiteConfig {
     const support = (parsed.support ?? {}) as Record<string, unknown>;
     const payments = (parsed.payments ?? {}) as Record<string, unknown>;
     const announcement = (parsed.announcement ?? {}) as Record<string, unknown>;
+    const maintenance = (parsed.maintenance ?? {}) as Record<string, unknown>;
     const ordering = (services.ordering ?? {}) as Record<string, unknown>;
     const booking = (services.booking ?? {}) as Record<string, unknown>;
     const waitlist = (services.waitlist ?? {}) as Record<string, unknown>;
@@ -164,6 +175,14 @@ export function parseSiteConfig(raw?: string): SiteConfig {
         enabled: bool(announcement.enabled, false),
         tone: mode(announcement.tone, ["info", "good", "warn"] as const, "info"),
         message: localized(announcement.message, DEFAULT_SITE_CONFIG.announcement.message),
+      },
+      maintenance: {
+        /* Only an explicit true closes the site. Anything else — a missing
+           block, a stray string, a 1 — leaves it open, because a site that
+           shuts itself over a malformed value is worse than one that stays up
+           when it should not have. */
+        enabled: bool(maintenance.enabled, false),
+        message: localized(maintenance.message, DEFAULT_SITE_CONFIG.maintenance.message),
       },
     };
   } catch { return structuredClone(DEFAULT_SITE_CONFIG); }

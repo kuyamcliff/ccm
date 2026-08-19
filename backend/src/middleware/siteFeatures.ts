@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { db } from "../db.js";
 import { featureIsOn } from "../lib/featureWindow.js";
+import { decide, readMaintenance } from "../lib/maintenance.js";
 
 export type CustomerFeature = "customerAccounts" | "ordering" | "booking" | "waitlist" | "reviews" | "gallery" | "offers" | "events" | "loyalty" | "giftCards" | "supportChat";
 export type CustomerService = "ordering" | "booking" | "waitlist";
@@ -40,4 +41,34 @@ export function requireSiteService(service: CustomerService) {
     }
     next();
   };
+}
+
+/**
+ * Closes the site to customers while the owner works on it.
+ *
+ * Mounted across the whole API rather than route by route, because the point
+ * of maintenance is that nothing gets half-served: a customer who can still
+ * reach the payment endpoint while the menu is down will find that out at the
+ * worst possible moment.
+ *
+ * Who and what stays reachable is decided in lib/maintenance.ts, under one
+ * rule — turning this on must never lock the owner out of turning it off.
+ */
+export async function maintenanceGate(req: Request, res: Response, next: NextFunction) {
+  const state = readMaintenance(await config());
+  /* baseUrl + path, not path. This is mounted at "/api", and inside a mounted
+     handler `req.path` has that prefix stripped — so "/api/auth/login" arrives
+     as "/auth/login" and matches none of the paths that are meant to stay
+     open. That would close signing in while maintenance is on, which is the
+     one thing this feature must never do. */
+  const fullPath = `${req.baseUrl}${req.path}`;
+  if (decide(state, fullPath, req.user?.role) === "open") { next(); return; }
+
+  /* Retry-After tells a crawler to come back rather than treating the whole
+     site as gone, which is what an unqualified 503 eventually means to one. */
+  res.setHeader("Retry-After", "3600");
+  res.status(503).json({
+    error: "The site is closed for maintenance right now. Please try again shortly.",
+    maintenance: true,
+  });
 }

@@ -11,7 +11,7 @@ import { newErrorReference } from "./lib/errorReference.js";
 import { migrateUxControls } from "./lib/migrate-ux-controls.js";
 import { backfillLegacyBookingCodes } from "./lib/bookingCode.js";
 import { rateLimit, sameOriginOnly, securityHeaders } from "./middleware/security.js";
-import { requireSiteService } from "./middleware/siteFeatures.js";
+import { maintenanceGate, requireSiteService } from "./middleware/siteFeatures.js";
 import { initTelegramLogger, flushTelegramLogs } from "./lib/telegramLogger.js";
 import { authRouter } from "./routes/auth.js";
 import { reservationsRouter } from "./routes/reservations.js";
@@ -59,6 +59,10 @@ app.use(cookieParser());
 app.use(attachUser);
 app.use(sameOriginOnly);
 app.use("/api", rateLimit("global", { windowMs: 60 * 1000, max: 300, message: "You are sending requests very quickly. Slow down and try again." }));
+/* After attachUser, so staff are recognised and let through, and after the
+   rate limit, so a closed site cannot be used to hammer the database with
+   config reads. */
+app.use("/api", maintenanceGate);
 
 app.get("/api/health", async (_req, res) => { res.setHeader("Cache-Control", "no-store"); try { await db.prepare("SELECT 1").get(); res.json({ ok: true, database: "up", uptime_seconds: Math.round(process.uptime()) }); } catch (err) { console.error("[health] database check failed", err); res.status(503).json({ ok: false, database: "down" }); } });
 app.use("/api/auth", authRouter);

@@ -1,10 +1,13 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { RouteMeta } from "./RouteMeta";
 import { Suspense, lazy } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Shell } from "./Shell";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { RequireAccount, RequireStaff } from "./guards";
+import { useSession } from "~/state/session";
+import { useVenue } from "~/state/venue";
+import { Maintenance } from "~/features/misc/Maintenance";
 import { SkeletonCards } from "~/ui/Feedback";
 import { FeatureGate, ServiceGate } from "~/ui/FeatureGate";
 import { Home } from "~/features/home/Home";
@@ -33,8 +36,44 @@ const unavailableScreen: CSSProperties = { minHeight: "100vh", display: "grid", 
 function NotAvailable() { return <main style={unavailableScreen} aria-labelledby="not-available-title"><section style={{ width: "min(100%, 34rem)" }}><p style={{ color: "#E31C23", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" }}>Coming soon</p><h1 id="not-available-title" style={{ fontSize: "clamp(2.5rem, 9vw, 5rem)", lineHeight: 0.95, letterSpacing: "-0.055em", margin: "1rem 0" }}>Not available yet.</h1><p style={{ color: "rgba(255,255,255,0.62)", lineHeight: 1.65 }}>CCM is still being finished behind the scenes. The site is temporarily unavailable while we put the final pieces in place.</p></section></main>; }
 function Loading() { return <div className="page section"><SkeletonCards count={2} height="9rem" /></div>; }
 
+/**
+ * Closes the customer side while the owner works on the site.
+ *
+ * Staff pass straight through, exactly as they do at the API, so the owner can
+ * keep using the site they have closed — and, more to the point, can reach the
+ * switch that opens it again. The console is outside this on purpose.
+ *
+ * `ready` matters: until the session has come back this tab does not know
+ * whether it is staff, and showing the maintenance page to an owner for half a
+ * second and then yanking it away is worse than waiting.
+ */
+/**
+ * The screens that stay reachable while the site is closed.
+ *
+ * Signing in, above all: a signed-out owner who cannot reach the sign-in form
+ * can never become staff, and so can never reach the switch that opens the
+ * site again. This mirrors the API's own list, which keeps /api/auth open for
+ * exactly the same reason — closing one without the other leaves a form that
+ * cannot submit, or a route that cannot be reached.
+ */
+const OPEN_DURING_MAINTENANCE = new Set(["/signin", "/join", "/reset"]);
+
+function MaintenanceGate({ children }: { children: ReactNode }) {
+  const { siteConfig, loading } = useVenue();
+  const { isStaff, ready } = useSession();
+  const { pathname } = useLocation();
+
+  /* Until the session has come back this tab does not know whether it is
+     staff. Showing an owner the maintenance page for half a second and then
+     yanking it away is worse than making them wait for it. */
+  if (loading || !ready) return <Loading />;
+  if (!siteConfig.maintenance.enabled || isStaff) return <>{children}</>;
+  if (OPEN_DURING_MAINTENANCE.has(pathname.replace(/\/+$/, "") || "/")) return <>{children}</>;
+  return <Maintenance />;
+}
+
 function CustomerRoutes() {
-  return <Routes><Route element={<Shell />}>
+  return <Routes><Route element={<MaintenanceGate><Shell /></MaintenanceGate>}>
     <Route index element={<Home />} />
     <Route path="menu" element={<MenuPage />} />
     <Route path="book" element={<ServiceGate feature="booking"><BookPage /></ServiceGate>} />

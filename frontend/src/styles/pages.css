@@ -2844,3 +2844,15 @@ body:has(.booking__foot) .shell__main {
 .clash__choices .chip .faint {
   font-weight: 500;
 }
+
+/* ── Maintenance ──────────────────────────────────────────────────────────
+   The only page a customer can reach while the site is closed, so it stands
+   on its own: no header, no tab bar, nothing to tap that leads back here. */
+.maintenance { min-height: 100svh; display: grid; place-items: center; padding: var(--s-6) var(--gutter); }
+.maintenance__inner { display: grid; gap: var(--s-4); justify-items: start; width: min(100%, 34rem); }
+.maintenance__mark { display: grid; place-items: center; width: 3.5rem; height: 3.5rem; border: 1px solid var(--line-2); border-radius: var(--r-full); color: var(--text-2); }
+.maintenance__eyebrow { color: var(--red); }
+.maintenance__title { margin: 0; }
+.maintenance__reach { display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: var(--s-2); }
+.maintenance__reach .mono { opacity: 0.75; }
+.maintenance__where { display: flex; align-items: center; gap: var(--s-2); margin: 0; color: var(--text-2); font-size: var(--t-fine); }

@@ -455,6 +455,74 @@ describe("feature scheduling", () => {
   });
 });
 
+describe("maintenance mode", () => {
+  const KEY = "site_config_json";
+
+  async function setMaintenance(enabled: boolean): Promise<void> {
+    await pool.query(
+      "INSERT INTO camchop.site_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+      [KEY, JSON.stringify({ maintenance: { enabled } })]
+    );
+  }
+
+  async function staffCookie(): Promise<string> {
+    const email = `it-${run}-maint-staff@camchopmeat.test`;
+    const hash = await bcrypt.hash(PASSWORD, 10);
+    await pool.query(
+      "INSERT INTO camchop.users (name, email, password_hash, role) VALUES ($1, $2, $3, 'owner')",
+      ["Maintenance Owner", email, hash]
+    );
+    const res = await fetch(`${BASE}/api/auth/login`, {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ email, password: PASSWORD }),
+    });
+    assert.equal(res.status, 200);
+    return cookieFrom(res);
+  }
+
+  /*
+   * The one rule: turning maintenance on must never lock the owner out of
+   * turning it off again. Every case below is a route somebody needs to get
+   * back out, checked against a real server rather than a decision table.
+   */
+  it("closes the site to customers but never to the owner", async () => {
+    // Signed in before maintenance starts, the way an owner actually would be.
+    const staff = await staffCookie();
+
+    try {
+      await setMaintenance(true);
+
+      const closed = await fetch(`${BASE}/api/menu`);
+      assert.equal(closed.status, 503, "a customer must be turned away");
+      const body = (await closed.json()) as { maintenance?: boolean };
+      assert.equal(body.maintenance, true, "the app needs to know this is maintenance, not a crash");
+      assert.ok(closed.headers.get("retry-after"), "a crawler must be told to come back, not that we are gone");
+
+      // Everything needed to get back out again.
+      assert.equal((await fetch(`${BASE}/api/health`)).status, 200, "the platform must still see us as alive");
+      assert.equal((await fetch(`${BASE}/api/site-settings`)).status, 200, "the console reads this to render the switch");
+      assert.equal((await fetch(`${BASE}/api/auth/me`)).status, 401, "signing in must still be reachable, 401 not 503");
+
+      // A signed-out owner must be able to become staff again.
+      const login = await fetch(`${BASE}/api/auth/login`, {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ email: `it-${run}-maint-staff@camchopmeat.test`, password: PASSWORD }),
+      });
+      assert.equal(login.status, 200, "the owner must be able to sign in during maintenance");
+
+      // And staff see the site as normal.
+      assert.equal((await fetch(`${BASE}/api/menu`, { headers: { Cookie: staff } })).status, 200);
+      assert.equal((await fetch(`${BASE}/api/admin/stats`, { headers: { Cookie: staff } })).status, 200);
+    } finally {
+      await pool.query("DELETE FROM camchop.site_settings WHERE key = $1", [KEY]);
+    }
+
+    assert.equal((await fetch(`${BASE}/api/menu`)).status, 200, "and the site comes back afterwards");
+  });
+});
+
 describe("error handling", () => {
   it("never returns a raw internal message to a customer", async () => {
     const res = await fetch(`${BASE}/api/reservations`, {
