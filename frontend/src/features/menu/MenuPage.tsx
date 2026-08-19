@@ -21,10 +21,11 @@ function Dish({ item }: { item: MenuItem }) {
   const { add, lines } = useBasket();
   const inBasket = lines.find((line) => line.id === item.id)?.qty ?? 0;
   const tags = parseTags(item.dietary_tags);
-  const orderable = item.price_fcfa != null;
+  const soldOut = item.sold_out === 1;
+  const orderable = item.price_fcfa != null && !soldOut;
 
   return (
-    <article className="row-item">
+    <article className="row-item" data-sold-out={soldOut || undefined}>
       {/* Always drawn, even with nothing to draw. A menu where half the rows
           start at the text edge and half start four rems in reads as broken;
           the fallback is a deliberate shape, so a row without a photograph
@@ -34,8 +35,13 @@ function Dish({ item }: { item: MenuItem }) {
       <div className="row-item__body">
         <h3 className="row-item__name">{item.name}</h3>
         {item.description ? <p className="fine">{item.description}</p> : null}
-        {tags.length > 0 ? (
+        {tags.length > 0 || soldOut ? (
           <p className="row-item__tags">
+            {/* Said in words, not by grey-ing the button out. A control that
+                simply stops working leaves the guest wondering whether the
+                fault is theirs; "sold out today" also tells them it is worth
+                coming back tomorrow. */}
+            {soldOut ? <span className="badge badge--warn">Sold out today</span> : null}
             {tags.map((tag) => (
               <span key={tag} className="badge badge--plain">
                 {tag}
@@ -77,6 +83,8 @@ function Dish({ item }: { item: MenuItem }) {
           >
             {inBasket > 0 ? `${inBasket} added` : "Add"}
           </Button>
+        ) : soldOut ? (
+          <span className="fine faint">Back tomorrow</span>
         ) : (
           <span className="fine faint">Ask at the counter</span>
         )}

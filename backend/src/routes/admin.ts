@@ -362,6 +362,7 @@ adminRouter.patch("/menu/:id", async (req, res) => {
   if (req.body?.price_label !== undefined) fields.price_label = req.body.price_label ? String(req.body.price_label).slice(0, 40) : null;
   if (req.body?.position !== undefined) fields.position = Number(req.body.position) || 0;
   if (req.body?.is_active !== undefined) fields.is_active = req.body.is_active ? 1 : 0;
+  if (req.body?.sold_out !== undefined) fields.sold_out = req.body.sold_out ? 1 : 0;
 
   if (req.body?.price_fcfa !== undefined) {
     const price = req.body.price_fcfa ? Number(req.body.price_fcfa) : null;

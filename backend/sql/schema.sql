@@ -176,7 +176,12 @@ CREATE TABLE IF NOT EXISTS menu_items (
   price_label  text,
   image_url    text,
   position     integer NOT NULL DEFAULT 0,
+  /* Off the menu entirely: not shown, not orderable, not mentioned. */
   is_active    integer NOT NULL DEFAULT 1,
+  /* On the menu but not available today. Deliberately distinct from
+     is_active: a guest who cannot find the goat at all assumes it was never
+     sold here, where "sold out today" tells them to come back tomorrow. */
+  sold_out     integer NOT NULL DEFAULT 0,
   dietary_tags text NOT NULL DEFAULT '',
   created_at   text NOT NULL DEFAULT now_text()
 );
