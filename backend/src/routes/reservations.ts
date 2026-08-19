@@ -4,6 +4,7 @@ import { requireAuth } from "../auth.js";
 import { generateBookingCode } from "../lib/bookingCode.js";
 import { getLateCancelFcfa } from "../lib/pricing.js";
 import { priceChosenItems } from "../lib/orderItems.js";
+import { alternativesForDoubleBooking, alternativesForTakenTable } from "../lib/bookingAlternatives.js";
 
 export const reservationsRouter = Router();
 reservationsRouter.use(requireAuth);
@@ -45,6 +46,16 @@ for (let h = 9; h <= 22; h++) {
 function todayLocal(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * The earliest slot still worth suggesting on `date`, or null if the whole day
+ * is still ahead. Stops today's refusals offering the guest lunchtime.
+ */
+function earliestSuggestableSlot(date: string): string | null {
+  if (date !== todayLocal()) return null;
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 reservationsRouter.get("/", async (req, res) => {
@@ -160,7 +171,7 @@ reservationsRouter.post("/", async (req, res) => {
    * answer; see the note in sql/schema.sql for why the booking lifecycle
    * cannot carry one yet.
    */
-  const outcome = await transaction<{ id: number } | { status: number; error: string }>(async () => {
+  const outcome = await transaction<{ id: number } | { status: number; error: string; clash?: "table" | "guest" }>(async () => {
     await db.prepare("SELECT pg_advisory_xact_lock(?, ?)").get(BOOKING_LOCK_NAMESPACE, slotLockKey(tableId, date, time));
 
     if (tableId !== null) {
@@ -172,7 +183,7 @@ reservationsRouter.post("/", async (req, res) => {
                OR (status = 'pending_payment' AND created_at > now_text_offset(interval '-30 minutes')))`
         )
         .get(tableId, date, time);
-      if (clash) return { status: 409, error: "That table is already reserved for this slot. Pick another." };
+      if (clash) return { status: 409, error: "That table was taken while you were booking.", clash: "table" };
     }
 
     const userClash = await db
@@ -183,7 +194,7 @@ reservationsRouter.post("/", async (req, res) => {
              OR (status = 'pending_payment' AND created_at > now_text_offset(interval '-30 minutes')))`
       )
       .get(req.user!.id, date, time);
-    if (userClash) return { status: 409, error: "You already have a table booked for that exact slot." };
+    if (userClash) return { status: 409, error: "You already have a table booked for that exact slot.", clash: "guest" };
 
     const inserted = await db
       .prepare(
@@ -208,7 +219,25 @@ reservationsRouter.post("/", async (req, res) => {
   });
 
   if ("error" in outcome) {
-    res.status(outcome.status).json({ error: outcome.error });
+    /* Read after the transaction, so the slot lock is already released: these
+       are suggestions, and no other guest should queue behind them. */
+    const earliest = earliestSuggestableSlot(date);
+    const alternatives =
+      outcome.clash === "table" && tableId !== null
+        ? await alternativesForTakenTable(tableId, date, time, partySize, SLOTS, earliest)
+        : outcome.clash === "guest"
+          ? await alternativesForDoubleBooking(req.user!.id, date, time, SLOTS, earliest)
+          : null;
+    const hasAny = alternatives !== null && (alternatives.times.length > 0 || alternatives.tables.length > 0);
+    /* `clash` names the reason in a word the app can switch on. `error` is the
+       same thing in English prose, for anything that has nowhere to put a
+       code — the two must never be read as separate failures. A screen that
+       has its own wording, in the guest's own language, uses `clash`. */
+    res.status(outcome.status).json({
+      error: outcome.error,
+      ...(outcome.clash ? { clash: outcome.clash } : {}),
+      ...(hasAny ? { alternatives } : {}),
+    });
     return;
   }
   const id = outcome.id;

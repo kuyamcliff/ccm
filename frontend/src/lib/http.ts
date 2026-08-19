@@ -6,20 +6,33 @@
  * in JavaScript where a script injection could read it.
  */
 
-export class ApiError extends Error {
-  readonly status: number;
+/** The parts of a failure this layer understands well enough to name. */
+export interface ApiErrorDetail {
   /** Seconds the server asked us to wait, when it sent a 429. */
-  readonly retryAfter?: number;
+  retryAfter?: number;
   /** Short code the server logged this same failure under, when it sent one.
       Shown to the customer so support can find the incident from it. */
-  readonly reference?: string;
+  reference?: string;
+  /** The whole parsed body, for the rare refusal that carries something only
+      one screen knows how to read — a booking clash and the times still free,
+      say. Untyped on purpose: it came off the network, so whoever wants it
+      must check its shape rather than assert it. */
+  body?: unknown;
+}
 
-  constructor(status: number, message: string, retryAfter?: number, reference?: string) {
+export class ApiError extends Error {
+  readonly status: number;
+  readonly retryAfter?: number;
+  readonly reference?: string;
+  readonly body?: unknown;
+
+  constructor(status: number, message: string, detail: ApiErrorDetail = {}) {
     super(message);
     this.name = "ApiError";
     this.status = status;
-    this.retryAfter = retryAfter;
-    this.reference = reference;
+    this.retryAfter = detail.retryAfter;
+    this.reference = detail.reference;
+    this.body = detail.body;
   }
 
   /** The request never reached the server at all. */
@@ -119,7 +132,7 @@ async function once<T>(method: Method, path: string, body?: unknown, extra?: Rec
     const retryAfter = typeof record?.retry_after_seconds === "number" ? record.retry_after_seconds : undefined;
     const reference = typeof record?.reference === "string" ? record.reference : undefined;
     if (response.status === 401) onUnauthorized?.();
-    throw new ApiError(response.status, message, retryAfter, reference);
+    throw new ApiError(response.status, message, { retryAfter, reference, body: payload });
   }
 
   return payload as T;

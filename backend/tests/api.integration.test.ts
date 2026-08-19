@@ -255,6 +255,64 @@ describe("booking", () => {
     assert.equal(refused, guests.length - 1, "everyone else must be told the table is taken");
   });
 
+  it("offers a way out when the table has gone, instead of only refusing", async () => {
+    const [holder, latecomer] = await Promise.all([signedInGuest("holds"), signedInGuest("late")]);
+    const date = new Date(Date.now() + 140 * 864e5).toISOString().slice(0, 10);
+    await pool.query("DELETE FROM camchop.reservations WHERE date = $1", [date]);
+
+    const body = JSON.stringify({ tableId: 1, date, time: "19:30", partySize: 2, phone: "677123456", note: "" });
+    const first = await fetch(`${BASE}/api/reservations`, { method: "POST", headers: { ...JSON_HEADERS, Cookie: holder }, body });
+    assert.equal(first.status, 201, "the first guest must get the table");
+
+    const refused = await fetch(`${BASE}/api/reservations`, { method: "POST", headers: { ...JSON_HEADERS, Cookie: latecomer }, body });
+    assert.equal(refused.status, 409);
+
+    const payload = (await refused.json()) as {
+      error?: string;
+      clash?: string;
+      alternatives?: { times?: string[]; tables?: { id: number; label: string; capacity: number }[] };
+    };
+
+    /* The word, not the sentence: the app picks its own wording from this so a
+       French-speaking guest is not shown an English one. */
+    assert.equal(payload.clash, "table");
+    assert.ok(typeof payload.error === "string" && payload.error.length > 0, "prose must still be there for anything that cannot read the word");
+
+    const times = payload.alternatives?.times ?? [];
+    assert.ok(times.length > 0, "a refusal must offer other times");
+    assert.ok(!times.includes("19:30"), "it must never offer back the slot it just refused");
+    for (const slot of times) assert.match(slot, /^\d{2}:\d{2}$/);
+
+    const tables = payload.alternatives?.tables ?? [];
+    assert.ok(tables.length > 0, "a refusal must offer the tables still free at that time");
+    assert.ok(!tables.some((t) => t.id === 1), "it must never offer back the table it just refused");
+    assert.ok(tables.every((t) => t.capacity >= 2), "it must not offer a table the party does not fit on");
+  });
+
+  it("tells a guest who is already booked, and offers times they are free", async () => {
+    const cookie = await signedInGuest("double");
+    const date = new Date(Date.now() + 150 * 864e5).toISOString().slice(0, 10);
+    await pool.query("DELETE FROM camchop.reservations WHERE date = $1", [date]);
+
+    const base = { date, time: "19:30", partySize: 2, phone: "677123456", note: "" };
+    const first = await fetch(`${BASE}/api/reservations`, {
+      method: "POST", headers: { ...JSON_HEADERS, Cookie: cookie }, body: JSON.stringify({ ...base, tableId: 2 }),
+    });
+    assert.equal(first.status, 201);
+
+    const refused = await fetch(`${BASE}/api/reservations`, {
+      method: "POST", headers: { ...JSON_HEADERS, Cookie: cookie }, body: JSON.stringify({ ...base, tableId: 3 }),
+    });
+    assert.equal(refused.status, 409);
+
+    const payload = (await refused.json()) as { clash?: string; alternatives?: { times?: string[]; tables?: unknown[] } };
+    assert.equal(payload.clash, "guest");
+    assert.ok((payload.alternatives?.times ?? []).length > 0, "offer them a time they are actually free");
+    /* Never another table at the same time: that would be a second booking for
+       one visit, and a second deposit. */
+    assert.deepEqual(payload.alternatives?.tables ?? [], []);
+  });
+
   it("refuses a booking in the past", async () => {
     const cookie = await signedInGuest("past");
     const res = await fetch(`${BASE}/api/reservations`, {

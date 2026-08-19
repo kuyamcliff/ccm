@@ -10,14 +10,19 @@ export function Notice({
   tone = "info",
   children,
   title,
+  role,
 }: {
   tone?: "info" | "good" | "bad" | "warn";
   title?: string;
   children: ReactNode;
+  /** Overrides what assistive technology is told. A failure is announced by
+      default; anything else that appears in answer to a tap — a slot that has
+      just gone, say — should say so too, and passing "alert" is how. */
+  role?: "alert" | "status";
 }) {
   const icon: IconName = tone === "bad" ? "alert" : tone === "good" ? "check-circle" : tone === "warn" ? "alert" : "info";
   return (
-    <div className={`notice${tone === "info" ? "" : ` notice--${tone}`}`} role={tone === "bad" ? "alert" : undefined}>
+    <div className={`notice${tone === "info" ? "" : ` notice--${tone}`}`} role={role ?? (tone === "bad" ? "alert" : undefined)}>
       <span className="notice__icon">
         <Icon name={icon} size={18} />
       </span>

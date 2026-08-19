@@ -1,5 +1,82 @@
-import { http } from "../http";
+import { ApiError, http } from "../http";
 import type { Booking, DiningTable, FloorFixture, MomoPrompt, MomoStatus } from "./types";
+
+/** A table the server says is still free at the slot the guest wanted. */
+export interface AlternativeTable {
+  id: number;
+  label: string;
+  zone: string;
+  capacity: number;
+}
+
+/** What the server offers instead when the slot has just gone. */
+export interface BookingAlternatives {
+  times: string[];
+  tables: AlternativeTable[];
+}
+
+/**
+ * Why a booking was refused, in a word the app can switch on.
+ *
+ * `table` — somebody else took that table for that slot.
+ * `guest` — this guest already has a table at that exact slot.
+ */
+export type BookingClashReason = "table" | "guest";
+
+export interface BookingClash {
+  reason: BookingClashReason;
+  /** Absent when the day is too full to suggest anything. */
+  alternatives: BookingAlternatives | null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+/**
+ * Reads the suggestions off a refused booking, if there are any.
+ *
+ * Checked rather than asserted, field by field, because this arrives over the
+ * network on the unhappy path: a booking that has already failed must not
+ * become a blank screen because the shape was not what we expected. Anything
+ * unreadable simply comes back as nothing, and the guest gets the plain
+ * refusal they would have got before.
+ */
+export function parseBookingAlternatives(value: unknown): BookingAlternatives | null {
+  if (!isRecord(value)) return null;
+  const raw = value.alternatives;
+  if (!isRecord(raw)) return null;
+
+  const times = Array.isArray(raw.times) ? raw.times.filter((t): t is string => /^\d{2}:\d{2}$/.test(String(t))) : [];
+  const tables = Array.isArray(raw.tables)
+    ? raw.tables.flatMap((entry): AlternativeTable[] => {
+        if (!isRecord(entry)) return [];
+        const { id, label, zone, capacity } = entry;
+        if (typeof id !== "number" || !Number.isFinite(id)) return [];
+        if (typeof label !== "string" || label === "") return [];
+        if (typeof capacity !== "number" || !Number.isFinite(capacity)) return [];
+        return [{ id, label, zone: typeof zone === "string" ? zone : "", capacity }];
+      })
+    : [];
+
+  if (times.length === 0 && tables.length === 0) return null;
+  return { times, tables };
+}
+
+/**
+ * Reads a booking clash off a failed request, or nothing if it was not one.
+ *
+ * The reason is taken from the server's own `clash` word rather than from its
+ * English sentence, so a screen can say this in the guest's language instead
+ * of pattern-matching prose it does not own.
+ */
+export function clashFromError(error: unknown): BookingClash | null {
+  if (!(error instanceof ApiError) || error.status !== 409) return null;
+  if (!isRecord(error.body)) return null;
+  const reason = error.body.clash;
+  if (reason !== "table" && reason !== "guest") return null;
+  return { reason, alternatives: parseBookingAlternatives(error.body) };
+}
 
 /**
  * What the deposit was before the owner could set it.
