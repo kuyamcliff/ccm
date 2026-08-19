@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { api } from "~/lib/api";
 import type { MenuItem } from "~/lib/api";
 import { useResource } from "~/lib/useResource";
@@ -7,7 +7,7 @@ import { Icon } from "~/ui/Icon";
 import { Photo } from "~/ui/Photo";
 import { Button, LinkButton } from "~/ui/Button";
 import { Money } from "~/ui/Bits";
-import { ErrorState, Skeleton } from "~/ui/Feedback";
+import { EmptyState, ErrorState, Skeleton } from "~/ui/Feedback";
 import { useBasket } from "~/state/basket";
 
 /**
@@ -96,6 +96,8 @@ function Dish({ item }: { item: MenuItem }) {
 export function MenuPage() {
   const { data, loading, error, reload } = useResource(() => api.site.menu(), []);
   const [active, setActive] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const { count } = useBasket();
 
   const grouped = useMemo(() => {
@@ -115,17 +117,29 @@ export function MenuPage() {
   }, [data]);
 
   const categories = grouped.map(([name]) => name);
-  const shown = active ? grouped.filter(([name]) => name === active) : grouped;
+
+  const needle = query.trim().toLowerCase();
+  const matches = (item: MenuItem) =>
+    !needle || item.name.toLowerCase().includes(needle) || item.description.toLowerCase().includes(needle);
+
+  const shown = grouped
+    .filter(([name]) => !active || name === active)
+    .map(([name, items]) => [name, items.filter(matches)] as [string, MenuItem[]])
+    .filter(([, items]) => items.length > 0);
+
+  const searching = needle.length > 0;
+  const totalShown = shown.reduce((sum, [, items]) => sum + items.length, 0);
+
+  function clearSearch() {
+    setQuery("");
+    searchRef.current?.focus();
+  }
 
   return (
     <div className="page section">
       <div className="section-head">
         <hr className="heat-rule" />
         <h1 className="display display--xl">The menu</h1>
-        <p className="lead">
-          Everything is grilled fresh when you order it. Anything priced by weight is settled at the counter once it is
-          weighed.
-        </p>
       </div>
 
       {loading ? (
@@ -138,6 +152,28 @@ export function MenuPage() {
         <ErrorState error={error} onRetry={reload} />
       ) : (
         <>
+          <div className="menu-search">
+            <Icon name="search" size={18} className="menu-search__icon" />
+            <input
+              ref={searchRef}
+              type="text"
+              inputMode="search"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              className="menu-search__input"
+              placeholder="Search the menu"
+              aria-label="Search the menu"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {query ? (
+              <button type="button" className="menu-search__clear" aria-label="Clear search" onClick={clearSearch}>
+                <Icon name="close" size={16} />
+              </button>
+            ) : null}
+          </div>
+
           {categories.length > 1 ? (
             <div className="chip-rail sticky-rail">
               <button type="button" className="chip" aria-pressed={active === null} onClick={() => setActive(null)}>
@@ -157,18 +193,41 @@ export function MenuPage() {
             </div>
           ) : null}
 
-          <div className="stack stack--loose" style={{ marginTop: "var(--s-5)" }}>
-            {shown.map(([category, items]) => (
-              <section key={category}>
-                <h2 className="display display--lg menu-heading">{category}</h2>
-                <div className="row-list">
-                  {items.map((item) => (
-                    <Dish key={item.id} item={item} />
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
+          {shown.length === 0 ? (
+            <EmptyState icon={searching ? "search" : "info"} title={searching ? "Nothing matches that" : "The menu is empty"}>
+              {searching ? (
+                <>
+                  Nothing on {active ? `the ${active} list` : "the menu"} matches “{query}”.{" "}
+                  <button type="button" className="menu-search__reset" onClick={clearSearch}>
+                    Clear the search
+                  </button>
+                  .
+                </>
+              ) : (
+                "Check back soon."
+              )}
+            </EmptyState>
+          ) : (
+            <>
+              {searching ? (
+                <p className="fine faint menu-search__count">
+                  {totalShown} {totalShown === 1 ? "dish" : "dishes"} match “{query}”
+                </p>
+              ) : null}
+              <div className="stack stack--loose" style={{ marginTop: "var(--s-5)" }}>
+                {shown.map(([category, items]) => (
+                  <section key={category}>
+                    <h2 className="display display--lg menu-heading">{category}</h2>
+                    <div className="row-list">
+                      {items.map((item) => (
+                        <Dish key={item.id} item={item} />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </>
+          )}
         </>
       )}
 

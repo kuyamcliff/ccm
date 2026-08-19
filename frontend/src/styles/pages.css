@@ -949,6 +949,83 @@
 
 /* ══ Menu ═══════════════════════════════════════════════════════════════════ */
 
+.menu-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--s-4);
+}
+
+@media (min-width: 40rem) {
+  .menu-search {
+    max-width: 24rem;
+  }
+}
+
+.menu-search__icon {
+  position: absolute;
+  left: var(--s-4);
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.menu-search__input {
+  width: 100%;
+  min-height: var(--tap);
+  padding: var(--s-3) var(--s-4) var(--s-3) 2.75rem;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-full);
+  background: var(--ink-900);
+  color: var(--white);
+  /* 16px exactly, same reason as every other input: under it, iOS zooms the
+     page on focus and the layout never recovers. */
+  font-size: 1rem;
+  transition:
+    border-color var(--dur-2) var(--ease),
+    background-color var(--dur-2) var(--ease);
+}
+
+.menu-search__input::placeholder {
+  color: var(--text-3);
+}
+
+.menu-search__input:focus {
+  outline: none;
+  border-color: var(--red);
+  background: var(--ink-850);
+}
+
+.menu-search__clear {
+  position: absolute;
+  right: 0.4rem;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--r-full);
+  color: var(--text-2);
+  transition: background-color var(--dur-1) var(--ease);
+}
+
+.menu-search__clear:hover {
+  background: var(--ink-800);
+}
+
+.menu-search__clear:active {
+  transform: scale(0.92);
+}
+
+.menu-search__reset {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.menu-search__count {
+  margin-top: var(--s-4);
+}
+
 .menu-heading {
   position: relative;
   margin-bottom: var(--s-4);
