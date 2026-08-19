@@ -71,7 +71,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUnauthorizedHandler(() => {
       if (userRef.current !== null) {
         setUser(null);
-        toast.say("You have been signed out.");
+        /* Says what happened and what to do about it. "You have been signed
+           out" reads as something the site chose to do to them; a session
+           that ran out is a fact with an obvious next step, and the guard
+           that redirects carries the page they were on so signing in again
+           returns them to it rather than to the home page. */
+        toast.say("Your session has expired. Sign in again to pick up where you were.");
       }
     });
     return () => setUnauthorizedHandler(null);

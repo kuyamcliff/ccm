@@ -1527,3 +1527,31 @@ body:has(.booking__foot) .helper {
   border-radius: var(--r-md);
   background: var(--ink-900);
 }
+
+/* ── Error reference ──────────────────────────────────────────────────────
+   The code that ties what the customer saw to what the server logged. Quiet
+   by default: it only matters once somebody is actually asking about it. */
+
+.error-ref {
+  margin-top: var(--s-3);
+}
+
+.error-ref__code {
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  background: var(--ink-900);
+  color: var(--text-2);
+  font-size: var(--t-fine);
+  letter-spacing: 0.04em;
+  transition: border-color var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
+}
+
+.error-ref__code:hover {
+  border-color: var(--line-2);
+  color: var(--text);
+}
+
+.error-ref__copied {
+  color: var(--good);
+}

@@ -10,12 +10,16 @@ export class ApiError extends Error {
   readonly status: number;
   /** Seconds the server asked us to wait, when it sent a 429. */
   readonly retryAfter?: number;
+  /** Short code the server logged this same failure under, when it sent one.
+      Shown to the customer so support can find the incident from it. */
+  readonly reference?: string;
 
-  constructor(status: number, message: string, retryAfter?: number) {
+  constructor(status: number, message: string, retryAfter?: number, reference?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.retryAfter = retryAfter;
+    this.reference = reference;
   }
 
   /** The request never reached the server at all. */
@@ -113,8 +117,9 @@ async function once<T>(method: Method, path: string, body?: unknown, extra?: Rec
     const record = payload as Record<string, unknown> | null;
     const message = typeof record?.error === "string" ? record.error : `Request failed (${response.status}).`;
     const retryAfter = typeof record?.retry_after_seconds === "number" ? record.retry_after_seconds : undefined;
+    const reference = typeof record?.reference === "string" ? record.reference : undefined;
     if (response.status === 401) onUnauthorized?.();
-    throw new ApiError(response.status, message, retryAfter);
+    throw new ApiError(response.status, message, retryAfter, reference);
   }
 
   return payload as T;
