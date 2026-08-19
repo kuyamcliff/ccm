@@ -3,6 +3,7 @@ import { api } from "~/lib/api";
 import type { MenuItem } from "~/lib/api";
 import { useResource } from "~/lib/useResource";
 import { parseTags } from "~/lib/format";
+import { buildVocabulary, itemMatches, suggestQuery, tokens } from "~/lib/search";
 import { Icon } from "~/ui/Icon";
 import { Photo } from "~/ui/Photo";
 import { Button, LinkButton } from "~/ui/Button";
@@ -118,17 +119,43 @@ export function MenuPage() {
 
   const categories = grouped.map(([name]) => name);
 
-  const needle = query.trim().toLowerCase();
-  const matches = (item: MenuItem) =>
-    !needle || item.name.toLowerCase().includes(needle) || item.description.toLowerCase().includes(needle);
+  /* Everything worth matching a dish on, in one string: its name, what it says
+     about itself, and the section it sits under, so "grills" finds the grills
+     and "pepper" finds the dish whose description mentions it. */
+  const searchable = useMemo(
+    () =>
+      (data ?? []).map((item) => ({
+        item,
+        haystack: `${item.name} ${item.description} ${item.category}`,
+      })),
+    [data]
+  );
+
+  const vocabulary = useMemo(() => buildVocabulary(searchable), [searchable]);
+
+  const needles = tokens(query);
+  const searching = needles.length > 0;
+  const matching = useMemo(() => {
+    if (!searching) return null;
+    return new Set(searchable.filter((entry) => itemMatches(entry, needles)).map((entry) => entry.item.id));
+    // `needles` is derived from `query`, which is the dependency that matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchable, query, searching]);
 
   const shown = grouped
     .filter(([name]) => !active || name === active)
-    .map(([name, items]) => [name, items.filter(matches)] as [string, MenuItem[]])
+    .map(([name, items]) => [name, matching ? items.filter((item) => matching.has(item.id)) : items] as [string, MenuItem[]])
     .filter(([, items]) => items.length > 0);
 
-  const searching = needle.length > 0;
   const totalShown = shown.reduce((sum, [, items]) => sum + items.length, 0);
+
+  /* Only worth working out when there is nothing to show: a guest who can see
+     their dish does not need to be asked whether they meant a different one. */
+  const suggestion = useMemo(
+    () => (searching && shown.length === 0 ? suggestQuery(query, vocabulary) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [query, vocabulary, searching, shown.length]
+  );
 
   function clearSearch() {
     setQuery("");
@@ -198,10 +225,22 @@ export function MenuPage() {
               {searching ? (
                 <>
                   Nothing on {active ? `the ${active} list` : "the menu"} matches “{query}”.{" "}
-                  <button type="button" className="menu-search__reset" onClick={clearSearch}>
-                    Clear the search
-                  </button>
-                  .
+                  {suggestion ? (
+                    <>
+                      Did you mean{" "}
+                      <button type="button" className="menu-search__reset" onClick={() => setQuery(suggestion)}>
+                        {suggestion}
+                      </button>
+                      ?
+                    </>
+                  ) : (
+                    <>
+                      <button type="button" className="menu-search__reset" onClick={clearSearch}>
+                        Clear the search
+                      </button>
+                      .
+                    </>
+                  )}
                 </>
               ) : (
                 "Check back soon."
@@ -211,7 +250,7 @@ export function MenuPage() {
             <>
               {searching ? (
                 <p className="fine faint menu-search__count">
-                  {totalShown} {totalShown === 1 ? "dish" : "dishes"} match “{query}”
+                  {totalShown === 1 ? "1 dish matches" : `${totalShown} dishes match`} “{query}”
                 </p>
               ) : null}
               <div className="stack stack--loose" style={{ marginTop: "var(--s-5)" }}>
