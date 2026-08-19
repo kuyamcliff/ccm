@@ -5,6 +5,7 @@ import { generateBookingCode } from "../lib/bookingCode.js";
 import { getLateCancelFcfa } from "../lib/pricing.js";
 import { priceChosenItems } from "../lib/orderItems.js";
 import { alternativesForDoubleBooking, alternativesForTakenTable } from "../lib/bookingAlternatives.js";
+import { buildCalendarEvent } from "../lib/ics.js";
 
 export const reservationsRouter = Router();
 reservationsRouter.use(requireAuth);
@@ -15,6 +16,14 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
    first key is a namespace that keeps booking locks from colliding with any
    other use of the mechanism elsewhere. */
 const BOOKING_LOCK_NAMESPACE = 4201;
+
+/** What the calendar entry is called, and the first line of its address. */
+const VENUE_NAME = "Cam Chop Meat";
+
+/** How long to block out in the guest's calendar. Two hours is a sitting: long
+    enough that nothing else gets booked over the meal, short enough that it
+    does not swallow their whole evening. Not a rule the restaurant enforces. */
+const SITTING_MINUTES = 120;
 
 /**
  * A stable 32-bit key for one bookable slot.
@@ -103,6 +112,83 @@ reservationsRouter.delete("/:id/hide", async (req, res) => {
 
   await db.prepare("UPDATE reservations SET hidden_at = now_text() WHERE id = ?").run(id);
   res.json({ ok: true });
+});
+
+/**
+ * The booking as a calendar event, for the guest's own phone.
+ *
+ * Served as a file with the calendar content type rather than generated in the
+ * browser: tapping a `text/calendar` response is what makes iOS and Android
+ * hand it straight to the calendar app, and a blob built in JavaScript is
+ * exactly the thing both of them are least reliable about.
+ *
+ * The UID is derived from the booking id and never changes, so a guest who
+ * adds it twice — or adds it again after changing something — ends up with one
+ * entry rather than two.
+ */
+reservationsRouter.get("/:id/calendar.ics", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad reservation id." }); return; }
+
+  const row = (await db
+    .prepare(
+      `SELECT r.id, r.user_id, r.date, r.time, r.party_size, r.status, r.note, r.ccm_code,
+              t.label AS table_label
+       FROM reservations r
+       LEFT JOIN restaurant_tables t ON r.table_id = t.id
+       WHERE r.id = ?`
+    )
+    .get(id)) as
+    | { id: number; user_id: number; date: string; time: string; party_size: number; status: string; note: string | null; ccm_code: string | null; table_label: string | null }
+    | undefined;
+
+  /* Same answer for somebody else's booking as for one that does not exist:
+     whether a given id is real is not something a stranger gets to learn. */
+  if (!row || row.user_id !== req.user!.id) { res.status(404).json({ error: "Reservation not found." }); return; }
+  if (row.status !== "confirmed" && row.status !== "pending_payment") {
+    res.status(409).json({ error: "That booking is no longer live, so there is nothing to add." });
+    return;
+  }
+
+  const settings = (await db
+    .prepare("SELECT key, value FROM site_settings WHERE key IN ('address', 'city')")
+    .all()) as { key: string; value: string }[];
+  const lookup = new Map(settings.map((s) => [s.key, s.value]));
+  const where = [VENUE_NAME, lookup.get("address"), lookup.get("city")].filter((part) => part && part.trim() !== "").join(", ");
+
+  const code = row.ccm_code ?? `#${String(row.id).padStart(4, "0")}`;
+  const seats = `${row.party_size} ${row.party_size === 1 ? "person" : "people"}`;
+  const table = row.table_label ? `Table ${row.table_label}` : "Table given on arrival";
+  const note = row.note && row.note.trim() !== "" ? ` Your note: ${row.note.trim()}` : "";
+  const unpaid = row.status === "pending_payment" ? " The deposit is not paid yet, so this table is not held." : "";
+
+  let body: string;
+  try {
+    body = buildCalendarEvent({
+      /* Tied to the booking, not to this download: the same booking must
+         produce the same UID every time or a second tap makes a second entry. */
+      uid: `ccm-booking-${row.id}@camchopmeat.cm`,
+      date: row.date,
+      time: row.time,
+      durationMinutes: SITTING_MINUTES,
+      summary: `${VENUE_NAME} — ${table}`,
+      description: `${table}, ${seats}. Show ${code} at the door.${note}${unpaid}`,
+      location: where,
+      /* A table whose deposit has not arrived is not held, and the calendar
+         entry must not claim otherwise. */
+      status: row.status === "confirmed" ? "confirmed" : "tentative",
+    });
+  } catch (err) {
+    console.error("[calendar] could not build an event for booking", row.id, err);
+    res.status(500).json({ error: "That calendar file could not be made." });
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${code}.ics"`);
+  /* A booking can be cancelled or moved, so nothing may hold on to this. */
+  res.setHeader("Cache-Control", "no-store");
+  res.send(body);
 });
 
 reservationsRouter.post("/", async (req, res) => {

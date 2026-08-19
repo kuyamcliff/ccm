@@ -112,6 +112,16 @@ export const bookingApi = {
 
   mine: () => http.get<{ reservations: Booking[] }>("/api/reservations").then((r) => r.reservations),
 
+  /**
+   * Where the booking lives as a calendar entry.
+   *
+   * An address rather than a fetch: the phone's own calendar app is what
+   * should open this, and that only happens when the browser follows a link
+   * to something the server labels as a calendar. A blob built here would
+   * land in Downloads instead, which is not adding anything to a calendar.
+   */
+  calendarUrl: (id: number) => `/api/reservations/${id}/calendar.ics`,
+
   create: (input: {
     date: string;
     time: string;

@@ -5,7 +5,7 @@ import type { Booking, BookingAlternatives, BookingClash, MenuItem } from "~/lib
 import { ApiError } from "~/lib/http";
 import { addDays, dayLabel, isPastSlot, longDate, money, normalisePhone, timeLabel, todayISO, toISODate } from "~/lib/format";
 import { useAction, useResource } from "~/lib/useResource";
-import { Button, LinkButton } from "~/ui/Button";
+import { AnchorButton, Button, LinkButton } from "~/ui/Button";
 import { Icon } from "~/ui/Icon";
 import { Notice, Skeleton } from "~/ui/Feedback";
 import { useSession } from "~/state/session";
@@ -159,7 +159,7 @@ export function BookPage() {
 
   if (paid) {
     clearDraft();
-    return <div className="page section stack stack--loose"><div className="section-head"><hr className="heat-rule" /><h1 className="display display--xl">{locale === "fr" ? "Table confirmée" : "Table held"}</h1><p className="lead">{locale === "fr" ? "Présentez ceci à l'entrée. Votre réservation est aussi dans Mes visites." : "Show this at the door. It is also in My visits, so you do not need to keep this page open."}</p></div><BookingPass booking={{ ...paid, status: "confirmed", payment_status: "paid" }} /><div className="actions"><LinkButton to="/mine" tone="primary" iconEnd="arrow-right">{locale === "fr" ? "Voir mes réservations" : "See my bookings"}</LinkButton><Button tone="ghost" onClick={() => { clearDraft(); setPaid(null); setPending(null); setTime(null); setTableId(null); setBasket({}); setParams({}, { replace: true }); }}> {locale === "fr" ? "Réserver encore" : "Book another"}</Button></div></div>;
+    return <div className="page section stack stack--loose"><div className="section-head"><hr className="heat-rule" /><h1 className="display display--xl">{locale === "fr" ? "Table confirmée" : "Table held"}</h1><p className="lead">{locale === "fr" ? "Présentez ceci à l'entrée. Votre réservation est aussi dans Mes visites." : "Show this at the door. It is also in My visits, so you do not need to keep this page open."}</p></div><BookingPass booking={{ ...paid, status: "confirmed", payment_status: "paid" }} /><div className="actions"><AnchorButton tone="primary" icon="calendar" href={api.booking.calendarUrl(paid.id)}>{locale === "fr" ? "Ajouter au calendrier" : "Add to calendar"}</AnchorButton><LinkButton to="/mine" tone="ghost" iconEnd="arrow-right">{locale === "fr" ? "Voir mes réservations" : "See my bookings"}</LinkButton><Button tone="ghost" onClick={() => { clearDraft(); setPaid(null); setPending(null); setTime(null); setTableId(null); setBasket({}); setParams({}, { replace: true }); }}> {locale === "fr" ? "Réserver encore" : "Book another"}</Button></div></div>;
   }
 
   const forward = step === "review" ? <Button tone="primary" size="lg" icon="wallet" busy={create.busy} onClick={submit}>{locale === "fr" ? `Payer ${money(dueNow)} FCFA` : `Pay ${money(dueNow)} FCFA`}</Button> : <Button tone="primary" size="lg" iconEnd="arrow-right" disabled={(step === "when" && !time) || (step === "who" && !phoneReady)} onClick={() => go(ORDER[index + 1]!)}>{locale === "fr" ? "Continuer" : "Continue"}</Button>;

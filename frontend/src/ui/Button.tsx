@@ -93,6 +93,41 @@ export function LinkButton({
   );
 }
 
+interface AnchorButtonProps extends CommonProps {
+  href: string;
+  ariaLabel?: string;
+}
+
+/**
+ * A real anchor that looks like a button, for an address the router must not
+ * intercept — a file served by the API rather than a page in this app.
+ *
+ * Deliberately without a `download` attribute. The server already says what
+ * the file is and what to call it, and letting the browser hand it to the
+ * phone's own handler is the whole point for something like a calendar entry:
+ * forcing a download instead leaves the guest with a file in Downloads and no
+ * idea what to do with it.
+ */
+export function AnchorButton({
+  href,
+  tone = "default",
+  size = "md",
+  block,
+  icon,
+  iconEnd,
+  className,
+  ariaLabel,
+  children,
+}: AnchorButtonProps) {
+  return (
+    <a href={href} className={classes(tone, size, block, className)} aria-label={ariaLabel}>
+      {icon ? <Icon name={icon} size={18} /> : null}
+      {children}
+      {iconEnd ? <Icon name={iconEnd} size={18} /> : null}
+    </a>
+  );
+}
+
 interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className" | "children"> {
   name: IconName;
   /** Required: an icon alone tells a screen reader nothing. */

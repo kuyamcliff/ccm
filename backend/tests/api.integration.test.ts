@@ -313,6 +313,62 @@ describe("booking", () => {
     assert.deepEqual(payload.alternatives?.tables ?? [], []);
   });
 
+  it("hands the guest their booking as a calendar file", async () => {
+    const cookie = await signedInGuest("cal");
+    const date = new Date(Date.now() + 160 * 864e5).toISOString().slice(0, 10);
+    await pool.query("DELETE FROM camchop.reservations WHERE date = $1", [date]);
+
+    const created = await fetch(`${BASE}/api/reservations`, {
+      method: "POST",
+      headers: { ...JSON_HEADERS, Cookie: cookie },
+      body: JSON.stringify({ tableId: 4, date, time: "19:30", partySize: 2, phone: "677123456", note: "Birthday; cake, please" }),
+    });
+    assert.equal(created.status, 201);
+    const { reservation } = (await created.json()) as { reservation: { id: number } };
+
+    const res = await fetch(`${BASE}/api/reservations/${reservation.id}/calendar.ics`, { headers: { Cookie: cookie } });
+    assert.equal(res.status, 200);
+    /* The content type is what makes a phone hand this to its calendar app
+       rather than drop it in Downloads. */
+    assert.match(res.headers.get("content-type") ?? "", /^text\/calendar/);
+    assert.match(res.headers.get("content-disposition") ?? "", /\.ics"$/);
+
+    const body = await res.text();
+    assert.ok(body.startsWith("BEGIN:VCALENDAR\r\n"));
+    assert.ok(body.endsWith("END:VCALENDAR\r\n"));
+    assert.ok(!/[^\r]\n/.test(body), "a bare newline makes the file unimportable");
+    assert.ok(body.includes(`UID:ccm-booking-${reservation.id}@`), "the UID must be the booking's own");
+    // Unpaid, so the calendar must not promise a table that is not held.
+    assert.ok(body.includes("STATUS:TENTATIVE"));
+    // The note's semicolon and comma must be escaped, not left to break the file.
+    assert.ok(body.includes("Birthday\\; cake\\, please"));
+    for (const line of body.split("\r\n")) {
+      assert.ok(new TextEncoder().encode(line).length <= 75, `over-length line: ${line}`);
+    }
+  });
+
+  it("will not hand one guest's calendar file to another", async () => {
+    const [owner, stranger] = await Promise.all([signedInGuest("calmine"), signedInGuest("calnosy")]);
+    const date = new Date(Date.now() + 170 * 864e5).toISOString().slice(0, 10);
+    await pool.query("DELETE FROM camchop.reservations WHERE date = $1", [date]);
+
+    const created = await fetch(`${BASE}/api/reservations`, {
+      method: "POST",
+      headers: { ...JSON_HEADERS, Cookie: owner },
+      body: JSON.stringify({ tableId: 4, date, time: "20:00", partySize: 2, phone: "677123456", note: "" }),
+    });
+    assert.equal(created.status, 201);
+    const { reservation } = (await created.json()) as { reservation: { id: number } };
+
+    const theirs = await fetch(`${BASE}/api/reservations/${reservation.id}/calendar.ics`, { headers: { Cookie: stranger } });
+    /* 404 rather than 403: whether a given booking id exists at all is not
+       something a stranger gets to learn. */
+    assert.equal(theirs.status, 404);
+
+    const signedOut = await fetch(`${BASE}/api/reservations/${reservation.id}/calendar.ics`);
+    assert.equal(signedOut.status, 401);
+  });
+
   it("refuses a booking in the past", async () => {
     const cookie = await signedInGuest("past");
     const res = await fetch(`${BASE}/api/reservations`, {
