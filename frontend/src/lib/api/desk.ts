@@ -1,9 +1,11 @@
 import { http } from "../http";
-import type { AdminScope, AuditEntry, DeskAnalytics, DeskBooking, DeskOrder, DeskPayment, DeskReceipt, DeskStats, DeskTable, DeskUser, DiningTable, EventEnquiry, EventType, FixtureKind, FloorFixture, GalleryPhoto, GiftCard, LegalPage, LoyaltyLedgerEntry, MenuItem, Offer, PromoCode, Review, ScopeInfo, SiteSettings, StaffAccess, VerifiedBooking, VerifiedOrder, VerifyResult, WaitlistEntry } from "./types";
+import type { AdminScope, AuditEntry, DeskAnalytics, DeskBooking, DeskOrder, DeskPayment, DeskReceipt, DeskStats, DeskTable, DeskUser, DiningTable, EventEnquiry, EventType, FixtureKind, FloorFixture, GalleryPhoto, GiftCard, LegalPage, LoyaltyLedgerEntry, MenuItem, Offer, PromoCode, Review, ScopeInfo, SiteSettings, StaffAccess, TranslationReport, VerifiedBooking, VerifiedOrder, VerifyResult, WaitlistEntry } from "./types";
 
 export const deskApi = {
   stats: () => http.get<DeskStats>("/api/admin/stats"),
   analytics: () => http.get<DeskAnalytics>("/api/admin/analytics"),
+  /** What of the owner's own wording is still only in English. */
+  translations: () => http.get<{ report: TranslationReport }>("/api/admin/translations").then((r) => r.report),
   audit: (limit = 200) => http.get<{ entries: AuditEntry[] }>(`/api/admin/audit?limit=${limit}`).then((r) => r.entries),
   bookings: { list: (filters: { date?: string; status?: string; q?: string } = {}) => http.get<{ reservations: DeskBooking[] }>(`/api/admin/reservations${http.query(filters)}`).then((r) => r.reservations), setStatus: (id: number, status: string) => http.patch<{ ok: true }>(`/api/admin/reservations/${id}`, { status }), cancel: (id: number, reason: string) => http.post<{ ok: true }>(`/api/admin/reservations/${id}/cancel`, { reason }), restore: (id: number) => http.post<{ ok: true }>(`/api/admin/reservations/${id}/uncancel`) },
   tables: { list: () => http.get<{ tables: DeskTable[] }>("/api/admin/tables").then((r) => r.tables), create: (input: { label: string; capacity: number; zone: string; pos_x: number; pos_y: number }) => http.post<{ table: DiningTable }>("/api/admin/tables", input).then((r) => r.table), update: (id: number, input: Partial<{ label: string; capacity: number; zone: string; pos_x: number; pos_y: number; active: boolean }>) => http.patch<{ ok: true }>(`/api/admin/tables/${id}`, input), remove: (id: number) => http.del<{ ok: true }>(`/api/admin/tables/${id}`) },

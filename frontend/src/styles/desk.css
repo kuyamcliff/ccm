@@ -1217,3 +1217,12 @@
 .desk-table .table td.mono {
   white-space: nowrap;
 }
+
+/* ── Translation coverage ─────────────────────────────────────────────────
+   One bar, because the number beside it is the point and a chart would be
+   decoration over a single figure. */
+.translation-bar { height: 0.5rem; border-radius: var(--r-full); background: var(--surface-2); overflow: hidden; }
+.translation-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--good); transition: width var(--dur-2) var(--ease); }
+/* The owner's own words, quoted back so they can translate from this screen
+   instead of going to find what it was they wrote. */
+.translation-entry__english { margin: 0; padding-left: var(--s-3); border-left: 2px solid var(--line-2); color: var(--text-2); }

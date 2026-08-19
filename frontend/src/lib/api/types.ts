@@ -52,3 +52,20 @@ export type DeskTable = DiningTable & { today_count: number; booking_id: number 
 export type DeskPayment = Payment & { res_date: string; res_time: string; user_name: string };
 export type DeskReceipt = ReceiptSummary & { user_name: string; user_email: string; pay_reference: string | null };
 export type DeskOrder = TakeawayOrder & { user_name: string | null };
+
+/** One piece of owner-entered wording, and whether it has been translated. */
+export interface TranslationEntry {
+  id: string;
+  label: string;
+  /** The console screen it is changed on. */
+  where: string;
+  /** "missing" is an empty French box; "copied" is the English pasted into it. */
+  status: "missing" | "copied" | "done";
+  english: string;
+}
+
+export interface TranslationReport {
+  total: number;
+  done: number;
+  outstanding: TranslationEntry[];
+}
