@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../db.js";
+import { db, transaction } from "../db.js";
 import { requireAuth } from "../auth.js";
 import { generateBookingCode } from "../lib/bookingCode.js";
 import { getLateCancelFcfa } from "../lib/pricing.js";
@@ -9,6 +9,33 @@ export const reservationsRouter = Router();
 reservationsRouter.use(requireAuth);
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/* Advisory locks are global to the database and keyed only by number, so the
+   first key is a namespace that keeps booking locks from colliding with any
+   other use of the mechanism elsewhere. */
+const BOOKING_LOCK_NAMESPACE = 4201;
+
+/**
+ * A stable 32-bit key for one bookable slot.
+ *
+ * Two requests for the same table at the same date and time must derive the
+ * same number and therefore queue behind each other; requests for anything
+ * else must not. A collision between unrelated slots costs a moment of waiting
+ * and nothing else, which is why a plain FNV-1a is enough here.
+ *
+ * Bookings with no table chosen share a single key per date and time: the only
+ * invariant left to protect for those is one booking per guest per slot.
+ */
+function slotLockKey(tableId: number | null, date: string, time: string): number {
+  const source = `${tableId ?? "any"}:${date}:${time}`;
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < source.length; i++) {
+    hash ^= source.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  // Postgres takes a signed 32-bit integer here.
+  return hash | 0;
+}
 const SLOTS: string[] = [];
 for (let h = 9; h <= 22; h++) {
   SLOTS.push(`${String(h).padStart(2, "0")}:00`);
@@ -102,36 +129,14 @@ reservationsRouter.post("/", async (req, res) => {
       res.status(400).json({ error: "That table is not available." });
       return;
     }
-    const clash = await db
-      .prepare(
-        `SELECT id FROM reservations
-         WHERE table_id = ? AND date = ? AND time = ? AND table_id IS NOT NULL
-           AND (status = 'confirmed'
-             OR (status = 'pending_payment' AND created_at > now_text_offset(interval '-30 minutes')))`
-      )
-      .get(tableId, date, time);
-    if (clash) {
-      res.status(409).json({ error: "That table is already reserved for this slot. Pick another." });
-      return;
-    }
-  }
-
-  const userClash = await db
-    .prepare(
-      `SELECT id FROM reservations
-       WHERE user_id = ? AND date = ? AND time = ?
-         AND (status = 'confirmed'
-           OR (status = 'pending_payment' AND created_at > now_text_offset(interval '-30 minutes')))`
-    )
-    .get(req.user!.id, date, time);
-  if (userClash) {
-    res.status(409).json({ error: "You already have a table booked for that exact slot." });
-    return;
   }
 
   /* Food and drink chosen alongside the table. Priced here, against the live
      menu, because a total that arrived in the request body is a total the guest
-     could have written themselves. */
+     could have written themselves.
+
+     Done before the lock below: it only reads the menu, and holding a lock over
+     it would serialise every booking behind one guest's basket. */
   let priced;
   try {
     priced = await priceChosenItems(req.body?.items);
@@ -140,25 +145,73 @@ reservationsRouter.post("/", async (req, res) => {
     return;
   }
 
-  const info = await db
-    .prepare(
-      `INSERT INTO reservations (user_id, table_id, date, time, party_size, phone, note, status, items_json, items_total_fcfa)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?)`
-    )
-    .run(
-      req.user!.id,
-      tableId,
-      date,
-      time,
-      partySize,
-      phone,
-      note,
-      priced.lines.length > 0 ? JSON.stringify(priced.lines) : null,
-      priced.total
-    );
+  /*
+   * Checking whether a table is free and then taking it has to be one
+   * indivisible step.
+   *
+   * Read and write as separate statements leaves a gap another request fits
+   * through, and two guests tapping the same free table within the same second
+   * on a Friday evening is ordinary rather than exotic — reproducibly so: two
+   * simultaneous requests for the same table both returned 201 before this.
+   *
+   * The lock is taken on the slot itself, so bookings for different tables or
+   * different times never wait for each other, and it is released when the
+   * transaction ends however it ends. A unique index would be the more usual
+   * answer; see the note in sql/schema.sql for why the booking lifecycle
+   * cannot carry one yet.
+   */
+  const outcome = await transaction<{ id: number } | { status: number; error: string }>(async () => {
+    await db.prepare("SELECT pg_advisory_xact_lock(?, ?)").get(BOOKING_LOCK_NAMESPACE, slotLockKey(tableId, date, time));
 
-  const id = Number(info.lastInsertRowid);
-  await db.prepare("UPDATE reservations SET ccm_code = ? WHERE id = ?").run(await generateBookingCode(), id);
+    if (tableId !== null) {
+      const clash = await db
+        .prepare(
+          `SELECT id FROM reservations
+           WHERE table_id = ? AND date = ? AND time = ? AND table_id IS NOT NULL
+             AND (status = 'confirmed'
+               OR (status = 'pending_payment' AND created_at > now_text_offset(interval '-30 minutes')))`
+        )
+        .get(tableId, date, time);
+      if (clash) return { status: 409, error: "That table is already reserved for this slot. Pick another." };
+    }
+
+    const userClash = await db
+      .prepare(
+        `SELECT id FROM reservations
+         WHERE user_id = ? AND date = ? AND time = ?
+           AND (status = 'confirmed'
+             OR (status = 'pending_payment' AND created_at > now_text_offset(interval '-30 minutes')))`
+      )
+      .get(req.user!.id, date, time);
+    if (userClash) return { status: 409, error: "You already have a table booked for that exact slot." };
+
+    const inserted = await db
+      .prepare(
+        `INSERT INTO reservations (user_id, table_id, date, time, party_size, phone, note, status, items_json, items_total_fcfa)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?)`
+      )
+      .run(
+        req.user!.id,
+        tableId,
+        date,
+        time,
+        partySize,
+        phone,
+        note,
+        priced.lines.length > 0 ? JSON.stringify(priced.lines) : null,
+        priced.total
+      );
+
+    const newId = Number(inserted.lastInsertRowid);
+    await db.prepare("UPDATE reservations SET ccm_code = ? WHERE id = ?").run(await generateBookingCode(), newId);
+    return { id: newId };
+  });
+
+  if ("error" in outcome) {
+    res.status(outcome.status).json({ error: outcome.error });
+    return;
+  }
+  const id = outcome.id;
 
   const row = await db
     .prepare(

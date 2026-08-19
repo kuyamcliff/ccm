@@ -12,7 +12,9 @@
     "check:loyalty": "tsx scripts/check-loyalty.ts",
     "momo:provision": "tsx scripts/momo-provision.ts",
     "test": "tsx --test \"src/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:setup": "tsx --env-file=.env scripts/db-setup.ts",
+    "db:seed": "tsx --env-file=.env scripts/db-seed.ts"
   },
   "dependencies": {
     "@simplewebauthn/server": "^13.3.2",
