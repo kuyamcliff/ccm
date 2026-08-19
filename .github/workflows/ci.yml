@@ -58,6 +58,49 @@ jobs:
         run: npm run build
         working-directory: frontend
 
+  integration:
+    name: Integration (real database)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ccm
+          POSTGRES_PASSWORD: ccm
+          POSTGRES_DB: ccm
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ccm:ccm@localhost:5432/ccm
+      NODE_ENV: development
+      JWT_SECRET: ci-only-secret-000000000000000000000000000000
+      QR_SIGNING_SECRET: ci-only-qr-secret-1111111111111111111111111
+      FRONTEND_URL: http://localhost:5173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - name: Create the schema
+        # Also proves the schema in this repository can build a database from
+        # nothing, which is the property that was missing entirely.
+        run: npm run db:setup
+        working-directory: backend
+      - name: Seed development data
+        run: npm run db:seed
+        working-directory: backend
+      - name: Integration tests
+        run: npm run test:integration
+        working-directory: backend
+
   constraints:
     name: Product constraints
     runs-on: ubuntu-latest
