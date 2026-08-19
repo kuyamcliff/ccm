@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, SLOTS } from "~/lib/api";
 import type { Booking, MenuItem } from "~/lib/api";
 import { ApiError } from "~/lib/http";
