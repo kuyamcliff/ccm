@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { db } from "../db.js";
+import { featureIsOn } from "../lib/featureWindow.js";
 
 export type CustomerFeature = "customerAccounts" | "ordering" | "booking" | "waitlist" | "reviews" | "gallery" | "offers" | "events" | "loyalty" | "giftCards" | "supportChat";
 export type CustomerService = "ordering" | "booking" | "waitlist";
@@ -10,22 +11,30 @@ async function config(): Promise<Record<string, unknown>> {
   try { return JSON.parse(row.value) as Record<string, unknown>; } catch { return {}; }
 }
 
+function sections(parsed: Record<string, unknown>) {
+  return {
+    features: (parsed.features ?? {}) as Record<string, unknown>,
+    schedules: (parsed.schedules ?? {}) as Record<string, unknown>,
+    services: (parsed.services ?? {}) as Record<string, unknown>,
+  };
+}
+
 export function requireSiteFeature(feature: CustomerFeature) {
   return async (_req: Request, res: Response, next: NextFunction) => {
-    const parsed = await config();
-    const features = (parsed.features ?? {}) as Record<string, unknown>;
-    if (features[feature] !== false) { next(); return; }
+    const { features, schedules } = sections(await config());
+    if (featureIsOn(features, schedules, feature)) { next(); return; }
     res.status(503).json({ error: "This service is temporarily unavailable.", feature_disabled: true });
   };
 }
 
 export function requireSiteService(service: CustomerService) {
   return async (_req: Request, res: Response, next: NextFunction) => {
-    const parsed = await config();
-    const features = (parsed.features ?? {}) as Record<string, unknown>;
-    const services = (parsed.services ?? {}) as Record<string, unknown>;
+    const { features, schedules, services } = sections(await config());
     const entry = (services[service] ?? {}) as Record<string, unknown>;
-    if (features[service] === false || entry.mode === "paused") {
+    /* Two separate controls, and either one closes the door: the feature can be
+       off or outside its window, and the service can be paused for the evening
+       while the feature stays on. */
+    if (!featureIsOn(features, schedules, service) || entry.mode === "paused") {
       res.status(503).json({ error: "This service is temporarily unavailable.", service_paused: true });
       return;
     }

@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DEFAULT_SITE_CONFIG, parseSiteConfig } from "./siteConfig.js";
+import {
+  DEFAULT_SITE_CONFIG,
+  featureIsOn,
+  nextFeatureBoundary,
+  parseSiteConfig,
+  resolveFeatures,
+  windowIsOpen,
+  type SiteConfig,
+} from "./siteConfig.js";
 
 /**
  * `parseSiteConfig` is the single point where owner-controlled configuration
@@ -107,5 +115,165 @@ describe("parseSiteConfig", () => {
   it("never invents a payment method beyond the two wallets", () => {
     const config = parseSiteConfig(JSON.stringify({ payments: { mtn: true, orange: true, card: true } }));
     assert.deepEqual(Object.keys(config.payments).sort(), ["mtn", "orange"]);
+  });
+});
+
+/*
+ * Feature scheduling.
+ *
+ * These cases are deliberately mirrored in the API's featureWindow.test.ts.
+ * The two packages build separately and cannot share a module, so the
+ * guarantee that they agree is that both are held to the same list. A button
+ * this app hides but the API still accepts is not a disabled feature, and the
+ * failure mode is invisible until somebody exploits it.
+ */
+
+const OPEN = new Date("2026-12-25T12:00:00Z");
+
+function withSchedule(schedules: Record<string, unknown>, features: Record<string, unknown> = {}): SiteConfig {
+  return parseSiteConfig(JSON.stringify({ features, schedules }));
+}
+
+describe("windowIsOpen", () => {
+  it("is open inside the window", () => {
+    assert.equal(windowIsOpen({ startAt: "2026-12-01T00:00:00Z", endAt: "2027-01-01T00:00:00Z" }, OPEN), true);
+  });
+
+  it("is shut before the window", () => {
+    assert.equal(windowIsOpen({ startAt: "2027-01-01T00:00:00Z", endAt: null }, OPEN), false);
+  });
+
+  it("is shut after the window", () => {
+    assert.equal(windowIsOpen({ startAt: null, endAt: "2026-12-01T00:00:00Z" }, OPEN), false);
+  });
+
+  it("includes the first instant and excludes the last", () => {
+    const at = new Date("2026-12-25T12:00:00Z");
+    assert.equal(windowIsOpen({ startAt: "2026-12-25T12:00:00Z", endAt: null }, at), true);
+    assert.equal(windowIsOpen({ startAt: null, endAt: "2026-12-25T12:00:00Z" }, at), false);
+  });
+
+  it("is never open when the end is before the start", () => {
+    const backwards = { startAt: "2027-01-01T00:00:00Z", endAt: "2026-01-01T00:00:00Z" };
+    assert.equal(windowIsOpen(backwards, OPEN), false);
+    assert.equal(windowIsOpen(backwards, new Date("2026-06-01T00:00:00Z")), false);
+    assert.equal(windowIsOpen(backwards, new Date("2027-06-01T00:00:00Z")), false);
+  });
+
+  it("ignores an end it cannot read rather than shutting on it", () => {
+    assert.equal(windowIsOpen({ startAt: "2020-01-01T00:00:00Z", endAt: "not a date" }, OPEN), true);
+  });
+});
+
+describe("parseSiteConfig schedules", () => {
+  it("has no schedules by default", () => {
+    assert.deepEqual(parseSiteConfig(undefined).schedules, {});
+  });
+
+  it("reads a window off the stored config", () => {
+    const config = withSchedule({ ordering: { startAt: "2026-12-01T00:00:00Z", endAt: "2027-01-01T00:00:00Z" } });
+    assert.deepEqual(config.schedules.ordering, {
+      startAt: "2026-12-01T00:00:00.000Z",
+      endAt: "2027-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("drops a schedule for something that is not a feature", () => {
+    const config = withSchedule({ notAFeature: { startAt: "2026-12-01T00:00:00Z", endAt: null } });
+    assert.deepEqual(config.schedules, {});
+  });
+
+  it("drops a window with neither end, so the console shows nothing the owner did not set", () => {
+    assert.deepEqual(withSchedule({ ordering: { startAt: null, endAt: null } }).schedules, {});
+    assert.deepEqual(withSchedule({ ordering: {} }).schedules, {});
+  });
+
+  it("survives a schedules section that is not an object", () => {
+    assert.deepEqual(parseSiteConfig(JSON.stringify({ schedules: "christmas" })).schedules, {});
+    assert.deepEqual(parseSiteConfig(JSON.stringify({ schedules: [] })).schedules, {});
+  });
+});
+
+describe("featureIsOn", () => {
+  it("is on when the switch is on and there is no schedule", () => {
+    assert.equal(featureIsOn(withSchedule({}, { ordering: true }), "ordering", OPEN), true);
+  });
+
+  it("is on when the feature is not mentioned at all", () => {
+    assert.equal(featureIsOn(parseSiteConfig(undefined), "giftCards", OPEN), true);
+  });
+
+  it("is off when the switch is off, schedule or no schedule", () => {
+    assert.equal(featureIsOn(withSchedule({}, { ordering: false }), "ordering", OPEN), false);
+    assert.equal(
+      featureIsOn(withSchedule({ ordering: { startAt: "2020-01-01T00:00:00Z", endAt: null } }, { ordering: false }), "ordering", OPEN),
+      false
+    );
+  });
+
+  it("is off when the switch is on but the window has not opened", () => {
+    assert.equal(
+      featureIsOn(withSchedule({ ordering: { startAt: "2027-01-01T00:00:00Z", endAt: null } }, { ordering: true }), "ordering", OPEN),
+      false
+    );
+  });
+
+  it("is off when the switch is on but the window has closed", () => {
+    assert.equal(
+      featureIsOn(withSchedule({ ordering: { startAt: null, endAt: "2026-12-01T00:00:00Z" } }, { ordering: true }), "ordering", OPEN),
+      false
+    );
+  });
+
+  it("ignores a schedule belonging to a different feature", () => {
+    assert.equal(
+      featureIsOn(withSchedule({ booking: { startAt: "2027-01-01T00:00:00Z", endAt: null } }, { ordering: true }), "ordering", OPEN),
+      true
+    );
+  });
+});
+
+describe("resolveFeatures", () => {
+  it("hands back every feature, schedules applied", () => {
+    const config = withSchedule(
+      { ordering: { startAt: "2027-01-01T00:00:00Z", endAt: null } },
+      { ordering: true, booking: true, waitlist: false }
+    );
+    const now = resolveFeatures(config, OPEN);
+    assert.equal(now.ordering, false, "scheduled for later");
+    assert.equal(now.booking, true, "on, unscheduled");
+    assert.equal(now.waitlist, false, "switched off");
+    assert.equal(Object.keys(now).length, Object.keys(config.features).length, "every feature must be accounted for");
+  });
+
+  it("never invents a payment method beyond the two wallets", () => {
+    // Guards the product's hardest constraint against a config blob that tries
+    // to introduce one.
+    const config = parseSiteConfig(JSON.stringify({ payments: { mtn: true, orange: true, visa: true, card: true } }));
+    assert.deepEqual(Object.keys(config.payments).sort(), ["mtn", "orange"]);
+  });
+});
+
+describe("nextFeatureBoundary", () => {
+  it("is nothing when no feature is scheduled", () => {
+    assert.equal(nextFeatureBoundary(parseSiteConfig(undefined), OPEN), null);
+  });
+
+  it("finds the soonest edge still ahead", () => {
+    const config = withSchedule({
+      ordering: { startAt: "2027-03-01T00:00:00Z", endAt: "2027-04-01T00:00:00Z" },
+      booking: { startAt: "2027-01-15T00:00:00Z", endAt: null },
+    });
+    assert.equal(nextFeatureBoundary(config, OPEN)?.toISOString(), "2027-01-15T00:00:00.000Z");
+  });
+
+  it("ignores edges that have already gone by", () => {
+    const config = withSchedule({ ordering: { startAt: "2020-01-01T00:00:00Z", endAt: "2027-01-01T00:00:00Z" } });
+    assert.equal(nextFeatureBoundary(config, OPEN)?.toISOString(), "2027-01-01T00:00:00.000Z");
+  });
+
+  it("is nothing when every edge is in the past", () => {
+    const config = withSchedule({ ordering: { startAt: "2020-01-01T00:00:00Z", endAt: "2021-01-01T00:00:00Z" } });
+    assert.equal(nextFeatureBoundary(config, OPEN), null);
   });
 });

@@ -393,6 +393,68 @@ describe("booking", () => {
   });
 });
 
+describe("feature scheduling", () => {
+  const KEY = "site_config_json";
+
+  async function setConfig(value: unknown): Promise<void> {
+    await pool.query(
+      "INSERT INTO camchop.site_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+      [KEY, JSON.stringify(value)]
+    );
+  }
+
+  async function clearConfig(): Promise<void> {
+    await pool.query("DELETE FROM camchop.site_settings WHERE key = $1", [KEY]);
+  }
+
+  async function tryToBook(cookie: string, date: string, time: string): Promise<number> {
+    const res = await fetch(`${BASE}/api/reservations`, {
+      method: "POST",
+      headers: { ...JSON_HEADERS, Cookie: cookie },
+      body: JSON.stringify({ tableId: null, date, time, partySize: 2, phone: "677123456", note: "" }),
+    });
+    return res.status;
+  }
+
+  /*
+   * The customer app hides a scheduled-off feature. That is presentation, and
+   * presentation is not access control: the guarantee that matters is that the
+   * API refuses it too. These cases mirror featureWindow.test.ts against a real
+   * server and a real config row.
+   */
+  it("refuses a feature the schedule has not opened yet, and allows it inside the window", async () => {
+    const cookie = await signedInGuest("sched");
+    const date = new Date(Date.now() + 180 * 864e5).toISOString().slice(0, 10);
+    await pool.query("DELETE FROM camchop.reservations WHERE date = $1", [date]);
+
+    try {
+      await clearConfig();
+      assert.equal(await tryToBook(cookie, date, "19:00"), 201, "no schedule means the switch alone decides");
+
+      await setConfig({ features: { booking: true }, schedules: { booking: { startAt: "2090-01-01T00:00:00Z", endAt: null } } });
+      assert.equal(await tryToBook(cookie, date, "19:30"), 503, "not open yet");
+
+      await setConfig({ features: { booking: true }, schedules: { booking: { startAt: null, endAt: "2000-01-01T00:00:00Z" } } });
+      assert.equal(await tryToBook(cookie, date, "20:00"), 503, "already closed");
+
+      await setConfig({ features: { booking: true }, schedules: { booking: { startAt: "2000-01-01T00:00:00Z", endAt: "2090-01-01T00:00:00Z" } } });
+      assert.equal(await tryToBook(cookie, date, "20:30"), 201, "inside the window");
+
+      // A schedule can only take away. It must never turn on something the
+      // owner switched off.
+      await setConfig({ features: { booking: false }, schedules: { booking: { startAt: "2000-01-01T00:00:00Z", endAt: "2090-01-01T00:00:00Z" } } });
+      assert.equal(await tryToBook(cookie, date, "21:00"), 503, "switched off beats any window");
+
+      // Dates the wrong way round: off, rather than quietly reinterpreted.
+      await setConfig({ features: { booking: true }, schedules: { booking: { startAt: "2090-01-01T00:00:00Z", endAt: "2000-01-01T00:00:00Z" } } });
+      assert.equal(await tryToBook(cookie, date, "21:30"), 503, "an end before its start is never open");
+    } finally {
+      await clearConfig();
+      await pool.query("DELETE FROM camchop.reservations WHERE date = $1", [date]);
+    }
+  });
+});
+
 describe("error handling", () => {
   it("never returns a raw internal message to a customer", async () => {
     const res = await fetch(`${BASE}/api/reservations`, {
