@@ -49,7 +49,7 @@ export function OrderStep({ basket, onChange, onMenuLoaded }: Props) {
   const menu = useResource(() => api.site.menu(), []);
 
   const grouped = useMemo(() => {
-    const orderable = (menu.data ?? []).filter((item) => item.price_fcfa !== null);
+    const orderable = (menu.data ?? []).filter((item) => item.price_fcfa != null);
     if (orderable.length > 0) onMenuLoaded(orderable);
 
     const map = new Map<string, MenuItem[]>();

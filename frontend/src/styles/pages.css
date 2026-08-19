@@ -2146,6 +2146,10 @@ body:has(.booking__foot) .shell__main {
   align-items: start;
 }
 
+.queue-layout > * {
+  min-width: 0;
+}
+
 @media (min-width: 52rem) {
   .queue-layout {
     grid-template-columns: 18rem 1fr;
@@ -2175,6 +2179,10 @@ body:has(.booking__foot) .shell__main {
   align-items: start;
 }
 
+.reviews-layout > * {
+  min-width: 0;
+}
+
 @media (min-width: 60rem) {
   .reviews-layout {
     grid-template-columns: 1fr 21rem;
@@ -2199,11 +2207,19 @@ body:has(.booking__foot) .shell__main {
   display: flex;
   align-items: center;
   gap: var(--s-3);
+  /* A long name plus a verified badge already fills the row on a narrow
+     phone; the rating drops to its own line rather than being pushed off
+     the edge of the screen. */
+  flex-wrap: wrap;
 }
 
 .review__head > div {
   min-width: 0;
   flex: 1;
+}
+
+.review__head > .row {
+  margin-inline-start: auto;
 }
 
 .review__author {
@@ -2645,6 +2661,10 @@ body:has(.booking__foot) .shell__main {
   gap: var(--s-6);
   grid-template-columns: 1fr;
   align-items: start;
+}
+
+.help-layout > * {
+  min-width: 0;
 }
 
 @media (min-width: 60rem) {

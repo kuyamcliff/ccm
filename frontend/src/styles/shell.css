@@ -93,6 +93,14 @@ body:has(.basket-bar) .shell__main {
   line-height: 1;
   color: var(--white);
   white-space: nowrap;
+  /* `.brand`'s min-width: 0 lets this shrink below its text's own width; without
+     these, the nowrap text does not wrap or resize, it just paints straight
+     through whatever sits beside it — the language switcher, on a mid-width
+     phone. Ellipsis is the fallback for the gap between "hide the wordmark"
+     below 22rem and "there is room for it" above that. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 /* The second word takes the red. It is the one place red appears without

@@ -54,7 +54,11 @@ export function Loaded<T>({
 }) {
   if (resource.loading) return <SkeletonCards count={3} height={skeletonHeight ?? "3.5rem"} />;
   if (resource.error) return <ErrorState error={resource.error} onRetry={resource.reload} />;
-  if (resource.data === null) return null;
+  // `== null` on purpose: an unexpected response shape resolves this to
+  // `undefined`, not `null`, and every child below assumes it has the data
+  // it asked for — one bad response would otherwise crash the whole console
+  // through the error boundary instead of just showing nothing.
+  if (resource.data == null) return null;
   return <>{children(resource.data)}</>;
 }
 

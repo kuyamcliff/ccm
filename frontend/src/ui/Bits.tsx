@@ -5,7 +5,7 @@ import { Icon } from "./Icon";
 export function Money({ value, unit = "FCFA", className }: { value: number; unit?: string; className?: string }) {
   return (
     <span className={["money", className].filter(Boolean).join(" ")}>
-      {value.toLocaleString("en-US")}
+      {value.toLocaleString("en-US")}{" "}
       <span className="money__unit">{unit}</span>
     </span>
   );
