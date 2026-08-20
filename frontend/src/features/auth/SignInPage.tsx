@@ -40,7 +40,7 @@ export function SignInPage() {
 
   const afterSignIn = (role?: string) => {
     if (role === "admin" || role === "super_admin" || role === "owner") {
-      navigate("/admin", { replace: true });
+      navigate("/desk", { replace: true });
       return;
     }
     navigate(from, { replace: true });
@@ -61,7 +61,7 @@ export function SignInPage() {
     afterSignIn(signedInUser.role);
   });
 
-  if (user) return <Navigate to={user.role === "admin" || user.role === "super_admin" || user.role === "owner" ? "/admin" : from} replace />;
+  if (user) return <Navigate to={user.role === "admin" || user.role === "super_admin" || user.role === "owner" ? "/desk" : from} replace />;
 
   function fail(err: unknown, fallback: string) {
     setProblem(err instanceof ApiError ? err.message : fallback);

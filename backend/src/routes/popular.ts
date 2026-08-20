@@ -14,7 +14,8 @@ popularRouter.get("/", async (_req, res) => {
 
   const topItems = await db
     .prepare(
-      "SELECT * FROM menu_items WHERE is_active = 1 ORDER BY price_fcfa DESC LIMIT 3"
+      `SELECT id, category, name, description, price_fcfa, price_label, image_url, sold_out, dietary_tags
+       FROM menu_items WHERE is_active = 1 ORDER BY price_fcfa DESC LIMIT 3`
     )
     .all();
 

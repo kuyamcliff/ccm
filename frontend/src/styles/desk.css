@@ -270,9 +270,9 @@
 }
 
 .stat__value {
-  font-size: 1.375rem;
+  font-size: var(--t-title);
   line-height: 1.15;
-  font-family: var(--font-mono);
+  font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1171,7 +1171,7 @@
   }
 
   .stat__value {
-    font-size: 1.375rem;
+    font-size: var(--t-head);
   }
 }
 

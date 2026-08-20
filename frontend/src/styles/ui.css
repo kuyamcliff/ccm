@@ -705,7 +705,12 @@
   font-weight: 600;
   transition:
     background-color var(--dur-2) var(--ease),
-    color var(--dur-2) var(--ease);
+    color var(--dur-2) var(--ease),
+    transform var(--dur-1) var(--ease);
+}
+
+.segmented__opt:active {
+  transform: scale(0.94);
 }
 
 .segmented__opt[aria-pressed="true"] {
@@ -1558,12 +1563,16 @@ body:has(.booking__foot) .helper {
   color: var(--text-2);
   font-size: var(--t-fine);
   letter-spacing: 0.04em;
-  transition: border-color var(--dur-2) var(--ease), color var(--dur-2) var(--ease);
+  transition: border-color var(--dur-2) var(--ease), color var(--dur-2) var(--ease), transform var(--dur-1) var(--ease);
 }
 
 .error-ref__code:hover {
   border-color: var(--line-2);
   color: var(--text);
+}
+
+.error-ref__code:active {
+  transform: scale(0.96);
 }
 
 .error-ref__copied {
