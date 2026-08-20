@@ -131,6 +131,10 @@
   color: var(--text);
 }
 
+.desk__link:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .desk__link svg {
   color: var(--text-3);
   flex: none;
@@ -1198,6 +1202,42 @@
     min-height: var(--tap);
     min-width: var(--tap);
   }
+
+  .desk .switch {
+    min-height: var(--tap);
+  }
+
+  .guest-row {
+    min-height: var(--tap);
+  }
+}
+
+/* ── Switches and cards, at console density ─────────────────────────────
+   A settings screen with two dozen switches on it is the console's own
+   worst case: at the site's ordinary switch and card sizing, one page of
+   toggles reads as a wall. Smaller than the site's, larger than a checkbox —
+   still 44px under a thumb, which the touch override above restores. */
+.desk .switch {
+  gap: var(--s-2);
+  min-height: 2.25rem;
+}
+
+.desk .switch__track {
+  width: 2.375rem;
+  height: 1.375rem;
+}
+
+.desk .switch__track::after {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.desk .switch input:checked + .switch__track::after {
+  transform: translateX(1rem);
+}
+
+.desk .check__text {
+  font-size: var(--t-fine);
 }
 
 /* A guest's note about their table: worth noticing, not worth shouting. In the
@@ -1217,6 +1257,20 @@
 .desk-table .table td.mono {
   white-space: nowrap;
 }
+
+/* ── Guest list ──────────────────────────────────────────────────────────
+   A name, an email, a role — nothing a row does not need to identify who it
+   is, since the account underneath it can run into the thousands. Every
+   action that used to sit in the row now sits behind opening it. */
+.guest-list { display: flex; flex-direction: column; }
+.guest-row { display: flex; align-items: center; gap: var(--s-3); width: 100%; padding: var(--s-2) 0; border-bottom: 1px solid var(--line); text-align: left; color: var(--text); transition: background-color var(--dur-1) var(--ease); }
+.guest-row:hover { background: rgba(255, 255, 255, 0.03); }
+.guest-row:active { transform: scale(0.995); }
+.guest-row > svg { flex: none; color: var(--text-3); }
+.guest-row__body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; flex: 1; }
+.guest-row__body strong { font-size: var(--t-fine); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guest-row__body .fine { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guest-list__end { text-align: center; padding: var(--s-3) 0; }
 
 /* ── Translation coverage ─────────────────────────────────────────────────
    One bar, because the number beside it is the point and a chart would be

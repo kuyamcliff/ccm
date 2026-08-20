@@ -18,6 +18,7 @@ import { clientIp, rateLimit, resetLimit } from "../middleware/security.js";
 import { generateAuthenticationOptions, verifyAuthenticationResponse } from "@simplewebauthn/server";
 import type { AuthenticatorTransportFuture } from "@simplewebauthn/server";
 import { openCeremony, passkeyOrigin, passkeyRpId, sealCeremony } from "../lib/passkeys.js";
+import { openUserSession, revokeUserSession } from "../lib/userSessions.js";
 
 export const authRouter = Router();
 
@@ -118,7 +119,8 @@ authRouter.post("/register", registerLimit, async (req, res) => {
     .run(name, email, hash);
   const id = Number(info.lastInsertRowid);
 
-  res.cookie(COOKIE_NAME, signSession(id, 1), sessionCookieOptions());
+  const sid = await openUserSession(id, req);
+  res.cookie(COOKIE_NAME, signSession(id, 1, sid), sessionCookieOptions());
   res.status(201).json({ user: { id, name, email, role: "user" } });
 });
 
@@ -157,7 +159,8 @@ authRouter.post("/login", loginIpLimit, loginEmailLimit, async (req, res) => {
     return;
   }
 
-  res.cookie(COOKIE_NAME, signSession(row.id, row.session_version), sessionCookieOptions());
+  const sid = await openUserSession(row.id, req);
+  res.cookie(COOKIE_NAME, signSession(row.id, row.session_version, sid), sessionCookieOptions());
   res.json({ user: publicUser(row) });
 });
 
@@ -192,7 +195,8 @@ authRouter.post("/login/2fa", twoFactorLimit, async (req, res) => {
   }
 
   resetLimit("login-2fa", clientIp(req));
-  res.cookie(COOKIE_NAME, signSession(row.id, row.session_version), sessionCookieOptions());
+  const sid = await openUserSession(row.id, req);
+  res.cookie(COOKIE_NAME, signSession(row.id, row.session_version, sid), sessionCookieOptions());
   res.json({ user: publicUser(row) });
 });
 
@@ -301,11 +305,13 @@ authRouter.post("/passkey/verify", loginIpLimit, async (req, res) => {
    * sent round it, so an account with two step sign in on is not asked for a
    * code it does not need.
    */
-  res.cookie(COOKIE_NAME, signSession(row.id, row.session_version), sessionCookieOptions());
+  const sid = await openUserSession(row.id, req);
+  res.cookie(COOKIE_NAME, signSession(row.id, row.session_version, sid), sessionCookieOptions());
   res.json({ user: publicUser(row) });
 });
 
-authRouter.post("/logout", (_req, res) => {
+authRouter.post("/logout", async (req, res) => {
+  if (req.user?.sid) await revokeUserSession(req.user.id, req.user.sid);
   clearSessionCookie(res);
   res.json({ ok: true });
 });
@@ -318,5 +324,7 @@ authRouter.post("/logout-all", requireAuth, async (req, res) => {
 });
 
 authRouter.get("/me", requireAuth, (req, res) => {
-  res.json({ user: req.user });
+  // `sid` is this cookie's own session-row id — internal wiring, not part of
+  // the account the client is allowed to see.
+  res.json({ user: publicUser(req.user!) });
 });

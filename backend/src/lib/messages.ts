@@ -10,7 +10,7 @@
  * segment.
  */
 
-const VENUE = "Cam Chop Meat";
+import { VENUE_NAME as VENUE } from "../config.js";
 
 export function money(fcfa: number): string {
   return `${Math.round(fcfa).toLocaleString("en-US")} FCFA`;

@@ -523,6 +523,163 @@ describe("maintenance mode", () => {
   });
 });
 
+describe("sessions", () => {
+  it("lists the session a sign-in just opened, marked current", async () => {
+    const cookie = await signedInGuest("sess-list");
+    const res = await fetch(`${BASE}/api/account/sessions`, { headers: { Cookie: cookie } });
+    assert.equal(res.status, 200);
+    const { sessions } = (await res.json()) as { sessions: { id: string; current: boolean; device_type: string }[] };
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0]!.current, true);
+    assert.ok(["mobile", "tablet", "desktop", "unknown"].includes(sessions[0]!.device_type));
+  });
+
+  it("signing in twice opens two sessions, and revoking one actually ends it — not just from the list", async () => {
+    const email = `it-${run}-sess-two@camchopmeat.test`;
+    await pool.query(
+      "INSERT INTO camchop.users (name, email, password_hash, role) VALUES ($1, $2, $3, 'user')",
+      [`Guest sess-two`, email, await bcrypt.hash(PASSWORD, 10)]
+    );
+    const signIn = () =>
+      fetch(`${BASE}/api/auth/login`, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ email, password: PASSWORD }) });
+
+    const first = cookieFrom(await signIn());
+    const second = cookieFrom(await signIn());
+    assert.notEqual(first, second, "two sign-ins must not reuse one session");
+
+    const listed = await fetch(`${BASE}/api/account/sessions`, { headers: { Cookie: first } });
+    const { sessions } = (await listed.json()) as { sessions: { id: string; current: boolean }[] };
+    assert.equal(sessions.length, 2);
+
+    const other = sessions.find((s) => !s.current);
+    assert.ok(other, "the other device's session must be listed");
+
+    const revoke = await fetch(`${BASE}/api/account/sessions/${other!.id}`, { method: "DELETE", headers: { Origin: ORIGIN, Cookie: first } });
+    assert.equal(revoke.status, 200);
+
+    // The row is gone from the list, and the actual cookie for that device no
+    // longer authenticates — revoking one session must not be cosmetic.
+    const meFirst = await fetch(`${BASE}/api/auth/me`, { headers: { Cookie: first } });
+    assert.equal(meFirst.status, 200, "the device that did the revoking stays signed in");
+    const meSecond = await fetch(`${BASE}/api/auth/me`, { headers: { Cookie: second } });
+    assert.equal(meSecond.status, 401, "the revoked device is actually signed out");
+  });
+
+  it("refuses to revoke your own current session through this route", async () => {
+    const cookie = await signedInGuest("sess-self");
+    const mine = (await (await fetch(`${BASE}/api/account/sessions`, { headers: { Cookie: cookie } })).json()) as {
+      sessions: { id: string; current: boolean }[];
+    };
+    const current = mine.sessions.find((s) => s.current)!;
+    const res = await fetch(`${BASE}/api/account/sessions/${current.id}`, { method: "DELETE", headers: { Origin: ORIGIN, Cookie: cookie } });
+    assert.equal(res.status, 400, "ending the device you are on goes through sign-out, not this route");
+  });
+
+  it("will not let one guest revoke another guest's session", async () => {
+    const victim = await signedInGuest("sess-victim");
+    const attacker = await signedInGuest("sess-attacker");
+    const victimSessions = (await (await fetch(`${BASE}/api/account/sessions`, { headers: { Cookie: victim } })).json()) as {
+      sessions: { id: string }[];
+    };
+    const targetId = victimSessions.sessions[0]!.id;
+
+    const res = await fetch(`${BASE}/api/account/sessions/${targetId}`, { method: "DELETE", headers: { Origin: ORIGIN, Cookie: attacker } });
+    assert.equal(res.status, 404, "a session id from another account must not even confirm it exists");
+
+    // And it really is untouched.
+    const stillThere = await fetch(`${BASE}/api/auth/me`, { headers: { Cookie: victim } });
+    assert.equal(stillThere.status, 200);
+  });
+});
+
+describe("email change", () => {
+  it("rejects the wrong password before sending anything", async () => {
+    const cookie = await signedInGuest("email-wrongpw");
+    const res = await fetch(`${BASE}/api/account/email`, {
+      method: "PATCH",
+      headers: { ...JSON_HEADERS, Cookie: cookie },
+      body: JSON.stringify({ email: "new-address@camchopmeat.test", password: "not-the-password" }),
+    });
+    assert.equal(res.status, 400);
+  });
+
+  it("refuses an address already on another account", async () => {
+    const taken = `it-${run}-email-taken@camchopmeat.test`;
+    await pool.query(
+      "INSERT INTO camchop.users (name, email, password_hash, role) VALUES ($1, $2, $3, 'user')",
+      [`Guest taken`, taken, await bcrypt.hash(PASSWORD, 10)]
+    );
+    const cookie = await signedInGuest("email-clash");
+    const res = await fetch(`${BASE}/api/account/email`, {
+      method: "PATCH",
+      headers: { ...JSON_HEADERS, Cookie: cookie },
+      body: JSON.stringify({ email: taken, password: PASSWORD }),
+    });
+    assert.equal(res.status, 409);
+  });
+
+  it("the confirm step actually applies the change and drops other sessions — proven independent of whether mail sending is configured", async () => {
+    /* This environment has no RESEND_API_KEY, so PATCH /email itself takes the
+       no-code fallback path. The two-step mechanism is real product code that
+       must work the moment an owner sets the key, so it is exercised here by
+       issuing a code the same way the route would — through the library
+       function, not through mail delivery, which is not this test's job. */
+    const { issueEmailChangeCode } = await import("../src/lib/emailChange.js");
+    const cookie = await signedInGuest("email-confirm");
+    const email = `it-${run}-email-confirmed@camchopmeat.test`;
+
+    const userRow = (
+      await pool.query("SELECT id FROM camchop.users WHERE email = $1", [`it-${run}-email-confirm@camchopmeat.test`])
+    ).rows[0] as { id: number } | undefined;
+    assert.ok(userRow, "the guest just signed in must exist");
+
+    const { code } = await issueEmailChangeCode(userRow!.id, email);
+    const res = await fetch(`${BASE}/api/account/email/confirm`, {
+      method: "POST",
+      headers: { ...JSON_HEADERS, Cookie: cookie },
+      body: JSON.stringify({ code }),
+    });
+    const rawBody = await res.text();
+    assert.equal(res.status, 200, `confirm -> ${res.status} ${rawBody}`);
+    const body = JSON.parse(rawBody) as { email: string };
+    assert.equal(body.email, email);
+
+    /* Confirming an email change revokes every session, this device's own
+       included, and reissues a fresh cookie for it — exactly like changing a
+       password does. A real browser picks that Set-Cookie up automatically;
+       the test has to read it explicitly rather than reusing the one from
+       before the change, which is now dead by design. */
+    const reissued = cookieFrom(res);
+    assert.ok(reissued, "confirming must reissue this device's own cookie");
+    const oldCookieNowDead = await fetch(`${BASE}/api/auth/me`, { headers: { Cookie: cookie } });
+    assert.equal(oldCookieNowDead.status, 401, "the pre-change cookie must not still work");
+
+    const me = await fetch(`${BASE}/api/auth/me`, { headers: { Cookie: reissued } });
+    const meBody = (await me.json()) as { user: { email: string } };
+    assert.equal(meBody.user.email, email, "the account really does show the new address now");
+  });
+
+  it("rejects a wrong code without applying anything", async () => {
+    const { issueEmailChangeCode } = await import("../src/lib/emailChange.js");
+    const cookie = await signedInGuest("email-wrongcode");
+
+    const userRow = (
+      await pool.query("SELECT id FROM camchop.users WHERE email = $1", [`it-${run}-email-wrongcode@camchopmeat.test`])
+    ).rows[0] as { id: number } | undefined;
+    await issueEmailChangeCode(userRow!.id, "someone-else@camchopmeat.test");
+
+    const res = await fetch(`${BASE}/api/account/email/confirm`, {
+      method: "POST",
+      headers: { ...JSON_HEADERS, Cookie: cookie },
+      body: JSON.stringify({ code: "000000" }),
+    });
+    assert.equal(res.status, 400);
+
+    const me = (await (await fetch(`${BASE}/api/auth/me`, { headers: { Cookie: cookie } })).json()) as { user: { email: string } };
+    assert.equal(me.user.email, `it-${run}-email-wrongcode@camchopmeat.test`, "a wrong code must not change anything");
+  });
+});
+
 describe("error handling", () => {
   it("never returns a raw internal message to a customer", async () => {
     const res = await fetch(`${BASE}/api/reservations`, {

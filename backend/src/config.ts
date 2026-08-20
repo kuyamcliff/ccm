@@ -32,6 +32,16 @@ export const JWT_SECRET = required("JWT_SECRET", "dev-only-secret-change-in-prod
  */
 export const QR_SIGNING_SECRET = required("QR_SIGNING_SECRET", "dev-only-qr-secret-change-in-production");
 
+/**
+ * What the restaurant is called, in the one place the whole server reads it.
+ *
+ * Used in the subject and body of every email, and as the name on the calendar
+ * event a guest adds. It was written as a literal in three files; a rename, or
+ * a second venue on the same code, meant hunting them down. Set VENUE_NAME to
+ * change it everywhere at once.
+ */
+export const VENUE_NAME = optional("VENUE_NAME", "Cam Chop Meat");
+
 /** Origins allowed to make state-changing requests. Same-origin in production. */
 export const FRONTEND_URL = optional("FRONTEND_URL", "http://localhost:5173").replace(/\/+$/, "");
 
@@ -96,8 +106,10 @@ export const PORT = Number(process.env.PORT ?? 4000);
    unset. */
 export const RESEND_API_KEY = optional("RESEND_API_KEY");
 
-/** Must be an address on a domain verified in the Resend dashboard. */
-export const EMAIL_FROM = optional("EMAIL_FROM", "Cam Chop Meat <onboarding@resend.dev>");
+/** Must be an address on a domain verified in the Resend dashboard. Resend's
+    own sandbox address is the one default that works with zero setup, so it
+    stays as the fallback — everything else about it is env-driven. */
+export const EMAIL_FROM = optional("EMAIL_FROM", `${VENUE_NAME} <onboarding@resend.dev>`);
 
 /** Where Resend should send replies, when it differs from the from address. */
 export const EMAIL_REPLY_TO = optional("EMAIL_REPLY_TO");
@@ -135,6 +147,27 @@ export const WHATSAPP_ENABLED =
 
 /** Public base URL the API is reachable at — used to build absolute image URLs. */
 export const PUBLIC_API_URL = optional("PUBLIC_API_URL", "").replace(/\/+$/, "");
+
+/**
+ * Whether to negotiate TLS with Postgres.
+ *
+ * Most managed databases require it; a local or CI Postgres usually has no
+ * certificate configured at all and refuses the handshake outright rather
+ * than falling back, so guessing wrong in either direction breaks the
+ * connection completely. Defaults to on in production and off everywhere
+ * else, and can be forced either way when that default doesn't fit.
+ */
+const databaseSslOverride = optional("DATABASE_SSL");
+export const DATABASE_SSL = databaseSslOverride ? databaseSslOverride === "true" : IS_PROD;
+
+/* ── IP geolocation (ipinfo.io) ────────────────────────────────────────────
+   Powers the rough "Buea, CM" shown against a session in the account's own
+   security tab. Off by default: looking up a guest's IP with a third party
+   is a real decision the owner should switch on deliberately, not something
+   that starts happening the moment a token appears in an example .env file.
+   Until this is set, a session's location reads "Unknown" rather than a
+   guess. */
+export const IPINFO_TOKEN = optional("IPINFO_TOKEN");
 
 /* ── Telegram Logging ──────────────────────────────────────────────────────
    Send all render logs to Telegram for real-time monitoring. */

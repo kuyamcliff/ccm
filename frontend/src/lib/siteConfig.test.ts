@@ -249,7 +249,7 @@ describe("resolveFeatures", () => {
   it("never invents a payment method beyond the two wallets", () => {
     // Guards the product's hardest constraint against a config blob that tries
     // to introduce one.
-    const config = parseSiteConfig(JSON.stringify({ payments: { mtn: true, orange: true, visa: true, card: true } }));
+    const config = parseSiteConfig(JSON.stringify({ payments: { mtn: true, orange: true, unknown_wallet: true, third_option: true } }));
     assert.deepEqual(Object.keys(config.payments).sort(), ["mtn", "orange"]);
   });
 });

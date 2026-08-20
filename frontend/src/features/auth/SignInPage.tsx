@@ -73,7 +73,7 @@ export function SignInPage() {
         {challenge ? (
           <>
             <h1 className="display display--lg">One more step</h1>
-            <p className="muted">Open your authenticator app and type the six digit code it is showing.</p>
+            <p className="muted">Enter the six-digit code from your authenticator app.</p>
             <form className="stack" onSubmit={async (event) => { event.preventDefault(); setProblem(null); await answer.run(); const failure = answer.readError(); if (failure) fail(failure, "That code was not accepted."); }}>
               <TextField label="Authentication code" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" maxLength={6} required autoFocus />
               {problem ? <Notice tone="bad">{problem}</Notice> : null}
@@ -83,7 +83,7 @@ export function SignInPage() {
         ) : (
           <>
             <h1 className="display display--lg">Welcome back</h1>
-            <p className="muted">Your bookings, orders and receipts live behind here.</p>
+            <p className="muted">Your tables, orders and receipts, all in one place.</p>
             <form className="stack" onSubmit={async (event) => { event.preventDefault(); setProblem(null); await attempt.run(); const failure = attempt.readError(); if (failure) fail(failure, "Those details were not right."); }}>
               <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" inputMode="email" required />
               <TextField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />

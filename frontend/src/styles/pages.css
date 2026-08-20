@@ -1051,13 +1051,13 @@
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: var(--s-3);
-  padding: var(--s-4) 0;
+  padding: var(--s-3) 0;
   border-bottom: 1px solid var(--line);
 }
 
 .row-item__photo {
-  width: 4rem;
-  height: 4rem;
+  width: 3.25rem;
+  height: 3.25rem;
   border-radius: var(--r-sm);
   object-fit: cover;
   flex: none;
@@ -1066,8 +1066,8 @@
 
 @media (min-width: 40rem) {
   .row-item__photo {
-    width: 5.5rem;
-    height: 5.5rem;
+    width: 4.5rem;
+    height: 4.5rem;
   }
 }
 
@@ -1334,6 +1334,62 @@
   font-size: var(--t-micro);
   font-weight: 700;
   flex: none;
+}
+
+/* ══ Takeaway order receipt ═════════════════════════════════════════════════
+   A collection stub, not a poster. Everything is one size smaller than the
+   booking pass: the order number sits inline with its label instead of
+   spanning the screen, the "not paid" warning is a single quiet line rather
+   than a boxed panel, and the whole card carries a hairline edge, not a fill,
+   so a list of them reads as a list. */
+.order-card {
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.order-card__id {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.order-card__label {
+  font-size: var(--t-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.order-card__no {
+  font-size: var(--t-small);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--white);
+  word-break: break-word;
+}
+
+.lines--tight {
+  gap: var(--s-1);
+  padding-block: var(--s-1);
+  border-block: 1px solid var(--line);
+}
+
+.order-card__total strong {
+  font-size: var(--t-small);
+  color: var(--white);
+}
+
+.order-card__warn {
+  color: var(--warn);
+}
+
+.order-card__actions {
+  gap: var(--s-2);
+  align-items: center;
 }
 
 /* ══ Paying ═════════════════════════════════════════════════════════════════ */
@@ -2539,7 +2595,8 @@ body:has(.booking__foot) .shell__main {
 
 .auth__card {
   width: 100%;
-  max-width: 24rem;
+  max-width: 21rem;
+  margin-inline: auto;
 }
 
 /* Tighter than the shared card, which is sized for reading rather than
@@ -2702,6 +2759,53 @@ body:has(.booking__foot) .shell__main {
   letter-spacing: 0.06em;
   word-break: break-all;
   color: var(--white);
+}
+
+/* ── Sessions, on the account's security tab ──────────────────────────────
+   One row per signed-in device: a form-factor icon, the name and where and
+   when it was last active, and — for every device but this one — a way to
+   end it. Deliberately plainer than the passkey list beside it: this is a
+   status list to scan, not a set of things to manage one at a time. */
+.session-list {
+  gap: var(--s-1);
+}
+
+.session-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--s-3);
+  padding-block: var(--s-2);
+}
+
+.session-row__icon {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--text-2);
+  flex: none;
+}
+
+.session-row__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.session-row__name {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--t-fine);
+  font-weight: 700;
+}
+
+.session-row__badge {
+  font-size: var(--t-micro);
 }
 
 .points {

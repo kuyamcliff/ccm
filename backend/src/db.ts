@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Pool, type PoolClient, types } from "pg";
 import { toPositional } from "./lib/sqlPlaceholders.js";
+import { DATABASE_SSL, IS_PROD } from "./config.js";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) throw new Error("DATABASE_URL is not set.");
@@ -8,12 +9,11 @@ if (!DATABASE_URL) throw new Error("DATABASE_URL is not set.");
 types.setTypeParser(20, (val: string) => parseInt(val, 10));
 types.setTypeParser(1700, (val: string) => parseFloat(val));
 
-const sslRejectUnauthorized = process.env.NODE_ENV === "production";
 const sslCa = process.env.DATABASE_SSL_CA?.trim() || undefined;
 
 export const pool = new Pool({
   connectionString: DATABASE_URL,
-  ssl: sslCa ? { rejectUnauthorized: sslRejectUnauthorized, ca: sslCa } : { rejectUnauthorized: sslRejectUnauthorized },
+  ssl: DATABASE_SSL ? { rejectUnauthorized: IS_PROD, ca: sslCa } : false,
   options: "-c search_path=camchop,public",
 });
 

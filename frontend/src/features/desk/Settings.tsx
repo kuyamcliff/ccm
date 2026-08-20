@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { api } from "~/lib/api";
 import type { SiteSettings } from "~/lib/api";
 import { useResource } from "~/lib/useResource";
@@ -18,26 +18,28 @@ import { DeskPage, Loaded } from "./parts";
  * name silently does nothing rather than inventing a setting.
  */
 
-const FIELDS: { key: keyof SiteSettings; label: string; hint?: string; type?: string }[] = [
+const FIELDS: { key: keyof SiteSettings; label: string; hint?: string; type?: string; group?: string }[] = [
   { key: "phone", label: "Phone number", hint: "Shown on the site and used for the call button." },
   { key: "address", label: "Street address", hint: "How somebody would find you on foot." },
-  { key: "city", label: "Town" },
-  { key: "region", label: "Region" },
+  { key: "city", label: "Town", group: "location" },
+  { key: "region", label: "Region", group: "location" },
   { key: "hours", label: "Opening hours", hint: "Written out, for example: every day, midday until late." },
-  { key: "tiktok_url", label: "TikTok", type: "url" },
-  { key: "ig_url", label: "Instagram", type: "url" },
-  { key: "fb_url", label: "Facebook", type: "url" },
+  { key: "tiktok_url", label: "TikTok", type: "url", group: "social" },
+  { key: "ig_url", label: "Instagram", type: "url", group: "social" },
+  { key: "fb_url", label: "Facebook", type: "url", group: "social" },
   {
     key: "booking_deposit_fcfa",
     label: "Table deposit, FCFA",
     hint: "What a guest pays to hold a table. It comes off their bill. Changing it changes every price the site quotes.",
     type: "number",
+    group: "deposit",
   },
   {
     key: "late_cancel_fee_fcfa",
     label: "Late cancellation fee, FCFA",
     hint: "Kept when somebody cancels inside the hour, because the table sat empty.",
     type: "number",
+    group: "deposit",
   },
   {
     key: "loyalty_point_value_fcfa",
@@ -73,6 +75,15 @@ export function Settings() {
 
   const dirty = FIELDS.some((field) => (draft[field.key] ?? "") !== (settings.data?.[field.key] ?? ""));
 
+  /** Short fields with a `group` tag share one row instead of a row each — a
+      town and a region cost the same line whether they sit apart or together. */
+  const rows: (typeof FIELDS)[number][][] = [];
+  for (const field of FIELDS) {
+    const last = rows.at(-1);
+    if (field.group && last?.[0]?.group === field.group) last.push(field);
+    else rows.push([field]);
+  }
+
   return (
     <DeskPage title="Details" lead="What the site says about the place.">
       <Loaded resource={settings}>
@@ -100,17 +111,34 @@ export function Settings() {
               }
             }}
           >
-            {FIELDS.map((field) => (
-              <TextField
-                key={field.key}
-                label={field.label}
-                hint={field.hint}
-                type={field.type ?? "text"}
-                value={draft[field.key] ?? ""}
-                maxLength={400}
-                onChange={(e) => setDraft({ ...draft, [field.key]: e.target.value })}
-              />
-            ))}
+            {rows.map((row) => {
+              const first = row[0]!;
+              return row.length === 1 ? (
+                <TextField
+                  key={first.key}
+                  label={first.label}
+                  hint={first.hint}
+                  type={first.type ?? "text"}
+                  value={draft[first.key] ?? ""}
+                  maxLength={400}
+                  onChange={(e) => setDraft({ ...draft, [first.key]: e.target.value })}
+                />
+              ) : (
+                <div key={first.group} className="field-grid" style={{ "--field-grid-cols": row.length } as CSSProperties}>
+                  {row.map((field) => (
+                    <TextField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type ?? "text"}
+                      value={draft[field.key] ?? ""}
+                      maxLength={400}
+                      onChange={(e) => setDraft({ ...draft, [field.key]: e.target.value })}
+                    />
+                  ))}
+                </div>
+              );
+            })}
 
             <div className="row">
               <Button type="submit" tone="primary" busy={busy} disabled={!dirty}>
