@@ -44,7 +44,7 @@ function Orders({ orders }: { orders: Resource<TakeawayOrder[]> }) {
     const lines = parseLines(order.items_json).filter(hasMenuId);
     if (lines.length === 0) { toast.say(locale === "fr" ? "Les articles de cette ancienne commande ne peuvent pas être ajoutés automatiquement. Ouvrez le menu pour recommencer." : "Those older items cannot be restored automatically. Open the menu to order again."); navigate("/menu"); return; }
     if (menu.data) {
-      const validIds = new Set(menu.data.filter((item) => item.is_active === 1 && item.price_fcfa != null).map((item) => item.id));
+      const validIds = new Set(menu.data.filter((item) => item.price_fcfa != null).map((item) => item.id));
       const available = lines.filter((line) => validIds.has(line.id));
       if (!available.length) { toast.say(locale === "fr" ? "Ces articles ne sont plus disponibles. Nous vous avons ouvert le menu." : "Those items are no longer available. We opened the menu for you."); navigate("/menu"); return; }
       clear(); for (const line of available) add(line.id, line.qty);

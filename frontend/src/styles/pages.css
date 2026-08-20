@@ -1020,6 +1020,11 @@
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 0.15em;
+  transition: opacity var(--dur-1) var(--ease);
+}
+
+.menu-search__reset:active {
+  opacity: 0.6;
 }
 
 .menu-search__count {
@@ -1925,6 +1930,10 @@ body:has(.booking__foot) .shell__main {
   transform: translate(-50%, -50%) scale(1.06);
 }
 
+.plan__table[data-state="free"]:active {
+  transform: translate(-50%, -50%) scale(0.95);
+}
+
 /*
  * The table you have chosen — white, not red.
  *
@@ -1939,6 +1948,10 @@ body:has(.booking__foot) .shell__main {
   color: var(--ink-1000);
   transform: translate(-50%, -50%) scale(1.12);
   z-index: 2;
+}
+
+.plan__table[data-state="picked"]:active {
+  transform: translate(-50%, -50%) scale(1.04);
 }
 
 /* Too small for this party. Still dimmed, because it is not a table that will
@@ -2163,11 +2176,15 @@ body:has(.booking__foot) .shell__main {
   color: var(--red-hi);
   font-size: var(--t-fine);
   font-weight: 600;
-  transition: background-color var(--dur-2) var(--ease);
+  transition: background-color var(--dur-2) var(--ease), transform var(--dur-1) var(--ease);
 }
 
 .recap-row__edit:hover {
   background: var(--red-wash);
+}
+
+.recap-row__edit:active {
+  transform: scale(0.94);
 }
 
 /* Ordering ahead: closed until asked for, so it never reads as a fifth step. */
