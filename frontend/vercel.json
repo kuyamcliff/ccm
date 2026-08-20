@@ -4,8 +4,8 @@
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://ccm-53uc.onrender.com/api/$1" },
-    { "source": "/uploads/(.*)", "destination": "https://ccm-53uc.onrender.com/uploads/$1" },
+    { "source": "/api/(.*)", "destination": "https://ccm-138n.onrender.com/api/$1" },
+    { "source": "/uploads/(.*)", "destination": "https://ccm-138n.onrender.com/uploads/$1" },
     { "source": "/assets/(.*)", "destination": "/assets/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
