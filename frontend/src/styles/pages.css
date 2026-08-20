@@ -2539,7 +2539,8 @@ body:has(.booking__foot) .shell__main {
 
 .auth__card {
   width: 100%;
-  max-width: 24rem;
+  max-width: 21rem;
+  margin-inline: auto;
 }
 
 /* Tighter than the shared card, which is sized for reading rather than

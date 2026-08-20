@@ -35,7 +35,7 @@ export function JoinPage() {
     <div className="page auth">
       <div className="auth__card card stack">
         <h1 className="display display--lg">Create an account</h1>
-        <p className="muted">It takes a minute and it is what lets you cancel or change a booking yourself.</p>
+        <p className="muted">Book faster, and change or cancel a table yourself.</p>
 
         <form
           className="stack"

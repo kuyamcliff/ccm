@@ -26,9 +26,11 @@
 .site-notice--info { background: rgba(255, 255, 255, 0.035); }
 .site-notice--warn { background: rgba(240, 169, 39, 0.09); }
 .site-notice__link { color: var(--white); text-decoration: underline; text-underline-offset: 0.15em; font-weight: 700; }
-.language-switcher { display: inline-flex; align-items: center; gap: 0.25rem; min-height: 2.375rem; padding: 0 0.25rem; border: 1px solid var(--line); border-radius: var(--r-full); color: var(--text-3); font-size: var(--t-micro); font-weight: 700; letter-spacing: 0.08em; }
-.language-switcher button { min-width: 2rem; min-height: 2rem; border-radius: var(--r-full); color: var(--text-2); }
-.language-switcher button:hover, .language-switcher button.language-switcher__active { background: var(--ink-800); color: var(--white); }
+/* One small pill: a globe and the two-letter code of the language in use.
+   Width is not fixed — it holds the icon and two characters and no more. */
+.lang-toggle { width: auto; gap: 0.3rem; padding-inline: var(--s-2); min-width: var(--tap); }
+.lang-toggle__code { font-size: var(--t-micro); font-weight: 700; letter-spacing: 0.06em; color: var(--text-2); }
+.lang-toggle:hover .lang-toggle__code, .lang-toggle:active .lang-toggle__code { color: var(--white); }
 .empty--service { max-width: 36rem; margin-inline: auto; }
 .empty__actions { justify-content: center; margin-top: var(--s-2); }
 .chat__quick { display: flex; gap: var(--s-2); overflow-x: auto; padding-bottom: 0.1rem; scrollbar-width: none; }
