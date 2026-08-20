@@ -332,6 +332,16 @@
   gap: var(--s-2);
 }
 
+/* Short fields with nothing to explain — a town, a handle — cost the same
+   row whether they sit alone or beside each other. Two or three to a row
+   halves or thirds that cost without crowding anything, on a phone as much
+   as a desk. */
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--field-grid-cols, 2), minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
 .field__row > .input {
   flex: 1;
 }

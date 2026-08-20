@@ -30,8 +30,8 @@ export function LegalAdmin() {
       }}>
         <Notice tone="info">Start a line with <code>## </code> to make a heading. Leave a blank line between paragraphs. Both languages are published together.</Notice>
         <div className="site-control__grid">
-          <section className="stack"><h2 className="display display--md">English</h2><TextField label="Page title" value={draft.title} maxLength={120} onChange={(e) => setDraft({ ...draft, title: e.target.value })} /><TextAreaField label="The text" value={draft.body} rows={18} onChange={(e) => setDraft({ ...draft, body: e.target.value })} /></section>
-          <section className="stack"><h2 className="display display--md">Français</h2><TextField label="Titre" value={draft.title_fr} maxLength={120} onChange={(e) => setDraft({ ...draft, title_fr: e.target.value })} /><TextAreaField label="Le texte" value={draft.body_fr} rows={18} onChange={(e) => setDraft({ ...draft, body_fr: e.target.value })} /></section>
+          <section className="stack site-control__section site-control__section--half"><h2 className="display display--md">English</h2><TextField label="Page title" value={draft.title} maxLength={120} onChange={(e) => setDraft({ ...draft, title: e.target.value })} /><TextAreaField label="The text" value={draft.body} rows={18} onChange={(e) => setDraft({ ...draft, body: e.target.value })} /></section>
+          <section className="stack site-control__section site-control__section--half"><h2 className="display display--md">Français</h2><TextField label="Titre" value={draft.title_fr} maxLength={120} onChange={(e) => setDraft({ ...draft, title_fr: e.target.value })} /><TextAreaField label="Le texte" value={draft.body_fr} rows={18} onChange={(e) => setDraft({ ...draft, body_fr: e.target.value })} /></section>
         </div>
         <div className="row row--between"><Button type="submit" tone="primary" busy={busy}>Publish both versions</Button><span className="fine faint">Last changed {stampLabel(draft.updated_at)}</span></div>
       </form> : null}

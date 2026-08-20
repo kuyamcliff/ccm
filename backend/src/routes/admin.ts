@@ -278,9 +278,43 @@ adminRouter.delete("/tables/:id", async (req, res) => {
 
 // ── Users ────────────────────────────────────────────────
 
-adminRouter.get("/users", async (_req, res) => {
-  const users = await db.prepare("SELECT id, name, email, role, banned_at, created_at FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC").all();
-  res.json({ users });
+/**
+ * Search runs on the server rather than filtering a list already sent down,
+ * so the response stays a page long instead of every account the venue has
+ * ever had — the difference between a few dozen rows and several thousand
+ * once a restaurant has been open a while.
+ */
+adminRouter.get("/users", async (req, res) => {
+  const q = req.query.q ? String(req.query.q).trim().slice(0, 80) : null;
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 30));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+
+  let where = "WHERE deleted_at IS NULL";
+  const params: SqlValue[] = [];
+  if (q) {
+    where += " AND (name ILIKE ? ESCAPE '\\' OR email ILIKE ? ESCAPE '\\')";
+    const like = likeTerm(q);
+    params.push(like, like);
+  }
+
+  // Independent of the search box, so the totals at the top of the screen
+  // describe the venue's whole account base and do not jump around as
+  // somebody types.
+  const totals = (await db
+    .prepare(
+      `SELECT COUNT(*) as total,
+              COUNT(*) FILTER (WHERE role != 'user') as staff,
+              COUNT(*) FILTER (WHERE banned_at IS NOT NULL) as banned
+       FROM users WHERE deleted_at IS NULL`
+    )
+    .get()) as { total: number; staff: number; banned: number };
+
+  const matching = ((await db.prepare(`SELECT COUNT(*) as c FROM users ${where}`).get(...params)) as { c: number }).c;
+  const users = await db
+    .prepare(`SELECT id, name, email, role, banned_at, created_at FROM users ${where} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`)
+    .all(...params, limit, offset);
+
+  res.json({ users, totals, matching, more: offset + users.length < matching });
 });
 
 adminRouter.patch("/users/:id/ban", async (req, res) => {

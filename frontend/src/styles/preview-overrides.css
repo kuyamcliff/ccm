@@ -42,6 +42,12 @@
 .helper:active { transform: translateY(1px) scale(0.98); }
 .helper__dot[data-staffed="true"] { background: var(--good); }
 @media (min-width: 60rem) { .helper { right: 1.25rem; bottom: 1.25rem; } }
+/* The page itself: eight cards of switches, so the space between them and
+   inside them is where "smaller" actually has to come from — shaving a
+   switch's own height only goes so far when it is repeated forty times. */
+.site-control { gap: var(--s-4); }
+.site-control .card { padding: var(--s-3); }
+.site-control .section-head { gap: var(--s-1); margin-block-end: var(--s-3); }
 .site-control__grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--s-4); }
 .site-control__section { grid-column: span 12; }
 @media (min-width: 60rem) { .site-control__section--half { grid-column: span 6; } }
@@ -50,9 +56,20 @@
 .site-control__hint { color: var(--text-2); font-size: var(--t-fine); line-height: 1.45; }
 .site-control__status { color: var(--good); font-size: var(--t-fine); font-weight: 700; }
 .site-control__mode { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
-.site-control__mode button { min-height: 3rem; padding: 0 var(--s-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--text-2); }
+.site-control__mode button { min-height: 2.5rem; padding: 0 var(--s-2); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--text-2); font-size: var(--t-fine); }
 .site-control__mode button[data-active="true"] { border-color: var(--red-line); background: var(--red-wash); color: var(--white); }
 .site-control__notice { min-height: 6rem; }
+
+/* One section open at a glance instead of eight, with a tap to see the rest.
+   A native <details>, so the state needs no JavaScript of its own and a
+   screen reader already knows how to announce it. */
+.site-control__disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); cursor: pointer; list-style: none; }
+.site-control__disclosure > summary::-webkit-details-marker { display: none; }
+.site-control__disclosure-head { display: flex; flex-direction: column; gap: var(--s-1); text-align: left; }
+.site-control__disclosure > summary svg { flex: none; color: var(--text-3); transition: transform var(--dur-3) var(--ease); }
+.site-control__disclosure[open] > summary svg { transform: rotate(180deg); }
+.site-control__disclosure-body { padding-top: var(--s-3); }
+.site-control__grid > .site-control__disclosure { grid-column: span 12; }
 
 .wallet-choices { display: grid; gap: var(--s-2); }
 .wallet-choice { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr); align-items: center; gap: var(--s-3); width: 100%; min-height: 4.25rem; padding: var(--s-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--text); text-align: left; transition: border-color var(--dur-2) var(--ease), background-color var(--dur-2) var(--ease), transform var(--dur-1) var(--ease); }
@@ -66,21 +83,29 @@
 @media (min-width: 35rem) { .wallet-choices { grid-template-columns: 1fr 1fr; } }
 
 /* ── Feature scheduling ───────────────────────────────────────────────────
-   A schedule is a refinement of the switch beside it, so it sits under that
-   switch rather than in a column of its own: on a phone a second column would
-   halve the room the feature name has to explain itself. */
-.feature-row { display: grid; gap: var(--s-2); padding-block: var(--s-2); border-bottom: 1px solid var(--line); }
+   The toggle sits on the same line as its switch, not in a stacked block
+   below it — a console with ten of these is read at a glance, not scrolled
+   past. Only the schedule editor itself, opened rarely, drops to its own
+   full-width line. */
+.feature-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-3); padding-block: var(--s-1); border-bottom: 1px solid var(--line); }
 .feature-row:last-child { border-bottom: 0; }
-.feature-row__schedule { display: grid; gap: var(--s-2); }
-.feature-row__toggle { justify-self: start; display: inline-flex; align-items: center; gap: var(--s-2); min-height: var(--tap); padding: 0 var(--s-3); border: 1px solid var(--line-2); border-radius: var(--r-full); background: transparent; color: var(--text-2); font-size: var(--t-fine); font-weight: 600; }
+.feature-row > .switch { flex: 1 1 14rem; min-width: 0; }
+.feature-row__schedule { display: contents; }
+.feature-row__toggle { flex: none; display: inline-flex; align-items: center; gap: 0.3rem; min-height: 1.9rem; padding: 0 var(--s-2); border: 1px solid var(--line-2); border-radius: var(--r-full); background: transparent; color: var(--text-2); font-size: var(--t-micro); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
 .feature-row__toggle[aria-expanded="true"] { border-color: var(--red-line); color: var(--text); }
 /* One dot, for the one thing worth noticing at a glance: this feature is
    switched on but its schedule means customers cannot see it right now. */
-.feature-row__dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--red); }
-.feature-row__window { display: grid; gap: var(--s-3); padding: var(--s-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.feature-row__dot { width: 0.4rem; height: 0.4rem; border-radius: 50%; background: var(--red); }
+.feature-row__window { flex-basis: 100%; width: 100%; display: grid; gap: var(--s-3); padding: var(--s-3); margin-block: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
 @media (min-width: 40rem) { .feature-row__window { grid-template-columns: repeat(2, minmax(0, 1fr)); } .feature-row__window > p, .feature-row__window > button { grid-column: 1 / -1; } }
-.feature-row__state { margin: 0; }
+.feature-row__state { flex-basis: 100%; width: 100%; margin: 0; font-size: var(--t-fine); }
 .feature-row__state--good { color: var(--good); }
 .feature-row__state--warn { color: var(--warn); }
 .feature-row__state--bad { color: var(--red-hi); }
 .feature-row__clear { justify-self: start; min-height: var(--tap); padding: 0 var(--s-3); border: 0; background: none; color: var(--red-hi); font-size: var(--t-fine); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Touch still gets a real target — the pill just doesn't have to cost 44px of
+   height on every one of these rows when the pointer is a mouse. */
+@media (pointer: coarse) {
+  .feature-row__toggle { min-height: var(--tap); }
+}
