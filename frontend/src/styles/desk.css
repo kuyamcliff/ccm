@@ -131,6 +131,10 @@
   color: var(--text);
 }
 
+.desk__link:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .desk__link svg {
   color: var(--text-3);
   flex: none;

@@ -659,6 +659,10 @@
   transition: transform var(--dur-3) var(--ease);
 }
 
+.tab:active {
+  opacity: 0.6;
+}
+
 .tab[aria-selected="true"] {
   color: var(--white);
 }

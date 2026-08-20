@@ -56,15 +56,17 @@
 .site-control__hint { color: var(--text-2); font-size: var(--t-fine); line-height: 1.45; }
 .site-control__status { color: var(--good); font-size: var(--t-fine); font-weight: 700; }
 .site-control__mode { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
-.site-control__mode button { min-height: 2.5rem; padding: 0 var(--s-2); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--text-2); font-size: var(--t-fine); }
+.site-control__mode button { min-height: 2.5rem; padding: 0 var(--s-2); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--text-2); font-size: var(--t-fine); transition: transform var(--dur-1) var(--ease); }
 .site-control__mode button[data-active="true"] { border-color: var(--red-line); background: var(--red-wash); color: var(--white); }
+.site-control__mode button:active { transform: scale(0.96); }
 .site-control__notice { min-height: 6rem; }
 
 /* One section open at a glance instead of eight, with a tap to see the rest.
    A native <details>, so the state needs no JavaScript of its own and a
    screen reader already knows how to announce it. */
-.site-control__disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); cursor: pointer; list-style: none; }
+.site-control__disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); cursor: pointer; list-style: none; transition: transform var(--dur-1) var(--ease); }
 .site-control__disclosure > summary::-webkit-details-marker { display: none; }
+.site-control__disclosure > summary:active { transform: scale(0.99); }
 .site-control__disclosure-head { display: flex; flex-direction: column; gap: var(--s-1); text-align: left; }
 .site-control__disclosure > summary svg { flex: none; color: var(--text-3); transition: transform var(--dur-3) var(--ease); }
 .site-control__disclosure[open] > summary svg { transform: rotate(180deg); }
@@ -91,8 +93,9 @@
 .feature-row:last-child { border-bottom: 0; }
 .feature-row > .switch { flex: 1 1 14rem; min-width: 0; }
 .feature-row__schedule { display: contents; }
-.feature-row__toggle { flex: none; display: inline-flex; align-items: center; gap: 0.3rem; min-height: 1.9rem; padding: 0 var(--s-2); border: 1px solid var(--line-2); border-radius: var(--r-full); background: transparent; color: var(--text-2); font-size: var(--t-micro); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.feature-row__toggle { flex: none; display: inline-flex; align-items: center; gap: 0.3rem; min-height: 1.9rem; padding: 0 var(--s-2); border: 1px solid var(--line-2); border-radius: var(--r-full); background: transparent; color: var(--text-2); font-size: var(--t-micro); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; transition: transform var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
 .feature-row__toggle[aria-expanded="true"] { border-color: var(--red-line); color: var(--text); }
+.feature-row__toggle:active { transform: scale(0.94); }
 /* One dot, for the one thing worth noticing at a glance: this feature is
    switched on but its schedule means customers cannot see it right now. */
 .feature-row__dot { width: 0.4rem; height: 0.4rem; border-radius: 50%; background: var(--red); }
