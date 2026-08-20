@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { api } from "~/lib/api";
 import type { MenuItem } from "~/lib/api";
 import { useResource } from "~/lib/useResource";
@@ -48,10 +48,18 @@ interface Props {
 export function OrderStep({ basket, onChange, onMenuLoaded }: Props) {
   const menu = useResource(() => api.site.menu(), []);
 
-  const grouped = useMemo(() => {
-    const orderable = (menu.data ?? []).filter((item) => item.price_fcfa != null);
-    if (orderable.length > 0) onMenuLoaded(orderable);
+  const orderable = useMemo(() => (menu.data ?? []).filter((item) => item.price_fcfa != null), [menu.data]);
 
+  /* Handing the menu up is a state change in the step above, so it happens
+     after this render rather than inside it. Doing it in the useMemo below
+     drew React's "cannot update a component while rendering a different
+     component" warning, which is a warning about a real hazard: an update
+     queued mid-render is not guaranteed to be kept. */
+  useEffect(() => {
+    if (orderable.length > 0) onMenuLoaded(orderable);
+  }, [orderable, onMenuLoaded]);
+
+  const grouped = useMemo(() => {
     const map = new Map<string, MenuItem[]>();
     for (const item of orderable) {
       const bucket = map.get(item.category);
@@ -59,8 +67,7 @@ export function OrderStep({ basket, onChange, onMenuLoaded }: Props) {
       else map.set(item.category, [item]);
     }
     return [...map.entries()];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [menu.data]);
+  }, [orderable]);
 
   function setQty(id: number, qty: number) {
     const next = { ...basket };

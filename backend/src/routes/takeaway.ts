@@ -60,7 +60,7 @@ takeawayRouter.post("/", orderLimit, async (req, res) => {
 
   // Prices always come from the database, never from the request body.
   const menuItems = (await db
-    .prepare("SELECT id, name, price_fcfa FROM menu_items WHERE is_active = 1 AND price_fcfa IS NOT NULL")
+    .prepare("SELECT id, name, price_fcfa FROM menu_items WHERE is_active = 1 AND sold_out = 0 AND price_fcfa IS NOT NULL")
     .all()) as MenuItem[];
   const menuMap = new Map(menuItems.map((m) => [m.id, m]));
 

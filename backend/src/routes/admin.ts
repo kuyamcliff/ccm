@@ -2,6 +2,7 @@ import { Router } from "express";
 import { applyUpdate, db } from "../db.js";
 import type { SqlValue } from "../db.js";
 import { requireAuth, requireAdmin, requireScope, requireSuperAdmin, revokeSessions } from "../auth.js";
+import { assessOwnerContent, type LegalPageRow } from "../lib/translations.js";
 import { audit } from "../lib/audit.js";
 import { closeAccount } from "../lib/closeAccount.js";
 import { MediaError, storeOrValidateUrl } from "../lib/media.js";
@@ -29,6 +30,9 @@ adminRouter.use("/payments", requireScope("payments"));
 adminRouter.use("/notifications", requireScope("messages"));
 adminRouter.use("/reviews", requireScope("reviews"));
 adminRouter.use("/analytics", requireScope("insights"));
+/* The report only names owner-entered wording and where to change it, and
+   both of those live behind the settings scope already. */
+adminRouter.use("/translations", requireScope("settings"));
 
 const UNDO_WINDOW_MS = 30 * 60 * 1000;
 
@@ -39,6 +43,39 @@ const UNDO_WINDOW_MS = 30 * 60 * 1000;
 function likeTerm(raw: string): string {
   return `%${raw.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
+
+// ── Translations ────────────────────────────────────────
+
+/**
+ * What is still only in English.
+ *
+ * Only the wording the owner types themselves. The application's own strings
+ * are held level by the type system and a test in the customer app, so listing
+ * them here would pad the number with work nobody using this screen can do.
+ */
+adminRouter.get("/translations", async (_req, res) => {
+  const row = (await db.prepare("SELECT value FROM site_settings WHERE key = 'site_config_json'").get()) as
+    | { value: string }
+    | undefined;
+
+  let config: Record<string, unknown> = {};
+  if (row?.value) {
+    try {
+      const parsed = JSON.parse(row.value) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) config = parsed as Record<string, unknown>;
+    } catch {
+      /* A blob that will not parse has no readable wording in it. The report
+         says nothing rather than guessing, and Site control is where the owner
+         would see the same problem. */
+    }
+  }
+
+  const pages = (await db
+    .prepare("SELECT slug, title, title_fr, body, body_fr FROM legal_pages ORDER BY slug")
+    .all()) as LegalPageRow[];
+
+  res.json({ report: assessOwnerContent(config, pages) });
+});
 
 // ── Stats ───────────────────────────────────────────────
 
@@ -362,6 +399,7 @@ adminRouter.patch("/menu/:id", async (req, res) => {
   if (req.body?.price_label !== undefined) fields.price_label = req.body.price_label ? String(req.body.price_label).slice(0, 40) : null;
   if (req.body?.position !== undefined) fields.position = Number(req.body.position) || 0;
   if (req.body?.is_active !== undefined) fields.is_active = req.body.is_active ? 1 : 0;
+  if (req.body?.sold_out !== undefined) fields.sold_out = req.body.sold_out ? 1 : 0;
 
   if (req.body?.price_fcfa !== undefined) {
     const price = req.body.price_fcfa ? Number(req.body.price_fcfa) : null;

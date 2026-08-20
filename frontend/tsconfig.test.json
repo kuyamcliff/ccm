@@ -1,0 +1,12 @@
+{
+  /* The test project. Identical to the application's settings except that it
+     can see Node's globals and the test files themselves, neither of which the
+     browser bundle is allowed to know about. */
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "vite/client"],
+    "noEmit": true
+  },
+  "include": ["src"],
+  "exclude": []
+}

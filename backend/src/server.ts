@@ -7,10 +7,11 @@ import { db, loadIdColumns, pool } from "./db.js";
 import { UPLOAD_DIR } from "./lib/media.js";
 import { migrateInlineMedia } from "./lib/migrate-media.js";
 import { migrateSchema } from "./lib/migrate-schema.js";
+import { newErrorReference } from "./lib/errorReference.js";
 import { migrateUxControls } from "./lib/migrate-ux-controls.js";
 import { backfillLegacyBookingCodes } from "./lib/bookingCode.js";
 import { rateLimit, sameOriginOnly, securityHeaders } from "./middleware/security.js";
-import { requireSiteService } from "./middleware/siteFeatures.js";
+import { maintenanceGate, requireSiteService } from "./middleware/siteFeatures.js";
 import { initTelegramLogger, flushTelegramLogs } from "./lib/telegramLogger.js";
 import { authRouter } from "./routes/auth.js";
 import { reservationsRouter } from "./routes/reservations.js";
@@ -58,6 +59,10 @@ app.use(cookieParser());
 app.use(attachUser);
 app.use(sameOriginOnly);
 app.use("/api", rateLimit("global", { windowMs: 60 * 1000, max: 300, message: "You are sending requests very quickly. Slow down and try again." }));
+/* After attachUser, so staff are recognised and let through, and after the
+   rate limit, so a closed site cannot be used to hammer the database with
+   config reads. */
+app.use("/api", maintenanceGate);
 
 app.get("/api/health", async (_req, res) => { res.setHeader("Cache-Control", "no-store"); try { await db.prepare("SELECT 1").get(); res.json({ ok: true, database: "up", uptime_seconds: Math.round(process.uptime()) }); } catch (err) { console.error("[health] database check failed", err); res.status(503).json({ ok: false, database: "down" }); } });
 app.use("/api/auth", authRouter);
@@ -92,7 +97,13 @@ app.use("/api", (_req, res) => res.status(404).json({ error: "Not found." }));
 app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (err && typeof err === "object" && "type" in err) { const type = (err as { type: string }).type; if (type === "entity.too.large") { res.status(413).json({ error: "That file is too large. Keep uploads under 6 MB." }); return; } if (type === "entity.parse.failed") { res.status(400).json({ error: "That request was malformed." }); return; } }
   if (err && typeof err === "object" && "code" in err) { const code = String((err as { code: unknown }).code); if (code === "ECONNABORTED" || code === "ECONNRESET" || code === "EPIPE") return; if (["55P03", "40001", "40P01", "53300"].includes(code)) { res.setHeader("Retry-After", "2"); res.status(503).json({ error: "We are very busy right now. Try that again in a moment." }); return; } }
-  console.error(`[error] ${req.method} ${req.originalUrl}`, err); if (res.headersSent) { next(err); return; } res.status(500).json({ error: "Something broke on our side. Try again." });
+  /* One code, printed beside the customer's apology and logged next to the
+     stack, so "it said CCM-7F42" is enough for support to find the exact
+     failure instead of asking what time it happened. */
+  const reference = newErrorReference();
+  console.error(`[error] ${reference} ${req.method} ${req.originalUrl}`, err);
+  if (res.headersSent) { next(err); return; }
+  res.status(500).json({ error: "Something broke on our side. Try again.", reference });
 });
 const server = app.listen(PORT, () => console.log(`Camchop backend listening on http://localhost:${PORT}`));
 server.requestTimeout = 60_000; server.headersTimeout = 20_000; server.keepAliveTimeout = 65_000; server.timeout = 0;

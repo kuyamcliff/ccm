@@ -10,7 +10,12 @@
     "smoke": "tsx scripts/smoke.ts",
     "check:rules": "tsx scripts/check-password-rules.ts",
     "check:loyalty": "tsx scripts/check-loyalty.ts",
-    "momo:provision": "tsx scripts/momo-provision.ts"
+    "momo:provision": "tsx scripts/momo-provision.ts",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "db:setup": "tsx --env-file=.env scripts/db-setup.ts",
+    "db:seed": "tsx --env-file=.env scripts/db-seed.ts",
+    "test:integration": "tsx --env-file-if-exists=.env --test \"tests/**/*.test.ts\""
   },
   "dependencies": {
     "@simplewebauthn/server": "^13.3.2",

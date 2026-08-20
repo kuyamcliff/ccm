@@ -62,3 +62,23 @@
 .wallet-choice__copy strong { color: var(--white); }
 .wallet-choice__copy span { color: var(--text-2); font-size: var(--t-fine); line-height: 1.4; }
 @media (min-width: 35rem) { .wallet-choices { grid-template-columns: 1fr 1fr; } }
+
+/* ── Feature scheduling ───────────────────────────────────────────────────
+   A schedule is a refinement of the switch beside it, so it sits under that
+   switch rather than in a column of its own: on a phone a second column would
+   halve the room the feature name has to explain itself. */
+.feature-row { display: grid; gap: var(--s-2); padding-block: var(--s-2); border-bottom: 1px solid var(--line); }
+.feature-row:last-child { border-bottom: 0; }
+.feature-row__schedule { display: grid; gap: var(--s-2); }
+.feature-row__toggle { justify-self: start; display: inline-flex; align-items: center; gap: var(--s-2); min-height: var(--tap); padding: 0 var(--s-3); border: 1px solid var(--line-2); border-radius: var(--r-full); background: transparent; color: var(--text-2); font-size: var(--t-fine); font-weight: 600; }
+.feature-row__toggle[aria-expanded="true"] { border-color: var(--red-line); color: var(--text); }
+/* One dot, for the one thing worth noticing at a glance: this feature is
+   switched on but its schedule means customers cannot see it right now. */
+.feature-row__dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--red); }
+.feature-row__window { display: grid; gap: var(--s-3); padding: var(--s-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+@media (min-width: 40rem) { .feature-row__window { grid-template-columns: repeat(2, minmax(0, 1fr)); } .feature-row__window > p, .feature-row__window > button { grid-column: 1 / -1; } }
+.feature-row__state { margin: 0; }
+.feature-row__state--good { color: var(--good); }
+.feature-row__state--warn { color: var(--warn); }
+.feature-row__state--bad { color: var(--red-hi); }
+.feature-row__clear { justify-self: start; min-height: var(--tap); padding: 0 var(--s-3); border: 0; background: none; color: var(--red-hi); font-size: var(--t-fine); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }

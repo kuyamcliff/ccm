@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Pool, type PoolClient, types } from "pg";
+import { toPositional } from "./lib/sqlPlaceholders.js";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) throw new Error("DATABASE_URL is not set.");
@@ -33,7 +34,6 @@ export async function loadIdColumns(): Promise<void> {
   }
 }
 function tableHasId(table: string): boolean { return tablesWithId ? tablesWithId.has(table) : !NON_ID_PK_TABLES.has(table); }
-function toPositional(sql: string): string { let out = ""; let inQuote = false; let n = 0; for (let i = 0; i < sql.length; i++) { const c = sql[i]; if (c === "'") { inQuote = !inQuote; out += c; continue; } if (c === "?" && !inQuote) { n++; out += `$${n}`; continue; } out += c; } return out; }
 function tableFromInsert(sql: string): string | null { const m = /insert\s+into\s+["`]?([\w]+)["`]?/i.exec(sql); return m ? m[1] : null; }
 const als = new AsyncLocalStorage<{ client: PoolClient }>();
 async function run(sql: string, params: SqlValue[]) { const client = als.getStore()?.client; const text = toPositional(sql); return client ? client.query(text, params) : pool.query(text, params); }

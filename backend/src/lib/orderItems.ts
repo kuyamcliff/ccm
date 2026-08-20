@@ -48,7 +48,7 @@ export async function priceChosenItems(raw: unknown): Promise<PricedItems> {
   }
 
   const menuItems = (await db
-    .prepare("SELECT id, name, price_fcfa FROM menu_items WHERE is_active = 1 AND price_fcfa IS NOT NULL")
+    .prepare("SELECT id, name, price_fcfa FROM menu_items WHERE is_active = 1 AND sold_out = 0 AND price_fcfa IS NOT NULL")
     .all()) as { id: number; name: string; price_fcfa: number }[];
   const menu = new Map(menuItems.map((m) => [m.id, m]));
 

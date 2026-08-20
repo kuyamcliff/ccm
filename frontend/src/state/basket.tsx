@@ -174,9 +174,11 @@ export function BasketProvider({ children }: { children: ReactNode }) {
 
       for (const line of lines) {
         const item = byId.get(line.id);
-        // A dish taken off the menu, or one priced by the market rather than
-        // by the plate, cannot be ordered ahead.
-        if (!item || item.is_active !== 1 || item.price_fcfa == null) {
+        /* A dish taken off the menu, sold out since it was added, or priced by
+           the market rather than by the plate, cannot be ordered ahead. The
+           server refuses these too; dropping them here is so the total on
+           screen matches the one that will be charged. */
+        if (!item || item.is_active !== 1 || item.sold_out === 1 || item.price_fcfa == null) {
           dropped += 1;
           continue;
         }

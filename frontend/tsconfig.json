@@ -9,7 +9,7 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
-    "noUnusedLocals": false,
+    "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "exactOptionalPropertyTypes": false,
@@ -22,5 +22,9 @@
     "baseUrl": "src",
     "paths": { "~/*": ["*"] }
   },
-  "include": ["src"]
+  /* Tests are typechecked by tsconfig.test.json, which is the only project
+     that may see Node's globals. Keeping them out here stops a test file from
+     importing `node:test` into the browser bundle. */
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
 }

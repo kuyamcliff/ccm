@@ -112,6 +112,7 @@ export function MenuAdmin() {
                     <th className="table__num">Price</th>
                     <th className="table__num">Order</th>
                     <th>Showing</th>
+                    <th>Sold out</th>
                     <th />
                   </tr>
                 </thead>
@@ -147,6 +148,29 @@ export function MenuAdmin() {
                           />
                           <span className="switch__track" aria-hidden="true" />
                           <span className="sr-only">{item.name} on the menu</span>
+                        </label>
+                      </td>
+                      <td>
+                        {/* Separate from "showing" on purpose. Taking a dish
+                            off the menu hides that it exists; selling out says
+                            come back tomorrow, and the kitchen flips this one
+                            several times a week. */}
+                        <label className="switch">
+                          <input
+                            type="checkbox"
+                            role="switch"
+                            checked={item.sold_out === 1}
+                            onChange={async (event) => {
+                              try {
+                                await api.desk.menu.update(item.id, { sold_out: event.target.checked ? 1 : 0 });
+                                menu.reload();
+                              } catch (err) {
+                                toast.failed(err);
+                              }
+                            }}
+                          />
+                          <span className="switch__track" aria-hidden="true" />
+                          <span className="sr-only">{item.name} sold out today</span>
                         </label>
                       </td>
                       <td>

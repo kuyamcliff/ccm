@@ -7,7 +7,7 @@ export interface StaffAccess { id: number; name: string; email: string; role: "a
 export type LoginOutcome = { user: User } | { requires_2fa: true; challenge: string };
 export function isTwoFactorChallenge(value: LoginOutcome): value is { requires_2fa: true; challenge: string } { return "requires_2fa" in value; }
 export interface SiteSettings { phone?: string; address?: string; city?: string; region?: string; hours?: string; tiktok_url?: string; ig_url?: string; fb_url?: string; site_config_json?: string; booking_deposit_fcfa?: string; late_cancel_fee_fcfa?: string; loyalty_point_value_fcfa?: string; loyalty_min_redeem_points?: string; loyalty_max_redeem_percent?: string; }
-export interface MenuItem { id: number; category: string; name: string; description: string; price_fcfa: number | null; price_label: string | null; image_url: string | null; position: number; is_active: number; dietary_tags: string; }
+export interface MenuItem { id: number; category: string; name: string; description: string; price_fcfa: number | null; price_label: string | null; image_url: string | null; position: number; is_active: number; /** On the menu but not available today. Distinct from is_active, which removes it entirely. */ sold_out: number; dietary_tags: string; }
 export type FixtureKind = "grill" | "tv" | "bar" | "door" | "toilets" | "kitchen" | "speaker" | "plant";
 export interface FloorFixture { id: number; kind: FixtureKind; label: string; pos_x: number; pos_y: number; width: number; height: number; }
 export interface DiningTable { id: number; label: string; capacity: number; zone: string; pos_x: number; pos_y: number; active: number; available?: boolean; }
@@ -52,3 +52,20 @@ export type DeskTable = DiningTable & { today_count: number; booking_id: number 
 export type DeskPayment = Payment & { res_date: string; res_time: string; user_name: string };
 export type DeskReceipt = ReceiptSummary & { user_name: string; user_email: string; pay_reference: string | null };
 export type DeskOrder = TakeawayOrder & { user_name: string | null };
+
+/** One piece of owner-entered wording, and whether it has been translated. */
+export interface TranslationEntry {
+  id: string;
+  label: string;
+  /** The console screen it is changed on. */
+  where: string;
+  /** "missing" is an empty French box; "copied" is the English pasted into it. */
+  status: "missing" | "copied" | "done";
+  english: string;
+}
+
+export interface TranslationReport {
+  total: number;
+  done: number;
+  outstanding: TranslationEntry[];
+}

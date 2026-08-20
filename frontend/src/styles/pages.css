@@ -49,6 +49,39 @@
   }
 }
 
+/*
+ * The hero before anybody has uploaded a photograph.
+ *
+ * The heights above reserve most of the first screen for the picture, which is
+ * right when there is one and indefensible when there is not: a restaurant
+ * that has not added photos yet got 384px of empty black, with the headline
+ * and both buttons pushed off the bottom of the phone. The first thing a
+ * hungry visitor saw was nothing at all.
+ *
+ * With no picture the strip shrinks to the address it carries, and the padding
+ * replaces the height the hero borrows back from the transparent top bar.
+ */
+.hero__media--bare {
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  padding-top: calc(var(--topbar-h) + var(--safe-t) + var(--s-3));
+}
+
+.hero__media--bare .hero__eyebrow {
+  position: static;
+  margin-inline: var(--gutter);
+  /* Nothing behind it to sit on top of any more. */
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding-inline: 0;
+}
+
+.hero__media--bare::after {
+  content: none;
+}
+
 .hero__frames {
   position: absolute;
   inset: 0;
@@ -915,6 +948,83 @@
 }
 
 /* ══ Menu ═══════════════════════════════════════════════════════════════════ */
+
+.menu-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--s-4);
+}
+
+@media (min-width: 40rem) {
+  .menu-search {
+    max-width: 24rem;
+  }
+}
+
+.menu-search__icon {
+  position: absolute;
+  left: var(--s-4);
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.menu-search__input {
+  width: 100%;
+  min-height: var(--tap);
+  padding: var(--s-3) var(--s-4) var(--s-3) 2.75rem;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-full);
+  background: var(--ink-900);
+  color: var(--white);
+  /* 16px exactly, same reason as every other input: under it, iOS zooms the
+     page on focus and the layout never recovers. */
+  font-size: 1rem;
+  transition:
+    border-color var(--dur-2) var(--ease),
+    background-color var(--dur-2) var(--ease);
+}
+
+.menu-search__input::placeholder {
+  color: var(--text-3);
+}
+
+.menu-search__input:focus {
+  outline: none;
+  border-color: var(--red);
+  background: var(--ink-850);
+}
+
+.menu-search__clear {
+  position: absolute;
+  right: 0.4rem;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--r-full);
+  color: var(--text-2);
+  transition: background-color var(--dur-1) var(--ease);
+}
+
+.menu-search__clear:hover {
+  background: var(--ink-800);
+}
+
+.menu-search__clear:active {
+  transform: scale(0.92);
+}
+
+.menu-search__reset {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.menu-search__count {
+  margin-top: var(--s-4);
+}
 
 .menu-heading {
   position: relative;
@@ -2688,3 +2798,61 @@ body:has(.booking__foot) .shell__main {
   max-width: var(--prose-max);
   line-height: 1.65;
 }
+
+/* ── A booking clash, and the way out of it ───────────────────────────────
+   Lives inside the notice that carries the refusal, so it inherits the page
+   gutter and must not use the bleeding chip rail — these wrap instead. There
+   are never more than three of each, so wrapping costs at most two rows. */
+
+/* Always in the tree so there is something to scroll to the moment a refusal
+   lands, and out of the flow entirely until there is. */
+.booking__problem:empty {
+  display: none;
+}
+
+.booking__problem {
+  margin-top: var(--s-5);
+}
+
+.clash {
+  display: grid;
+  gap: var(--s-4);
+  margin-top: var(--s-3);
+}
+
+.clash__group {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.clash__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+/* The chips here are an offer, not a filter, so they read as something to
+   press: a visible face rather than the transparent outline a category uses.
+   `min-height` keeps them at the tap target the rest of the app holds to. */
+.clash__choices .chip {
+  min-height: var(--tap);
+  background: var(--surface-2);
+  border-color: var(--line-2);
+  color: var(--text);
+}
+
+.clash__choices .chip .faint {
+  font-weight: 500;
+}
+
+/* ── Maintenance ──────────────────────────────────────────────────────────
+   The only page a customer can reach while the site is closed, so it stands
+   on its own: no header, no tab bar, nothing to tap that leads back here. */
+.maintenance { min-height: 100svh; display: grid; place-items: center; padding: var(--s-6) var(--gutter); }
+.maintenance__inner { display: grid; gap: var(--s-4); justify-items: start; width: min(100%, 34rem); }
+.maintenance__mark { display: grid; place-items: center; width: 3.5rem; height: 3.5rem; border: 1px solid var(--line-2); border-radius: var(--r-full); color: var(--text-2); }
+.maintenance__eyebrow { color: var(--red); }
+.maintenance__title { margin: 0; }
+.maintenance__reach { display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: var(--s-2); }
+.maintenance__reach .mono { opacity: 0.75; }
+.maintenance__where { display: flex; align-items: center; gap: var(--s-2); margin: 0; color: var(--text-2); font-size: var(--t-fine); }
