@@ -618,14 +618,27 @@ adminRouter.patch("/payments/:id", async (req, res) => {
 // ── Audit trail ───────────────────────────────────────────
 
 adminRouter.get("/audit", requireSuperAdmin, async (req, res) => {
-  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
+  const q = req.query.q ? String(req.query.q).trim().slice(0, 80) : null;
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 30));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+
+  let where = "";
+  const params: SqlValue[] = [];
+  if (q) {
+    where = " WHERE (actor_name ILIKE ? ESCAPE '\\' OR action ILIKE ? ESCAPE '\\' OR target_type ILIKE ? ESCAPE '\\' OR target_id ILIKE ? ESCAPE '\\' OR detail ILIKE ? ESCAPE '\\')";
+    const like = likeTerm(q);
+    params.push(like, like, like, like, like);
+  }
+
+  const matching = ((await db.prepare(`SELECT COUNT(*) as c FROM admin_audit_log${where}`).get(...params)) as { c: number }).c;
   const entries = await db
     .prepare(
       `SELECT id, actor_id, actor_name, action, target_type, target_id, detail, created_at
-       FROM admin_audit_log ORDER BY id DESC LIMIT ?`
+       FROM admin_audit_log${where} ORDER BY id DESC LIMIT ? OFFSET ?`
     )
-    .all(limit);
-  res.json({ entries });
+    .all(...params, limit, offset);
+
+  res.json({ entries, more: offset + entries.length < matching });
 });
 
 // ── Reviews ──────────────────────────────────────────────
