@@ -106,8 +106,10 @@ export const PORT = Number(process.env.PORT ?? 4000);
    unset. */
 export const RESEND_API_KEY = optional("RESEND_API_KEY");
 
-/** Must be an address on a domain verified in the Resend dashboard. */
-export const EMAIL_FROM = optional("EMAIL_FROM", "Cam Chop Meat <onboarding@resend.dev>");
+/** Must be an address on a domain verified in the Resend dashboard. Resend's
+    own sandbox address is the one default that works with zero setup, so it
+    stays as the fallback — everything else about it is env-driven. */
+export const EMAIL_FROM = optional("EMAIL_FROM", `${VENUE_NAME} <onboarding@resend.dev>`);
 
 /** Where Resend should send replies, when it differs from the from address. */
 export const EMAIL_REPLY_TO = optional("EMAIL_REPLY_TO");
@@ -145,6 +147,15 @@ export const WHATSAPP_ENABLED =
 
 /** Public base URL the API is reachable at — used to build absolute image URLs. */
 export const PUBLIC_API_URL = optional("PUBLIC_API_URL", "").replace(/\/+$/, "");
+
+/* ── IP geolocation (ipinfo.io) ────────────────────────────────────────────
+   Powers the rough "Buea, CM" shown against a session in the account's own
+   security tab. Off by default: looking up a guest's IP with a third party
+   is a real decision the owner should switch on deliberately, not something
+   that starts happening the moment a token appears in an example .env file.
+   Until this is set, a session's location reads "Unknown" rather than a
+   guess. */
+export const IPINFO_TOKEN = optional("IPINFO_TOKEN");
 
 /* ── Telegram Logging ──────────────────────────────────────────────────────
    Send all render logs to Telegram for real-time monitoring. */

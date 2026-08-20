@@ -90,6 +90,26 @@ CREATE TABLE IF NOT EXISTS user_passkeys (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS user_passkeys_credential_idx ON user_passkeys (credential_id);
 
+-- One row per signed-in device, so "Sessions" in the account's security tab
+-- can show and individually revoke each one. `id` is the session's own random
+-- id (the JWT's `jti` claim), not a serial — it has to be guessable by
+-- nobody and generated before the row exists, at the moment a session is
+-- signed. A session cookie issued before this table existed carries no jti
+-- and is validated the old way, purely by session_version; it simply never
+-- appears in this list until its owner signs in again.
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id            text PRIMARY KEY,
+  user_id       integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  device_name   text NOT NULL DEFAULT 'Unknown device',
+  device_type   text NOT NULL DEFAULT 'unknown',
+  ip            text,
+  location      text,
+  created_at    text NOT NULL DEFAULT now_text(),
+  last_seen_at  text NOT NULL DEFAULT now_text(),
+  revoked_at    text
+);
+CREATE INDEX IF NOT EXISTS user_sessions_user_idx ON user_sessions (user_id, revoked_at);
+
 CREATE TABLE IF NOT EXISTS password_resets (
   id         serial PRIMARY KEY,
   user_id    integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
@@ -102,6 +122,23 @@ CREATE TABLE IF NOT EXISTS password_resets (
   created_at text NOT NULL DEFAULT now_text()
 );
 CREATE INDEX IF NOT EXISTS password_resets_user_idx ON password_resets (user_id, created_at DESC);
+
+-- A pending email change, proven by a code sent to the *new* address rather
+-- than the old one: the property that matters here is that the guest can
+-- read mail sent there, not that they remember their old inbox. Kept as its
+-- own table rather than folded into password_resets so starting one flow can
+-- never silently burn a code issued for the other.
+CREATE TABLE IF NOT EXISTS email_changes (
+  id         serial PRIMARY KEY,
+  user_id    integer NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  new_email  text NOT NULL,
+  token_hash text NOT NULL,
+  attempts   integer NOT NULL DEFAULT 0,
+  expires_at text NOT NULL,
+  used_at    text,
+  created_at text NOT NULL DEFAULT now_text()
+);
+CREATE INDEX IF NOT EXISTS email_changes_user_idx ON email_changes (user_id, created_at DESC);
 
 -- ── Staff authorisation ─────────────────────────────────────────────────────
 -- Page-level scope first, then the action within it. Both default-deny by

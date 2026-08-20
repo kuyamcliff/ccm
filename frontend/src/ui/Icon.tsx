@@ -71,7 +71,10 @@ export type IconName =
   | "sparkle"
   | "thumb-up"
   | "thumb-down"
-  | "wifi-off";
+  | "wifi-off"
+  | "smartphone"
+  | "tablet"
+  | "monitor";
 
 /* Paths are stroked, not filled, unless noted. Coordinates are exact so the
    whole set stays optically aligned at 20px. */
@@ -138,6 +141,9 @@ const PATHS: Record<IconName, string> = {
   sparkle: "M12 3l1.8 4.9L18.5 10l-4.7 2.1L12 17l-1.8-4.9L5.5 10l4.7-2.1L12 3ZM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z",
   "thumb-up": "M7 10v10H4V10h3ZM7 10l4-7a2 2 0 0 1 2 2v4h5.5a2 2 0 0 1 2 2.4l-1.4 6A2 2 0 0 1 17 20H7",
   "thumb-down": "M17 14V4h3v10h-3ZM17 14l-4 7a2 2 0 0 1-2-2v-4H5.5a2 2 0 0 1-2-2.4l1.4-6A2 2 0 0 1 7 4h10",
+  smartphone: "M7.5 2h9a1.5 1.5 0 0 1 1.5 1.5v17a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 20.5v-17A1.5 1.5 0 0 1 7.5 2ZM11 19h2",
+  tablet: "M5.5 3h13A1.5 1.5 0 0 1 20 4.5v15a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5v-15A1.5 1.5 0 0 1 5.5 3ZM11 18.5h2",
+  monitor: "M3.5 4h17a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-17a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1ZM8 21h8M12 17v4",
   "wifi-off": "M3 3l18 18M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 3.5-2.3M19 13a10 10 0 0 0-3-2.2M2 9a15 15 0 0 1 5-3.1M22 9a15 15 0 0 0-9.5-3.4M12 20h.01",
 };
 

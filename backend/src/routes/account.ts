@@ -14,6 +14,10 @@ import { checkPassword } from "../lib/passwordStrength.js";
 import { closeAccount } from "../lib/closeAccount.js";
 import { generateSecret, otpauthUri, verifyTotp } from "../lib/totp.js";
 import { rateLimit } from "../middleware/security.js";
+import { listUserSessions, openUserSession, revokeUserSession } from "../lib/userSessions.js";
+import { emailAvailable, sendMail } from "../lib/mailer.js";
+import { CODE_TTL_MINUTES, issueEmailChangeCode, purgeExpiredEmailChanges, verifyEmailChangeCode } from "../lib/emailChange.js";
+import { VENUE_NAME } from "../config.js";
 
 import { generateRegistrationOptions, verifyRegistrationResponse } from "@simplewebauthn/server";
 import type { AuthenticatorTransportFuture } from "@simplewebauthn/server";
@@ -67,9 +71,12 @@ async function currentHash(userId: number): Promise<string | undefined> {
 }
 
 /** Re-issues this device's cookie after a session revocation so the user who
- *  made the change stays signed in while every other device is logged out. */
-function reissueSession(userId: number, version: number, res: import("express").Response) {
-  res.cookie(COOKIE_NAME, signSession(userId, version), sessionCookieOptions());
+ *  made the change stays signed in while every other device is logged out.
+ *  `revokeSessions` just closed every session row too, this device's own
+ *  included, so a fresh one is opened here rather than left with none. */
+async function reissueSession(userId: number, version: number, req: import("express").Request, res: import("express").Response) {
+  const sid = await openUserSession(userId, req);
+  res.cookie(COOKIE_NAME, signSession(userId, version, sid), sessionCookieOptions());
 }
 
 // ── Receipts ─────────────────────────────────────────────
@@ -93,6 +100,15 @@ accountRouter.get("/receipts", async (req, res) => {
 
 // ── Profile ───────────────────────────────────────────────
 
+/**
+ * Step one of changing an email: check the password, check the address is
+ * free, and prove the guest can actually read mail sent there.
+ *
+ * Applies immediately, with no code, when Resend is not configured — the
+ * same graceful fallback password reset uses. A guest is never blocked from
+ * changing their email by a piece of infrastructure they did not set up;
+ * they just do not get the extra proof step while it is off.
+ */
 accountRouter.patch("/email", credentialLimit, async (req, res) => {
   const user = req.user!;
   const email = String(req.body?.email ?? "").trim().toLowerCase();
@@ -106,6 +122,10 @@ accountRouter.patch("/email", credentialLimit, async (req, res) => {
     res.status(400).json({ error: "That email address does not look right." });
     return;
   }
+  if (email === user.email) {
+    res.status(400).json({ error: "That is already your email." });
+    return;
+  }
 
   const hash = await currentHash(user.id);
   if (!hash) { res.status(404).json({ error: "User not found." }); return; }
@@ -117,13 +137,64 @@ accountRouter.patch("/email", credentialLimit, async (req, res) => {
   const existing = await db.prepare("SELECT id FROM users WHERE email = ? AND id != ?").get(email, user.id);
   if (existing) { res.status(409).json({ error: "That email is already in use." }); return; }
 
-  await db.prepare("UPDATE users SET email = ? WHERE id = ?").run(email, user.id);
+  if (!emailAvailable()) {
+    await db.prepare("UPDATE users SET email = ? WHERE id = ?").run(email, user.id);
+    const version = await revokeSessions(user.id);
+    await reissueSession(user.id, version, req, res);
+    res.json({ ok: true, pending: false, email });
+    return;
+  }
+
+  const { code, expiresAt } = await issueEmailChangeCode(user.id, email);
+  const result = await sendMail({
+    to: email,
+    subject: `${code} confirms your new ${VENUE_NAME} email`,
+    text:
+      `Someone asked to change the email on your ${VENUE_NAME} account to this address.\n\n` +
+      `Your confirmation code is:\n\n    ${code}\n\n` +
+      `It expires in ${CODE_TTL_MINUTES} minutes. If this was not you, ignore this message — ` +
+      `your account keeps its current email and nothing changes.`,
+  });
+  if (!result.sent) console.error(`[account] email-change code to user ${user.id} FAILED: ${result.reason}`);
+
+  res.json({
+    ok: true,
+    pending: true,
+    expires_in_minutes: CODE_TTL_MINUTES,
+    message: `We sent a code to ${email}. Enter it to finish changing your email.`,
+  });
+});
+
+/** Step two: the code from the new inbox, which is what actually applies the
+    change. Wrong or missing on purpose does not say why — the same shape as
+    every other code check in this codebase — so a stolen session cannot be
+    used to probe whether a request is even pending. */
+accountRouter.post("/email/confirm", credentialLimit, async (req, res) => {
+  const user = req.user!;
+  const code = String(req.body?.code ?? "").trim();
+
+  const check = await verifyEmailChangeCode(user.id, code);
+  if (!check.ok) {
+    const message =
+      check.reason === "locked"
+        ? "Too many wrong codes. Start the email change again."
+        : check.reason === "expired"
+          ? "That code expired. Start the email change again."
+          : check.reason === "no_code"
+            ? "No email change is waiting. Start one first."
+            : `That code is wrong.${check.attemptsLeft ? ` ${check.attemptsLeft} tries left.` : ""}`;
+    res.status(400).json({ error: message });
+    return;
+  }
+
+  await db.prepare("UPDATE users SET email = ? WHERE id = ?").run(check.newEmail, user.id);
 
   // The address a password reset would go to just changed — drop other sessions.
   const version = await revokeSessions(user.id);
-  reissueSession(user.id, version, res);
+  await reissueSession(user.id, version, req, res);
+  await purgeExpiredEmailChanges();
 
-  res.json({ ok: true, email });
+  res.json({ ok: true, email: check.newEmail });
 });
 
 accountRouter.patch("/password", credentialLimit, async (req, res) => {
@@ -157,7 +228,7 @@ accountRouter.patch("/password", credentialLimit, async (req, res) => {
 
   // Any session token stolen before this point stops working now.
   const version = await revokeSessions(user.id);
-  reissueSession(user.id, version, res);
+  await reissueSession(user.id, version, req, res);
 
   res.json({ ok: true, signed_out_other_devices: true });
 });
@@ -220,7 +291,7 @@ accountRouter.post("/2fa/enable", totpLimit, async (req, res) => {
   await db.prepare("UPDATE users SET totp_enabled = 1 WHERE id = ?").run(user.id);
 
   const version = await revokeSessions(user.id);
-  reissueSession(user.id, version, res);
+  await reissueSession(user.id, version, req, res);
 
   res.json({ ok: true });
 });
@@ -243,7 +314,7 @@ accountRouter.post("/2fa/disable", credentialLimit, async (req, res) => {
   await db.prepare("UPDATE users SET totp_secret = NULL, totp_enabled = 0 WHERE id = ?").run(user.id);
 
   const version = await revokeSessions(user.id);
-  reissueSession(user.id, version, res);
+  await reissueSession(user.id, version, req, res);
 
   res.json({ ok: true });
 });
@@ -316,8 +387,8 @@ accountRouter.post("/passkeys/verify", async (req, res) => {
     return;
   }
 
-  const { credential } = verification.registrationInfo;
-  const name = guessPasskeyName(req.get("user-agent"));
+  const { credential, aaguid } = verification.registrationInfo;
+  const name = guessPasskeyName(req.get("user-agent"), aaguid);
 
   try {
     await db
@@ -356,6 +427,29 @@ accountRouter.delete("/passkeys/:id", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad passkey id." }); return; }
   await db.prepare("DELETE FROM user_passkeys WHERE id = ? AND user_id = ?").run(id, req.user!.id);
+  res.json({ ok: true });
+});
+
+// ── Sessions ─────────────────────────────────────────────
+
+accountRouter.get("/sessions", async (req, res) => {
+  const sessions = await listUserSessions(req.user!.id);
+  res.json({
+    sessions: sessions.map((s) => ({ ...s, current: s.id === req.user!.sid })),
+  });
+});
+
+accountRouter.delete("/sessions/:id", async (req, res) => {
+  const id = String(req.params.id);
+  if (id === req.user!.sid) {
+    // Ending your own session through the list is what the sign-out button is
+    // for, and that path also clears this device's cookie — deleting it here
+    // would leave a guest holding a cookie the server has already discarded.
+    res.status(400).json({ error: "Use sign out for this device." });
+    return;
+  }
+  const found = await revokeUserSession(req.user!.id, id);
+  if (!found) { res.status(404).json({ error: "Session not found." }); return; }
   res.json({ ok: true });
 });
 

@@ -40,7 +40,22 @@ export const meApi = {
 
   changeName: (name: string) => http.patch<{ ok: true }>("/api/account/name", { name }),
 
-  changeEmail: (email: string, password: string) => http.patch<{ ok: true }>("/api/account/email", { email, password }),
+  /**
+   * Step one of changing an email.
+   *
+   * `pending: true` means a code just went to the new address and the change
+   * has not happened yet — the caller needs to collect it and call
+   * `confirmEmailChange`. `pending: false` means it applied immediately,
+   * which is what happens when the server has no way to send mail.
+   */
+  changeEmail: (email: string, password: string) =>
+    http.patch<{ ok: true; pending: boolean; email?: string; message?: string; expires_in_minutes?: number }>(
+      "/api/account/email",
+      { email, password }
+    ),
+
+  /** Step two: the code from the new inbox. */
+  confirmEmailChange: (code: string) => http.post<{ ok: true; email: string }>("/api/account/email/confirm", { code }),
 
   changePassword: (currentPassword: string, newPassword: string) =>
     http.patch<{ ok: true }>("/api/account/password", { currentPassword, newPassword }),
@@ -64,6 +79,26 @@ export const meApi = {
       .then((r) => r.passkeys),
 
   removePasskey: (id: number) => http.del<{ ok: true }>(`/api/account/passkeys/${id}`),
+
+  /** Every device currently signed in, this one included and marked as such. */
+  sessions: () =>
+    http
+      .get<{
+        sessions: {
+          id: string;
+          device_name: string;
+          device_type: "mobile" | "tablet" | "desktop" | "unknown";
+          location: string | null;
+          created_at: string;
+          last_seen_at: string;
+          current: boolean;
+        }[];
+      }>("/api/account/sessions")
+      .then((r) => r.sessions),
+
+  /** Signs one other device out. The current device goes through `signOut`
+      instead — the server refuses to end its own session through this call. */
+  revokeSession: (id: string) => http.del<{ ok: true }>(`/api/account/sessions/${id}`),
 
   /** Step one of adding a passkey: the challenge and what the browser needs. */
   passkeyOptions: () => http.post<{ options: unknown; token: string }>("/api/account/passkeys/options", {}),

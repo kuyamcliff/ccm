@@ -11,7 +11,7 @@ import { Sheet, useConfirm } from "~/ui/Sheet";
 import { PasswordField } from "~/ui/PasswordField";
 import { checkPassword } from "~/lib/passwordStrength";
 import { PasskeyError, addPasskey, passkeysSupported } from "~/lib/passkey";
-import { Icon } from "~/ui/Icon";
+import { Icon, type IconName } from "~/ui/Icon";
 import { useSession } from "~/state/session";
 import { useToast } from "~/state/toast";
 
@@ -22,6 +22,13 @@ import { useToast } from "~/state/toast";
  * is kept at the bottom and asks for the password, well away from the fields
  * people come here to edit.
  */
+
+const DEVICE_ICON: Record<"mobile" | "tablet" | "desktop" | "unknown", IconName> = {
+  mobile: "smartphone",
+  tablet: "tablet",
+  desktop: "monitor",
+  unknown: "globe",
+};
 
 function Profile() {
   const { user, refresh } = useSession();
@@ -35,7 +42,15 @@ function Profile() {
 
   const saveName = useAction(api.me.changeName);
   const saveEmail = useAction(api.me.changeEmail);
+  const confirmEmail = useAction(api.me.confirmEmailChange);
   const savePassword = useAction(api.me.changePassword);
+
+  /* Set once a code has been sent to the new address. Holding the address
+     here too — rather than reading it back off `user` — means the code entry
+     step still shows what it is confirming even though the account itself
+     has not changed yet. */
+  const [awaitingCode, setAwaitingCode] = useState<{ email: string } | null>(null);
+  const [emailCode, setEmailCode] = useState("");
 
   return (
     <div className="stack stack--loose">
@@ -55,7 +70,7 @@ function Profile() {
         >
           <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required />
           <div className="row">
-            <Button type="submit" busy={saveName.busy} disabled={name.trim() === user?.name}>
+            <Button type="submit" size="sm" busy={saveName.busy} disabled={name.trim() === user?.name}>
               Save name
             </Button>
           </div>
@@ -64,42 +79,93 @@ function Profile() {
 
       <section className="card stack">
         <h2 className="card__title">Email</h2>
-        <p className="fine muted">Changing it needs your password, because this address can reset the account.</p>
-        <form
-          className="stack"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            if (!(await saveEmail.run(email.trim(), emailPassword))) {
-              toast.failed(saveEmail.readError());
-              return;
-            }
-            setEmailPassword("");
-            await refresh();
-            toast.done("Email updated.");
-          }}
-        >
-          <TextField
-            label="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-            required
-          />
-          <TextField
-            label="Current password"
-            type="password"
-            value={emailPassword}
-            onChange={(e) => setEmailPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-          />
-          <div className="row">
-            <Button type="submit" busy={saveEmail.busy} disabled={!emailPassword || email.trim() === user?.email}>
-              Change email
-            </Button>
-          </div>
-        </form>
+        {awaitingCode ? (
+          <>
+            <p className="fine muted">
+              We sent a code to <strong>{awaitingCode.email}</strong>. Enter it below to finish.
+            </p>
+            <form
+              className="stack"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                const result = await confirmEmail.run(emailCode.trim());
+                if (!result) {
+                  toast.failed(confirmEmail.readError());
+                  return;
+                }
+                setAwaitingCode(null);
+                setEmailCode("");
+                setEmailPassword("");
+                await refresh();
+                toast.done("Email changed.");
+              }}
+            >
+              <TextField
+                label="Code from the email"
+                value={emailCode}
+                onChange={(e) => setEmailCode(e.target.value)}
+                inputMode="numeric"
+                maxLength={6}
+                autoComplete="one-time-code"
+                required
+                autoFocus
+              />
+              <div className="row">
+                <Button type="submit" size="sm" busy={confirmEmail.busy} disabled={emailCode.trim().length !== 6}>
+                  Confirm
+                </Button>
+                <Button type="button" size="sm" tone="quiet" onClick={() => { setAwaitingCode(null); setEmailCode(""); }}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </>
+        ) : (
+          <>
+            <p className="fine muted">Changing it needs your password, because this address can reset the account.</p>
+            <form
+              className="stack"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                const result = await saveEmail.run(email.trim(), emailPassword);
+                if (!result) {
+                  toast.failed(saveEmail.readError());
+                  return;
+                }
+                if (result.pending) {
+                  setAwaitingCode({ email: email.trim() });
+                  toast.say(result.message ?? "Check your inbox for a code.");
+                  return;
+                }
+                setEmailPassword("");
+                await refresh();
+                toast.done("Email updated.");
+              }}
+            >
+              <TextField
+                label="Email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                required
+              />
+              <TextField
+                label="Current password"
+                type="password"
+                value={emailPassword}
+                onChange={(e) => setEmailPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
+              <div className="row">
+                <Button type="submit" size="sm" busy={saveEmail.busy} disabled={!emailPassword || email.trim() === user?.email}>
+                  Change email
+                </Button>
+              </div>
+            </form>
+          </>
+        )}
       </section>
 
       <section className="card stack">
@@ -140,6 +206,7 @@ function Profile() {
           <div className="row">
             <Button
               type="submit"
+              size="sm"
               busy={savePassword.busy}
               disabled={!current || checkPassword(next, { name: user?.name, email: user?.email }) !== null}
             >
@@ -160,6 +227,7 @@ function Security() {
 
   const status = useResource(() => api.me.twoFactorStatus(), []);
   const passkeys = useResource(() => api.me.passkeys(), []);
+  const sessions = useResource(() => api.me.sessions(), []);
 
   const [setup, setSetup] = useState<{ secret: string; qrDataUrl: string } | null>(null);
   const [code, setCode] = useState("");
@@ -328,17 +396,60 @@ function Security() {
       </section>
 
       <section className="card stack">
-        <h2 className="card__title">Sessions</h2>
-        <p className="fine muted">
-          Signs you out on every device, including this one. Use it if you have signed in somewhere you should not have.
-        </p>
+        <h2 className="card__title">Signed in on</h2>
+        <p className="fine muted">Every device with access right now. Not one you recognise? Sign it out.</p>
+
+        {sessions.loading ? (
+          <Skeleton height="3rem" />
+        ) : sessions.error ? (
+          <ErrorState error={sessions.error} onRetry={sessions.reload} />
+        ) : (
+          <ul className="stack stack--tight session-list">
+            {(sessions.data ?? []).map((session) => (
+              <li key={session.id} className="session-row">
+                <span className="session-row__icon">
+                  <Icon name={DEVICE_ICON[session.device_type]} size={18} />
+                </span>
+                <span className="session-row__body">
+                  <span className="session-row__name">
+                    {session.device_name}
+                    {session.current ? <span className="badge badge--good session-row__badge">This device</span> : null}
+                  </span>
+                  <span className="fine faint">
+                    {session.location ?? "Unknown location"} · Active {stampLabel(session.last_seen_at)}
+                  </span>
+                </span>
+                {!session.current ? (
+                  <Button
+                    size="sm"
+                    tone="quiet"
+                    onClick={async () => {
+                      try {
+                        await api.me.revokeSession(session.id);
+                        sessions.reload();
+                        toast.done("That device is signed out.");
+                      } catch (err) {
+                        toast.failed(err);
+                      }
+                    }}
+                  >
+                    Sign out
+                  </Button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+
         <div className="row">
           <Button
+            size="sm"
+            tone="ghost"
             icon="logout"
             onClick={async () => {
               const ok = await confirm({
                 title: "Sign out everywhere?",
-                body: "Every device will need to sign in again.",
+                body: "Every device will need to sign in again, including this one.",
                 confirmLabel: "Sign out everywhere",
               });
               if (!ok) return;

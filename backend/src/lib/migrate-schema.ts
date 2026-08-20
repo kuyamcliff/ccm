@@ -36,5 +36,9 @@ const STEPS: Step[] = [
   { name: "legal_pages.body_fr", sql: "ALTER TABLE legal_pages ADD COLUMN IF NOT EXISTS body_fr text" },
   { name: "legal_pages.title_fr backfill", sql: "UPDATE legal_pages SET title_fr = title WHERE title_fr IS NULL" },
   { name: "legal_pages.body_fr backfill", sql: "UPDATE legal_pages SET body_fr = body WHERE body_fr IS NULL" },
+  { name: "user_sessions", sql: `CREATE TABLE IF NOT EXISTS user_sessions (id text PRIMARY KEY, user_id integer NOT NULL, device_name text NOT NULL DEFAULT 'Unknown device', device_type text NOT NULL DEFAULT 'unknown', ip text, location text, created_at text NOT NULL DEFAULT now_text(), last_seen_at text NOT NULL DEFAULT now_text(), revoked_at text)` },
+  { name: "user_sessions.user_id index", sql: "CREATE INDEX IF NOT EXISTS user_sessions_user_idx ON user_sessions (user_id, revoked_at)" },
+  { name: "email_changes", sql: `CREATE TABLE IF NOT EXISTS email_changes (id serial PRIMARY KEY, user_id integer NOT NULL, new_email text NOT NULL, token_hash text NOT NULL, attempts integer NOT NULL DEFAULT 0, expires_at text NOT NULL, used_at text, created_at text NOT NULL DEFAULT now_text())` },
+  { name: "email_changes.user_id index", sql: "CREATE INDEX IF NOT EXISTS email_changes_user_idx ON email_changes (user_id, created_at DESC)" },
 ];
 export async function migrateSchema(): Promise<void> { for (const step of STEPS) { try { await db.exec(step.sql); } catch (err) { console.error(`[schema] "${step.name}" did not apply:`, err instanceof Error ? err.message : err); } } }
