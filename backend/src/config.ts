@@ -148,6 +148,18 @@ export const WHATSAPP_ENABLED =
 /** Public base URL the API is reachable at — used to build absolute image URLs. */
 export const PUBLIC_API_URL = optional("PUBLIC_API_URL", "").replace(/\/+$/, "");
 
+/**
+ * Whether to negotiate TLS with Postgres.
+ *
+ * Most managed databases require it; a local or CI Postgres usually has no
+ * certificate configured at all and refuses the handshake outright rather
+ * than falling back, so guessing wrong in either direction breaks the
+ * connection completely. Defaults to on in production and off everywhere
+ * else, and can be forced either way when that default doesn't fit.
+ */
+const databaseSslOverride = optional("DATABASE_SSL");
+export const DATABASE_SSL = databaseSslOverride ? databaseSslOverride === "true" : IS_PROD;
+
 /* ── IP geolocation (ipinfo.io) ────────────────────────────────────────────
    Powers the rough "Buea, CM" shown against a session in the account's own
    security tab. Off by default: looking up a guest's IP with a third party
