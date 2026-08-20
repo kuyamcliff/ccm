@@ -6,6 +6,7 @@ import { getLateCancelFcfa } from "../lib/pricing.js";
 import { priceChosenItems } from "../lib/orderItems.js";
 import { alternativesForDoubleBooking, alternativesForTakenTable } from "../lib/bookingAlternatives.js";
 import { buildCalendarEvent } from "../lib/ics.js";
+import { VENUE_NAME } from "../config.js";
 
 export const reservationsRouter = Router();
 reservationsRouter.use(requireAuth);
@@ -17,8 +18,6 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
    other use of the mechanism elsewhere. */
 const BOOKING_LOCK_NAMESPACE = 4201;
 
-/** What the calendar entry is called, and the first line of its address. */
-const VENUE_NAME = "Cam Chop Meat";
 
 /** How long to block out in the guest's calendar. Two hours is a sitting: long
     enough that nothing else gets booked over the meal, short enough that it

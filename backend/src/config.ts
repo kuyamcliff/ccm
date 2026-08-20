@@ -32,6 +32,16 @@ export const JWT_SECRET = required("JWT_SECRET", "dev-only-secret-change-in-prod
  */
 export const QR_SIGNING_SECRET = required("QR_SIGNING_SECRET", "dev-only-qr-secret-change-in-production");
 
+/**
+ * What the restaurant is called, in the one place the whole server reads it.
+ *
+ * Used in the subject and body of every email, and as the name on the calendar
+ * event a guest adds. It was written as a literal in three files; a rename, or
+ * a second venue on the same code, meant hunting them down. Set VENUE_NAME to
+ * change it everywhere at once.
+ */
+export const VENUE_NAME = optional("VENUE_NAME", "Cam Chop Meat");
+
 /** Origins allowed to make state-changing requests. Same-origin in production. */
 export const FRONTEND_URL = optional("FRONTEND_URL", "http://localhost:5173").replace(/\/+$/, "");
 

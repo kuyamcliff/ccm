@@ -12,6 +12,7 @@ import {
   verifyCode,
 } from "../lib/passwordReset.js";
 import { checkPassword } from "../lib/passwordStrength.js";
+import { VENUE_NAME } from "../config.js";
 import { rateLimit } from "../middleware/security.js";
 
 export const recoveryRouter = Router();
@@ -75,7 +76,7 @@ recoveryRouter.post("/request", requestLimit, async (req, res) => {
 
   const result = await sendMail({
     to: user.email,
-    subject: `${code} is your Cam Chop Meat reset code`,
+    subject: `${code} is your ${VENUE_NAME} reset code`,
     text:
       `Hi ${user.name},\n\n` +
       `Your password reset code is:\n\n` +
@@ -183,9 +184,9 @@ recoveryRouter.post("/admin/test-email", requireAuth, requireAdmin, requireScope
 
   const result = await sendMail({
     to,
-    subject: "Cam Chop Meat: email is working",
+    subject: `${VENUE_NAME}: email is working`,
     text:
-      "This is a test from your Cam Chop Meat admin dashboard.\n\n" +
+      `This is a test from your ${VENUE_NAME} admin dashboard.\n\n` +
       "If you are reading this, password reset codes will reach your customers.",
   });
 
