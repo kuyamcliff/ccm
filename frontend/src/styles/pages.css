@@ -1051,13 +1051,13 @@
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: var(--s-3);
-  padding: var(--s-4) 0;
+  padding: var(--s-3) 0;
   border-bottom: 1px solid var(--line);
 }
 
 .row-item__photo {
-  width: 4rem;
-  height: 4rem;
+  width: 3.25rem;
+  height: 3.25rem;
   border-radius: var(--r-sm);
   object-fit: cover;
   flex: none;
@@ -1066,8 +1066,8 @@
 
 @media (min-width: 40rem) {
   .row-item__photo {
-    width: 5.5rem;
-    height: 5.5rem;
+    width: 4.5rem;
+    height: 4.5rem;
   }
 }
 

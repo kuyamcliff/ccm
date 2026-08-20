@@ -166,7 +166,7 @@ export function MenuPage() {
     <div className="page section">
       <div className="section-head">
         <hr className="heat-rule" />
-        <h1 className="display display--xl">The menu</h1>
+        <h1 className="display display--lg">Our menu</h1>
       </div>
 
       {loading ? (
