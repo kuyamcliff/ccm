@@ -32,16 +32,26 @@ const ALWAYS_OPEN = [
   /* The console reads these to render the switch that turns maintenance off,
      and the customer maintenance screen reads them for the message to show. */
   "/api/site-settings",
+  /* The same reason, and it must be for the same reason: /api/bootstrap is the
+     one request the browser makes before it draws anything, and the settings it
+     carries are what tell the page it is closed and what wording to show. Gate
+     it and a closed site answers 503 to the only request that could explain the
+     503, leaving a visitor on a blank screen. */
+  "/api/bootstrap",
   /* The platform's own check. A 503 here and the host stops routing to the
      service, taking the console down with the site. */
   "/api/health",
   /* Account recovery, so a locked-out owner who has also lost their password
      is not locked out twice over. */
   "/api/recovery",
+  /* The reminder sweep. A site closed for an hour of maintenance still has
+     tables booked for tonight, and the guests holding them still need telling.
+     Guarded by its own shared secret rather than by a session. */
+  "/api/cron",
 ] as const;
 
 /** Everything a signed-in member of staff is, in the one place. */
-const STAFF_ROLES = new Set(["admin", "super_admin", "owner"]);
+const STAFF_ROLES = new Set(["admin", "super_admin", "owner", "developer"]);
 
 export interface MaintenanceState {
   enabled: boolean;

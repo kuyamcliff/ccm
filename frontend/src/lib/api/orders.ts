@@ -4,8 +4,39 @@ import type { MomoStatus, TakeawayOrder } from "./types";
 type WalletId = "mtn_momo" | "orange_money";
 
 export const orderApi = {
-  place: (input: { name: string; phone: string; pickup_time: string; items: { id: number; qty: number }[]; note?: string; promo_code?: string; gift_card_code?: string; use_points?: boolean }) =>
-    http.post<{ ok: true; id: number; order_no: string; subtotal: number; discount_fcfa: number; points_spent: number; points_value_fcfa: number; total_fcfa: number; payment_required: boolean; status: string }>("/api/takeaway", input),
+  /**
+   * Places an order.
+   *
+   * `payment_method: "cash"` means settle at the counter: the order goes
+   * straight to the kitchen and stays unpaid until somebody there marks it paid.
+   * Anything else is prepaid and the server holds it out of the kitchen queue
+   * until the money lands.
+   */
+  place: (input: {
+    name: string;
+    phone: string;
+    pickup_time: string;
+    items: { id: number; qty: number }[];
+    note?: string;
+    promo_code?: string;
+    gift_card_code?: string;
+    use_points?: boolean;
+    payment_method?: "cash";
+  }) =>
+    http.post<{
+      ok: true;
+      id: number;
+      order_no: string;
+      subtotal: number;
+      discount_fcfa: number;
+      points_spent: number;
+      points_value_fcfa: number;
+      total_fcfa: number;
+      payment_required: boolean;
+      /** What the counter will be owed on arrival. Zero unless this is cash. */
+      cash_due_fcfa?: number;
+      status: string;
+    }>("/api/takeaway", input),
 
   pay: (orderNo: string, momoPhone: string, walletOrIdempotency: WalletId | string, maybeIdempotency?: string) => {
     const wallet: WalletId = walletOrIdempotency === "mtn_momo" || walletOrIdempotency === "orange_money" ? walletOrIdempotency : "mtn_momo";

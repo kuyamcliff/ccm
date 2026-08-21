@@ -364,13 +364,42 @@ reservationsRouter.delete("/:id", async (req, res) => {
   const resDateTime = new Date(`${reservation.date}T${reservation.time}:00`);
   const minutesUntil = (resDateTime.getTime() - Date.now()) / 60000;
 
+  /*
+   * Cancelling inside the last hour of a paid booking.
+   *
+   * The 402 is a quote, not a refusal, and that distinction was missing: the
+   * route used to answer 402 and stop, with no parameter that would let the
+   * guest go ahead. A guest who genuinely could not come had no way to say so
+   * from the site at all, which is the worst outcome for everyone. The table
+   * stayed held, nobody was told, and it became a no-show that the waitlist
+   * could have filled.
+   *
+   * So the fee is quoted first, and `accept_fee` is how the guest says yes to
+   * it having seen the number. Two steps on purpose: nobody is charged a fee
+   * they were not shown, and nothing is cancelled by a stray tap.
+   */
   if (reservation.payment_status === "paid" && minutesUntil <= 60 && minutesUntil > 0) {
     const feeFcfa = await getLateCancelFcfa();
-    res.status(402).json({
-      error: `Cancelling within 60 minutes of your reservation requires a cancellation fee of ${feeFcfa.toLocaleString("en-US")} FCFA.`,
-      requires_fee: true,
-      fee_fcfa: feeFcfa,
-    });
+    const accepted = req.body?.accept_fee === true;
+
+    if (!accepted) {
+      res.status(402).json({
+        error: `Cancelling within 60 minutes of your reservation means a ${feeFcfa.toLocaleString("en-US")} FCFA fee.`,
+        requires_fee: true,
+        fee_fcfa: feeFcfa,
+      });
+      return;
+    }
+
+    /* Recorded on the reservation rather than taken here. The deposit is
+       already held, so what the fee governs is how much of it comes back, and
+       that reconciliation happens where refunds happen. */
+    await db
+      .prepare(
+        "UPDATE reservations SET status = 'cancelled', cancelled_at = now_text(), cancellation_fee_fcfa = ?, cancel_reason = 'guest cancelled late' WHERE id = ?"
+      )
+      .run(feeFcfa, id);
+    res.json({ ok: true, fee_fcfa: feeFcfa });
     return;
   }
 

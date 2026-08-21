@@ -10,12 +10,12 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="theme-color" content="#070707" />
 
-    <title>Cam Chop Meat, Buea | Fresh grilled chicken, goat and pork</title>
+    <title>Cam Chop Meat, Buea | The best meat in Buea</title>
     <meta
       name="description"
-      content="Fresh grilled chicken, goat and pork over the fire in Buea. See the menu and prices in FCFA, order takeaway with Mobile Money, or book a table. Razel Street, opposite P and T school, Buea."
+      content="The best meat in Buea. Chicken, goat and pork grilled fresh over the fire. See the menu and prices in FCFA, order takeaway with Mobile Money, or hold a table. Razel Street, opposite the P and T school, Buea."
     />
     <link rel="canonical" href="https://camchopmeat.com/" />
 
@@ -24,7 +24,7 @@
     <meta property="og:title" content="Cam Chop Meat, Buea" />
     <meta
       property="og:description"
-      content="Fresh grilled chicken, goat and pork over the fire. Order takeaway or book a table, both from your phone."
+      content="The best meat in Buea. Chicken, goat and pork straight off the fire. Order takeaway or hold a table, both from your phone."
     />
     <meta property="og:url" content="https://camchopmeat.com/" />
     <meta property="og:locale" content="en_GB" />
@@ -33,10 +33,10 @@
       The picture that shows when somebody shares the link.
 
       This site is found through TikTok, which means it is mostly passed around
-      as a link in WhatsApp and DMs — and a link with no image is a grey box
-      with a URL under it. None of those crawlers run JavaScript, so this has
-      to be here in the served HTML; setting it from React would be setting it
-      long after the only reader that mattered has gone.
+      as a link in WhatsApp and DMs, and a link with no image is a grey box with
+      a URL under it. None of those crawlers run JavaScript, so this has to be
+      in the served HTML: setting it from React would be setting it long after
+      the only reader that mattered had gone.
 
       `summary_large_image` is what makes it the wide card rather than a
       thumbnail beside the text.
@@ -51,18 +51,21 @@
     <!--
       What the restaurant is, in the form Google reads.
 
-      Without this the site is just words on a page: with it, the address,
-      hours and the fact that it takes bookings can appear in the search
-      result itself and in Maps. The address and hours mirror the fallbacks in
-      state/venue.tsx — they are also editable in Desk > Details, so if the
+      Without this the site is just words on a page; with it, the address, the
+      hours and the fact that it takes bookings can appear in the search result
+      itself and in Maps. The address and hours mirror the fallbacks in
+      src/state/venue.tsx, and both are editable in Desk > Details, so if the
       owner changes them there, change them here too.
+
+      There is no phone number, on purpose. Nothing in this codebase hardcodes
+      one, and inventing one for a real business is worse than omitting it.
     -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "Restaurant",
         "name": "Cam Chop Meat",
-        "description": "Fresh grilled chicken, goat and pork over the fire in Buea.",
+        "description": "The best meat in Buea. Chicken, goat and pork grilled fresh over the fire.",
         "url": "https://camchopmeat.com/",
         "image": "https://camchopmeat.com/og-image.png",
         "servesCuisine": ["Cameroonian", "Grill", "Barbecue"],
@@ -90,27 +93,73 @@
          no third-party connection to warm up here. See src/main.tsx. -->
 
     <!--
+      ── The hero photograph, before any JavaScript has run ──────────────────
+
+      This is the single biggest saving in the rewrite and it is eleven lines.
+
+      The home page opens on a photograph whose URL used to be unknowable until
+      three API round trips had finished, so on a slow connection nothing even
+      *asked* for an image for several seconds. The last visit's boot payload is
+      in localStorage, and it names that photograph. Reading it here, in a
+      blocking script in the head, means the download starts before the browser
+      has finished parsing this file, let alone downloading React.
+
+      `fetchpriority="high"` is the half that matters. Without it the browser
+      treats the image like everything else it has been asked for and it queues
+      behind the JavaScript; with it, the photo and the bundle race, which is
+      what we want, because neither is any use without the other.
+
+      Wrapped in try/catch and doing nothing at all on a first visit: it is a
+      head start, never a dependency. `src/lib/boot.ts` owns the same key and
+      does the same thing again once React is up, for the case where this found
+      nothing.
+    -->
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("ccm.boot.v5");
+          if (!raw) return;
+          var stored = JSON.parse(raw);
+          if (!stored || Date.now() - stored.at > 12 * 60 * 60 * 1000) return;
+          var items = (stored.payload && stored.payload.topItems) || [];
+          for (var i = 0; i < items.length; i++) {
+            if (!items[i] || !items[i].image_url) continue;
+            var link = document.createElement("link");
+            link.rel = "preload";
+            link.as = "image";
+            link.href = items[i].image_url;
+            link.fetchPriority = "high";
+            document.head.appendChild(link);
+            return;
+          }
+        } catch (e) {
+          /* No storage, a payload from an older build, or private browsing. */
+        }
+      })();
+    </script>
+
+    <!--
       The first paint, before any JavaScript has run.
 
-      On a slow connection the gap between the HTML landing and React mounting
-      is where a white flash lives. Painting the page's own black here closes
-      it, and the mark fading in gives the wait something honest to look at
-      rather than a spinner that implies an error is coming.
+      On a slow connection the gap between the HTML landing and React mounting is
+      where a white flash lives. Painting the page's own black here closes it,
+      and the mark fading in gives the wait something honest to look at rather
+      than a spinner, which implies an error is coming.
     -->
     <style>
       html {
-        background: #0a0a0a;
+        background: #070707;
       }
       #boot {
         position: fixed;
         inset: 0;
         display: grid;
         place-items: center;
-        background: #0a0a0a;
+        background: #070707;
       }
       #boot img {
-        width: 44px;
-        height: 44px;
+        width: 40px;
+        height: 40px;
         animation: boot 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
       }
       @keyframes boot {
@@ -136,7 +185,7 @@
         font-family: system-ui, sans-serif;
         font-size: 0.9375rem;
         line-height: 1.5;
-        color: #f6f6f6;
+        color: #f4f4f4;
         text-align: center;
       }
       #boot[data-stuck="true"] img {
@@ -149,8 +198,8 @@
         font: inherit;
         font-family: system-ui, sans-serif;
         font-size: 0.9375rem;
-        color: #f6f6f6;
-        background: #c8102e;
+        color: #f4f4f4;
+        background: #e31c23;
         border: 0;
         border-radius: 999px;
         cursor: pointer;
@@ -173,7 +222,7 @@
 
       If the app cannot start there is nothing on screen but the mark, and no
       amount of reloading helps when the reason is a bad file being served from
-      the browser's own storage — which is exactly what a stale service worker
+      the browser's own storage, which is exactly what a stale service worker
       cache did here once. So the page watches for its own failure to start and
       clears everything it can before trying again: caches, service workers, the
       lot. That runs at most once per tab, tracked in sessionStorage, because a
@@ -195,9 +244,9 @@
          * The first version of this recorded "recovery has been tried" once and
          * never tried again, which turned out to be the worse failure: a tab
          * that spent its one attempt while the server was still broken could
-         * never heal itself afterwards, no matter how many times it was
-         * reloaded or how thoroughly the underlying fault had been fixed. It
-         * just showed the apology forever.
+         * never heal itself afterwards, no matter how many times it was reloaded
+         * or how thoroughly the underlying fault had been fixed. It just showed
+         * the apology forever.
          *
          * A window rather than a flag. Two failures inside twenty seconds is a
          * loop and gets stopped; a reload a minute later is a person trying
@@ -254,7 +303,7 @@
           again.textContent = "Try again";
           again.onclick = function () {
             again.disabled = true;
-            again.textContent = "Trying…";
+            again.textContent = "Trying";
             done = false;
             recover(true);
           };
@@ -271,7 +320,7 @@
           if (!url || !window.fetch) return;
           var why = document.createElement("p");
           why.className = "why";
-          why.textContent = "Checking what failed…";
+          why.textContent = "Checking what failed";
           boot.appendChild(why);
 
           fetch(url, { cache: "reload" })
@@ -280,18 +329,21 @@
                 var isPage = body.slice(0, 60).toLowerCase().indexOf("<!doctype") !== -1;
                 why.textContent =
                   url.split("/").pop() +
-                  " — HTTP " + r.status + ", " + (r.headers.get("content-type") || "no type") +
+                  " HTTP " +
+                  r.status +
+                  ", " +
+                  (r.headers.get("content-type") || "no type") +
                   (isPage ? " (a web page where code should be)" : "");
               });
             })
             .catch(function (e) {
-              why.textContent = url.split("/").pop() + " — " + String((e && e.message) || e).slice(0, 70);
+              why.textContent = url.split("/").pop() + " " + String((e && e.message) || e).slice(0, 70);
             });
         }
 
         /* Wipes every cache and service worker this origin owns, then reloads.
-           Belt and braces: either one alone can be what is holding the bad
-           file, and by this point we care about getting in, not about tidiness. */
+           Belt and braces: either one alone can be what is holding the bad file,
+           and by this point we care about getting in, not about tidiness. */
         function recover(force) {
           if (done || mounted()) return;
           done = true;
@@ -307,14 +359,22 @@
           if (window.caches && caches.keys) {
             jobs.push(
               caches.keys().then(function (names) {
-                return Promise.all(names.map(function (n) { return caches.delete(n); }));
+                return Promise.all(
+                  names.map(function (n) {
+                    return caches.delete(n);
+                  })
+                );
               })
             );
           }
           if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
             jobs.push(
               navigator.serviceWorker.getRegistrations().then(function (regs) {
-                return Promise.all(regs.map(function (r) { return r.unregister(); }));
+                return Promise.all(
+                  regs.map(function (r) {
+                    return r.unregister();
+                  })
+                );
               })
             );
           }
@@ -325,20 +385,21 @@
            * work.
            *
            * Assets are served `immutable` for a year, which is right for a file
-           * whose name contains its hash — until the wrong body is stored under
+           * whose name contains its hash, until the wrong body is stored under
            * that name. `immutable` means the browser will not so much as ask
            * whether it is still valid, so clearing the service worker changed
            * nothing: the same bad response came straight back off the disk.
            *
            * `cache: "reload"` is the one way out. It ignores what is stored,
-           * goes to the network, and writes what it gets back over the entry —
-           * so the reload below starts from the real file.
+           * goes to the network, and writes what it gets back over the entry, so
+           * the reload below starts from the real file.
+           *
+           * Every asset the document names, whatever tag names it. The build
+           * pulls the big chunks in with <link rel="modulepreload">, not
+           * <script src>, so a selector that only looked for scripts and
+           * stylesheets left the largest one poisoned and the page still broken,
+           * with the network serving a perfectly good copy.
            */
-          /* Every asset the document names, whatever tag names it. The build
-             pulls the big chunks in with <link rel="modulepreload">, not
-             <script src>, so a selector that only looked for scripts and
-             stylesheets left the largest one poisoned and the page still
-             broken — with the network serving a perfectly good copy. */
           jobs.push(
             Promise.all(
               [].map
@@ -361,7 +422,7 @@
             });
         }
 
-        /* A script or stylesheet that failed outright — the wrong MIME type, a
+        /* A script or stylesheet that failed outright: the wrong MIME type, a
            404, a dead hash from an older deploy. This is the real signal, and it
            arrives immediately rather than after a timeout.
 
@@ -382,10 +443,10 @@
           true
         );
 
-        /* Backstop, for a failure that is silent rather than noisy. Deliberately
-           generous: a slow phone on a bad connection is not a broken page, and
-           must be given time to finish rather than be reloaded out from under
-           itself. */
+        /* Backstop, for a failure that is silent rather than noisy.
+           Deliberately generous: a slow phone on a bad connection is not a
+           broken page, and must be given time to finish rather than be reloaded
+           out from under itself. */
         window.setTimeout(function () {
           if (!mounted()) recover();
         }, 25000);
@@ -407,11 +468,11 @@
   <body>
     <div id="root">
       <div id="boot">
-        <img src="/mark.svg" alt="Cam Chop Meat" width="44" height="44" />
+        <img src="/mark.svg" alt="Cam Chop Meat" width="40" height="40" />
       </div>
     </div>
     <noscript>
-      <p style="font-family: system-ui, sans-serif; padding: 2rem; color: #f6f6f6; background: #0a0a0a">
+      <p style="font-family: system-ui, sans-serif; padding: 2rem; color: #f4f4f4; background: #070707">
         This site needs JavaScript. Turn it on and reload, or call the restaurant to book.
       </p>
     </noscript>

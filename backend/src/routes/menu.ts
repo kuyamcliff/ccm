@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../db.js";
+import { clearExpiredSoldOut } from "../lib/menuSweep.js";
 
 export const menuRouter = Router();
 
@@ -9,6 +10,10 @@ export const menuRouter = Router();
 const PUBLIC_COLUMNS = "id, category, name, description, price_fcfa, price_label, image_url, sold_out, dietary_tags";
 
 menuRouter.get("/", async (_req, res) => {
+  /* Puts back anything whose sold-out window has passed, before reading. See
+     lib/menuSweep.ts for why this is here rather than on a schedule. */
+  await clearExpiredSoldOut();
+
   const items = await db
     .prepare(`SELECT ${PUBLIC_COLUMNS} FROM menu_items WHERE is_active = 1 ORDER BY category, position, id`)
     .all();

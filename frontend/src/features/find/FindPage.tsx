@@ -1,151 +1,99 @@
 import { Icon } from "~/ui/Icon";
-import { LinkButton } from "~/ui/Button";
-import { Reveal } from "~/ui/Reveal";
+import { AnchorButton, LinkButton } from "~/ui/Button";
 import { phoneLabel } from "~/lib/format";
+import { useCopy } from "~/state/locale";
 import { useVenue } from "~/state/venue";
 
 /**
- * Where we are, how to get here, and how to reach us.
+ * Where the place is and how to reach it.
  *
- * Written for somebody standing on a Buea road with one bar of signal. The
- * three things they need are a tap that calls, a tap that opens their own maps
- * app, and the landmark to tell a bike rider. Everything else on the page is
- * underneath those.
+ * Every fact here comes from Desk > Details. Nothing about this restaurant is
+ * hardcoded, on purpose: a wrong phone number is one nobody can reach, and the
+ * owner should be able to fix it without a deploy.
  *
- * The map is drawn rather than embedded. A real tile layer is a third party
- * request, a licence, and a couple of hundred kilobytes on a connection that
- * may not have them to spare, and it would still not be the thing anybody
- * navigates by. This shows the shape of the corner and hands off to the phone's
- * own maps app, which is where somebody actually finding us wants to end up.
+ * No embedded map. An iframe from Google is a third-party script, a cookie
+ * banner's worth of tracking, and several hundred kilobytes on a connection that
+ * cannot spare them, to show a picture of a road. The Directions button opens
+ * the map app the phone already has, which is what somebody standing on Molyko
+ * Street actually wants.
  */
-
-const DIRECTIONS = [
-  "Make your way to Razel Street.",
-  "Find the P and T school and keep it on your left.",
-  "We are directly opposite it. Look for the grill and the smoke.",
-];
-
 export function FindPage() {
-  const { address, hours, phone, phoneHref, whatsappHref, socials } = useVenue();
-  const mapHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`Cam Chop Meat ${address}`)}`;
+  const { c } = useCopy();
+  const { address, hours, phone, phoneHref, whatsappHref, socials, siteConfig } = useVenue();
+
+  const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 
   return (
-    <div className="page section">
-      <div className="section-head">
-        <hr className="heat-rule" />
-        <h1 className="display display--xl">Find us</h1>
-        <p className="lead">{address}. Look for the grill on the corner.</p>
+    <div className="page section stack">
+      <header className="stack stack--tight">
+        <h1 className="display display--xl">{c.find.title}</h1>
+        <p className="lead">{address}</p>
+      </header>
+
+      <div className="rows">
+        <div className="row row--top row--tall">
+          <Icon name="pin" size={18} className="row__lead" />
+          <div className="grow stack stack--tight">
+            <span className="label">{c.find.address}</span>
+            <span>{address}</span>
+            <span className="fine faint">{c.home.findHint}</span>
+          </div>
+        </div>
+
+        <div className="row row--top row--tall">
+          <Icon name="clock" size={18} className="row__lead" />
+          <div className="grow stack stack--tight">
+            <span className="label">{c.find.hours}</span>
+            <span>{hours}</span>
+          </div>
+        </div>
+
+        {siteConfig.support.phone && phone && phoneHref ? (
+          <a href={phoneHref} className="row row--tall">
+            <Icon name="phone" size={18} className="row__lead" />
+            <div className="grow stack stack--tight">
+              <span className="label">{c.find.phone}</span>
+              <span>{phoneLabel(phone)}</span>
+            </div>
+            <Icon name="chevron-right" size={16} className="faint" />
+          </a>
+        ) : null}
+
+        {siteConfig.support.whatsapp && whatsappHref ? (
+          <a href={whatsappHref} target="_blank" rel="noreferrer noopener" className="row row--tall">
+            <Icon name="message" size={18} className="row__lead" />
+            <div className="grow stack stack--tight">
+              <span className="label">{c.find.whatsapp}</span>
+              <span>Message us</span>
+            </div>
+            <Icon name="external" size={16} className="faint" />
+          </a>
+        ) : null}
+
+        {socials.map((social) => (
+          <a
+            key={social.label}
+            href={social.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="row row--tall"
+          >
+            <Icon name="sparkle" size={18} className="row__lead" />
+            <span className="grow">{social.label}</span>
+            <Icon name="external" size={16} className="faint" />
+          </a>
+        ))}
       </div>
 
-      <div className="stack stack--loose">
-        <Reveal>
-          <a className="visit__map" href={mapHref} target="_blank" rel="noreferrer noopener" aria-label="Open in maps">
-            <span className="visit__grid" aria-hidden="true" />
-            <span className="visit__road visit__road--main" aria-hidden="true" />
-            <span className="visit__road visit__road--side" aria-hidden="true" />
-            <span className="visit__pin" aria-hidden="true">
-              <span>
-                <Icon name="flame" size={20} />
-              </span>
-              <span>Cam Chop Meat</span>
-            </span>
-            <span className="visit__open">
-              <Icon name="external" size={15} />
-              Open in maps
-            </span>
-          </a>
-        </Reveal>
-
-        <Reveal className="visit__actions" index={1}>
-          {phoneHref ? (
-            <a className="btn btn--primary btn--lg" href={phoneHref}>
-              <Icon name="phone" size={18} />
-              Call us
-            </a>
-          ) : null}
-          {whatsappHref ? (
-            <a className="btn btn--ghost btn--lg" href={whatsappHref} target="_blank" rel="noreferrer noopener">
-              <Icon name="message" size={18} />
-              WhatsApp
-            </a>
-          ) : null}
-        </Reveal>
-
-        <Reveal className="find" index={2}>
-          <div className="find__row">
-            <Icon name="pin" size={20} />
-            <div>
-              <p>{address}</p>
-              <a href={mapHref} target="_blank" rel="noreferrer noopener" className="fine hot">
-                Get directions
-              </a>
-            </div>
-          </div>
-
-          <div className="find__row">
-            <Icon name="clock" size={20} />
-            <div>
-              <p>{hours}</p>
-              <p className="fine faint">The grill runs late on Friday and Saturday.</p>
-            </div>
-          </div>
-
-          {phone && phoneHref ? (
-            <div className="find__row">
-              <Icon name="phone" size={20} />
-              <div>
-                <a href={phoneHref}>{phoneLabel(phone)}</a>
-                <p className="fine faint">Tap to call.</p>
-              </div>
-            </div>
-          ) : null}
-
-          {socials.length > 0 ? (
-            <div className="find__row">
-              <Icon name="sparkle" size={20} />
-              <p className="row row--wrap">
-                {socials.map((social) => (
-                  <a key={social.label} href={social.url} target="_blank" rel="noreferrer noopener" className="hot">
-                    {social.label}
-                  </a>
-                ))}
-              </p>
-            </div>
-          ) : null}
-        </Reveal>
-
-        <Reveal index={3}>
-          <h2 className="display display--lg" style={{ marginBottom: "var(--s-4)" }}>
-            Getting here
-          </h2>
-          <div className="visit__directions">
-            {DIRECTIONS.map((step) => (
-              <p key={step} className="visit__step">
-                <span>{step}</span>
-              </p>
-            ))}
-          </div>
-          <p className="fine faint" style={{ marginTop: "var(--s-4)" }}>
-            Telling a bike rider "Cam Chop Meat, Razel Street, opposite P and T" is usually enough.
-          </p>
-        </Reveal>
-
-        <Reveal className="join-strip" index={4}>
-          <div className="stack stack--tight">
-            <h2 className="display display--lg">Before you set off</h2>
-            <p className="muted">
-              Order ahead and your food is ready when you arrive. Book a table and it is waiting for you.
-            </p>
-          </div>
-          <div className="row row--wrap">
-            <LinkButton to="/order" tone="primary" icon="bag">
-              Order takeaway
-            </LinkButton>
-            <LinkButton to="/book" tone="ghost" icon="calendar">
-              Book a table
-            </LinkButton>
-          </div>
-        </Reveal>
+      <div className="bar bar--wrap">
+        <AnchorButton href={mapsHref} tone="primary" size="sm" icon="pin" newTab>
+          {c.find.directions}
+        </AnchorButton>
+        {siteConfig.features.booking ? (
+          <LinkButton to="/book" tone="ghost" size="sm" icon="calendar">
+            {c.home.holdTable}
+          </LinkButton>
+        ) : null}
       </div>
     </div>
   );

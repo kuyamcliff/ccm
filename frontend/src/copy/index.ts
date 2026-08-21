@@ -1,0 +1,1007 @@
+/**
+ * Everything this application says, in one file.
+ *
+ * The previous version split its wording between a fifty-key table and a few
+ * hundred `locale === "fr" ? "..." : "..."` ternaries buried inside JSX. That is
+ * why the English drifted into sounding like a template: nobody could read the
+ * voice in one place, so nobody noticed it had none.
+ *
+ * ── The voice ──────────────────────────────────────────────────────────────
+ *
+ * Cam Chop Meat is a grill on Razel Street in Buea. It is not a brand, it is a
+ * place with a fire at the front of it, and the site should sound like somebody
+ * who works there wrote it.
+ *
+ *   Say the thing.        "The best meat in Buea." Not "Redefining the grilling
+ *                         experience."
+ *   Short sentences.      This is read one-handed on a phone.
+ *   Anglophone Cameroon.  Buea speaks English. "Takeaway", never "collection"
+ *                         or "to-go". "Give us a call", not "contact us".
+ *   Never sound like a
+ *   receipt.              "Table held. See you Friday at 7." Not "Reservation
+ *                         created successfully."
+ *   No dashes.            No em dashes or en dashes anywhere a customer can
+ *                         read. CI checks this.
+ *
+ * ── Structure ──────────────────────────────────────────────────────────────
+ *
+ * Grouped by screen, and reached as `c.home.title` rather than `t("homeTitle")`,
+ * so the editor completes it and a typo is a type error. `Copy` is derived from
+ * the English, so French that is missing a key does not compile.
+ *
+ * The staff console is English only and lives in `desk.ts`. Staff are trained on
+ * the thing; a guest is not. Owner-entered wording (the closed sign, the
+ * announcement bar, the legal pages) is in the database and reported on the
+ * console's Translations screen instead.
+ */
+
+export const EN = {
+  /* ── The brand line. Everything else hangs off this. ─────────────────────*/
+  brand: {
+    name: "Cam Chop Meat",
+    tagline: "The best meat in Buea.",
+    /* The one-liner under the wordmark in the footer and on share cards. */
+    blurb: "Chicken, goat and pork, straight off the fire.",
+  },
+
+  /* ── Navigation. Every one of these has to fit a tab bar at 10px. ────────*/
+  nav: {
+    home: "Home",
+    menu: "Menu",
+    order: "Order",
+    book: "Book",
+    mine: "My visits",
+    you: "You",
+    find: "Find us",
+    story: "Our story",
+    reviews: "Reviews",
+    photos: "Photos",
+    offers: "Offers",
+    events: "Events",
+    queue: "Queue",
+    help: "Help",
+    signIn: "Sign in",
+    join: "Create account",
+    desk: "Desk",
+    basket: "Basket",
+    call: "Call",
+    terms: "Terms",
+    privacy: "Privacy",
+  },
+
+  /* ── Words that appear on more than one screen. ──────────────────────────*/
+  common: {
+    back: "Back",
+    next: "Next",
+    done: "Done",
+    close: "Close",
+    cancel: "Cancel",
+    save: "Save",
+    edit: "Edit",
+    remove: "Remove",
+    tryAgain: "Try again",
+    seeAll: "See all",
+    from: "From",
+    total: "Total",
+    free: "Free",
+    openNow: "Open now",
+    closedNow: "Closed",
+    busyNow: "Busy right now",
+    soldOut: "Sold out",
+    offline: "You are offline",
+    backOnline: "Back online",
+    loading: "One moment",
+    nothingYet: "Nothing here yet",
+    couldNotRefresh: "Could not refresh. Showing what we had.",
+  },
+
+  /* ── Pending labels. ─────────────────────────────────────────────────────
+     Every button that fires a request swaps to one of these while it runs. The
+     complaint that started this rewrite was buttons that looked dead, and this
+     table is the answer to it. Present continuous, always, so it reads as
+     something happening rather than something that happened. */
+  pending: {
+    signingIn: "Signing you in",
+    signingOut: "Signing out",
+    creating: "Creating your account",
+    resetting: "Resetting",
+    sending: "Sending",
+    saving: "Saving",
+    holding: "Holding your table",
+    ordering: "Sending your order",
+    paying: "Taking payment",
+    cancelling: "Cancelling",
+    joining: "Adding you",
+    posting: "Posting",
+    uploading: "Uploading",
+    checking: "Checking",
+    deleting: "Deleting",
+  },
+
+  /* ── Home ────────────────────────────────────────────────────────────────*/
+  home: {
+    heroLead: "The best meat",
+    heroTail: "in Buea.",
+    heroBlurb:
+      "Chicken, goat and pork grilled to order over the fire, with the sides you actually want. Order for takeaway or hold a table, both from your phone.",
+    seeMenu: "See the menu",
+    orderNow: "Order now",
+    holdTable: "Hold a table",
+    platesFrom: "Plates from",
+    callUs: "Call",
+    atTheCounter: "At the counter",
+
+    favouritesTitle: "What people order",
+    favouritesLead:
+      "Everything goes on the fire when you order it, so give it a little time. The price here is the price you pay.",
+    seeWholeMenu: "See the whole menu",
+
+    offerTitle: "On this week",
+    offerLead: "One offer worth knowing about.",
+    seeOffer: "See the offer",
+
+    waysTitle: "Three ways in",
+    wayOrderTitle: "Order for takeaway",
+    wayOrderBody: "Pay with MTN or Orange Money, or settle up at the counter. Show your code when you arrive.",
+    wayOrderAction: "Start an order",
+    wayBookTitle: "Hold a table",
+    wayBookBody: "Pick a time and a table. A deposit holds it and comes straight off your bill.",
+    wayBookAction: "Book a table",
+    wayQueueTitle: "Already outside",
+    wayQueueBody: "Full house? Join the queue from your phone and we will tell you the moment a table clears.",
+    wayQueueAction: "Join the queue",
+
+    galleryTitle: "Inside the place",
+    galleryLead: "A few glimpses of the room and what comes off the grill.",
+    seeGallery: "See the photos",
+
+    accountTitle: "Eating with us often?",
+    accountBody:
+      "An account keeps your bookings, codes and receipts in one place, and lets you change or cancel without ringing anybody.",
+    accountCreate: "Create an account",
+    accountHave: "I already have one",
+
+    reviewsMore: "Read the rest",
+
+    findTitle: "Where we are",
+    findHint: "Look for the grill on the corner.",
+    directions: "Directions",
+    ourStory: "Our story",
+  },
+
+  /* ── Signed in, on the home page. ────────────────────────────────────────*/
+  yours: {
+    greeting: "Evening",
+    greetingMorning: "Morning",
+    greetingAfternoon: "Afternoon",
+    nextTable: "Your next table",
+    liveOrder: "Your order",
+    noTable: "No table booked",
+    noTableBody: "Pick a time and we will hold one for you.",
+    noOrder: "No order running",
+    seeAllVisits: "All your visits",
+    showPass: "Show my pass",
+    trackOrder: "Track it",
+  },
+
+  /* ── Menu ────────────────────────────────────────────────────────────────*/
+  menu: {
+    title: "The menu",
+    lead: "Grilled to order. Prices in FCFA, and what you see is what you pay.",
+    search: "Search the menu",
+    noMatch: "Nothing matches that.",
+    clearSearch: "Clear",
+    all: "All",
+    add: "Add",
+    added: "Added",
+    inBasket: "In your basket",
+    soldOutToday: "Sold out today",
+    soldOutNote: "Back tomorrow.",
+    byWeight: "By weight",
+    viewBasket: "View basket",
+    itemOne: "1 item",
+    itemMany: "{n} items",
+  },
+
+  /* ── Order ───────────────────────────────────────────────────────────────*/
+  order: {
+    title: "Your order",
+    lead: "For takeaway. Show your code at the counter when you arrive.",
+    empty: "Your basket is empty.",
+    emptyBody: "Have a look at the menu and add something to it.",
+    goToMenu: "Go to the menu",
+    yourDetails: "Your details",
+    name: "Your name",
+    phone: "Phone number",
+    phoneHint: "So we can reach you if there is a problem with the order.",
+    pickupTime: "Pickup time",
+    pickupHint: "Give the grill a little time. Twenty minutes is about right.",
+    note: "Anything we should know?",
+    notePlaceholder: "Less pepper, extra plantain, that sort of thing.",
+    subtotal: "Subtotal",
+    discount: "Discount",
+    promo: "Promo code",
+    promoApply: "Apply",
+    promoApplied: "Code applied",
+    giftCard: "Gift card",
+    points: "Points",
+    pointsUse: "Use my points",
+    pointsWorth: "{n} points, worth {value} FCFA",
+    payNow: "Pay now",
+    payHow: "How would you like to pay?",
+    payMtn: "MTN Mobile Money",
+    payOrange: "Orange Money",
+    payCash: "Cash at the counter",
+    payCashNote: "We will hold your order. Pay when you collect it.",
+    placeOrder: "Place the order",
+    placed: "Order in. We will start on it.",
+    yourCode: "Your code",
+    codeHint: "Show this at the counter.",
+  },
+
+  /* ── Book ────────────────────────────────────────────────────────────────*/
+  book: {
+    title: "Hold a table",
+    stepWhen: "When",
+    stepWho: "How many",
+    stepWhere: "Which table",
+    stepConfirm: "Confirm",
+    date: "Which day",
+    time: "What time",
+    party: "How many of you",
+    partyOne: "Just me",
+    partyMany: "{n} people",
+    pickTable: "Pick your table off the plan",
+    tableFree: "Free",
+    tableTaken: "Taken",
+    tableTooSmall: "Too small for your party",
+    seats: "{n} seats",
+    phone: "Phone number",
+    phoneHint: "We only use this if something changes.",
+    note: "Anything we should know?",
+    notePlaceholder: "A birthday, a high chair, a quiet corner.",
+    preorder: "Order ahead?",
+    preorderBody: "Add dishes now and they go on the fire as you sit down.",
+    deposit: "Deposit",
+    depositBody: "{amount} FCFA holds the table and comes off your bill.",
+    lateFee: "Cancel less than an hour before and we keep {amount} FCFA.",
+    holdIt: "Hold my table",
+    held: "Table held. See you {when}.",
+    clash: "That table went while you were choosing.",
+    clashBody: "Here is what is still free.",
+    otherTimes: "Other times that day",
+    otherTables: "Other tables at that time",
+  },
+
+  /* ── Paying ──────────────────────────────────────────────────────────────*/
+  pay: {
+    title: "Pay",
+    amount: "To pay",
+    wallet: "Which wallet",
+    momoPhone: "Mobile Money number",
+    momoHint: "The number the money comes from.",
+    mtnHint: "Nine digits, starting with 6.",
+    orangeHint: "Starting 69, or 655 to 659.",
+    send: "Pay now",
+    checkPhone: "Check your phone",
+    checkPhoneBody: "We have sent a prompt. Enter your PIN to approve it.",
+    openOrange: "Open Orange Money",
+    openOrangeBody: "Finish the payment in Orange Money, then come back here.",
+    waiting: "Waiting for the payment",
+    expiresIn: "This expires in {time}",
+    done: "Paid. That is you sorted.",
+    failed: "That payment did not go through.",
+    failedBody: "Nothing has been taken. Check your balance and try again.",
+    tryAgain: "Try again",
+    somethingElse: "Pay another way",
+    nothingToPay: "Nothing to pay. Your discount covered it.",
+  },
+
+  /* ── My visits ───────────────────────────────────────────────────────────*/
+  mine: {
+    title: "My visits",
+    tables: "Tables",
+    orders: "Orders",
+    upcoming: "Coming up",
+    past: "Been and gone",
+    noTables: "No tables booked.",
+    noTablesBody: "When you book one it shows up here with its code.",
+    noOrders: "No orders yet.",
+    noOrdersBody: "Order something and you can follow it from here.",
+    pass: "Your pass",
+    passHint: "Show this at the door.",
+    receipt: "Receipt",
+    addToCalendar: "Add to calendar",
+    cancelBooking: "Cancel this booking",
+    cancelConfirm: "Cancel this table?",
+    cancelBody: "More than an hour before, your deposit comes back in full.",
+    cancelled: "Cancelled. Your deposit is on its way back.",
+    feeTitle: "There is a fee for this one",
+    feeBody: "It is less than an hour away, so {amount} FCFA is kept. Cancel anyway?",
+    orderStatus: {
+      awaiting_payment: "Waiting for payment",
+      pending: "With the kitchen",
+      confirmed: "On the fire",
+      ready: "Ready to collect",
+      picked_up: "Collected",
+      cancelled: "Cancelled",
+    },
+    bookingStatus: {
+      pending_payment: "Not held yet",
+      confirmed: "Held",
+      cancelled: "Cancelled",
+      completed: "Been",
+    },
+  },
+
+  /* ── Account ─────────────────────────────────────────────────────────────*/
+  account: {
+    title: "You",
+    profile: "Profile",
+    security: "Security",
+    rewards: "Rewards",
+    name: "Name",
+    email: "Email",
+    changeEmail: "Change email",
+    emailCodeSent: "We have sent a code to that address.",
+    emailCode: "The code",
+    password: "Password",
+    currentPassword: "Current password",
+    newPassword: "New password",
+    passwordChanged: "Password changed. Every other device has been signed out.",
+    twoStep: "Two-step sign in",
+    twoStepOn: "On",
+    twoStepOff: "Off",
+    twoStepBody: "Ask for a code from your phone as well as your password.",
+    passkeys: "Passkeys",
+    passkeysBody: "Sign in with your fingerprint or face instead of a password.",
+    addPasskey: "Add a passkey",
+    devices: "Signed in on",
+    thisDevice: "This device",
+    signOutOthers: "Sign out everywhere else",
+    signOut: "Sign out",
+    closeAccount: "Close my account",
+    closeBody:
+      "Your name, email and reviews go. Your bookings and payments stay, because they are the restaurant's records too.",
+    closeConfirm: "Close this account for good?",
+    pointsBalance: "Your points",
+    pointsBody: "One point for every {per} FCFA you spend. Spend them on a deposit or an order.",
+    pointsWorth: "Worth {value} FCFA",
+    pointsNeed: "You need {n} more before you can spend any.",
+    pointsHistory: "How you earned them",
+  },
+
+  /* ── Signing in ──────────────────────────────────────────────────────────*/
+  auth: {
+    signInTitle: "Welcome back",
+    signInLead: "Sign in to see your bookings and your codes.",
+    joinTitle: "Create an account",
+    joinLead: "It takes a minute, and it keeps everything in one place.",
+    resetTitle: "Reset your password",
+    resetLead: "We will send a code to your email.",
+    email: "Email",
+    password: "Password",
+    name: "Your name",
+    signIn: "Sign in",
+    join: "Create account",
+    usePasskey: "Use a passkey",
+    forgot: "Forgotten your password?",
+    noAccount: "No account yet?",
+    haveAccount: "Already have one?",
+    twoStepTitle: "One more step",
+    twoStepLead: "Enter the six-digit code from your authenticator app.",
+    code: "Code",
+    verify: "Verify",
+    sendCode: "Send me a code",
+    codeSent: "Check your email. The code lasts fifteen minutes.",
+    newPassword: "New password",
+    setPassword: "Set my password",
+    passwordSet: "Done. You can sign in with it now.",
+  },
+
+  /* ── The rest of the site ────────────────────────────────────────────────*/
+  reviews: {
+    title: "Reviews",
+    lead: "What people said after eating here.",
+    write: "Write a review",
+    edit: "Edit my review",
+    yours: "Your review",
+    rating: "How was it?",
+    text: "Tell people about it",
+    post: "Post it",
+    posted: "Posted. Thanks for taking the time.",
+    reply: "Reply",
+    replies: "{n} replies",
+    fromUs: "From Cam Chop Meat",
+    verified: "Ate here",
+    none: "No reviews yet.",
+    noneBody: "Be the first to say something.",
+  },
+
+  gallery: {
+    title: "Photos",
+    lead: "The room, the fire, and what comes off it.",
+    send: "Send us a photo",
+    sendBody: "We will have a look and put the good ones up.",
+    sent: "Got it. We will take a look.",
+    none: "No photos yet.",
+  },
+
+  offers: {
+    title: "Offers",
+    lead: "What is running at the moment.",
+    until: "Until",
+    none: "Nothing running right now.",
+    noneBody: "Check back, or follow us on TikTok.",
+  },
+
+  events: {
+    title: "Book the place out",
+    lead: "Birthdays, work dos, anything with a guest list. Tell us what you have in mind.",
+    type: "What kind of thing",
+    when: "When",
+    guests: "How many people",
+    note: "Tell us about it",
+    send: "Send the enquiry",
+    sent: "Got it. We will come back to you.",
+    types: {
+      birthday: "Birthday",
+      corporate: "Work do",
+      private_dining: "Private dining",
+      wedding: "Wedding",
+      other: "Something else",
+    },
+  },
+
+  queue: {
+    title: "Join the queue",
+    lead: "Full house? Put your name down and we will text you when a table clears.",
+    name: "Your name",
+    phone: "Phone number",
+    party: "How many of you",
+    join: "Put me down",
+    joined: "You are down. We will be in touch.",
+    position: "You are number {n}",
+    wait: "About {n} minutes",
+    waiting: "{n} waiting",
+  },
+
+  find: {
+    title: "Find us",
+    lead: "On Razel Street, opposite the P and T school.",
+    address: "Address",
+    hours: "Hours",
+    phone: "Phone",
+    whatsapp: "WhatsApp",
+    directions: "Open in Maps",
+    call: "Give us a call",
+  },
+
+  story: {
+    title: "Our story",
+  },
+
+  help: {
+    title: "Help",
+    lead: "Ask us anything. Somebody is usually about.",
+    online: "Somebody is at the desk",
+    offline: "Nobody is at the desk right now",
+    replyTime: "Usually replies within {time}",
+    placeholder: "What do you need?",
+    send: "Send",
+    quickBooking: "Help with a booking",
+    quickOrder: "Help with an order",
+    quickWhere: "Where are you?",
+    quickMenu: "What is on the menu?",
+    startedBy: "Started by",
+  },
+
+  /* ── When things are shut ────────────────────────────────────────────────*/
+  gate: {
+    maintenanceTitle: "Back shortly",
+    maintenanceBody: "We are doing a bit of work on the site. Give us a few minutes.",
+    pausedTitle: "Not right now",
+    pausedBody: "This part of the site is paused. Give us a call and we will sort you out.",
+    closedTitle: "We are closed",
+    notFoundTitle: "That page is not here",
+    notFoundBody: "It may have moved. Try the menu, or head back to the start.",
+    goHome: "Back to the start",
+    brokeTitle: "This page broke",
+    brokeBody: "Sorry about that. Reload it, and if it keeps happening give us a call.",
+    reload: "Reload",
+  },
+
+  footer: {
+    rights: "Cam Chop Meat, Buea",
+  },
+};
+
+/**
+ * The shape every language must fill.
+ *
+ * Derived from the English, and deliberately without `as const` on `EN` above.
+ * With it, every leaf would be its own literal type ("Home", not string) and
+ * `FR` could not satisfy it: French that says "Accueil" would be a type error
+ * rather than a translation. What is wanted here is the *structure* checked and
+ * the strings free, so a missing or misspelled key does not build and a
+ * translated one does.
+ */
+export type Copy = typeof EN;
+
+export const FR: Copy = {
+  brand: {
+    name: "Cam Chop Meat",
+    tagline: "La meilleure viande de Buea.",
+    blurb: "Poulet, chèvre et porc, droit sortis du feu.",
+  },
+
+  nav: {
+    home: "Accueil",
+    menu: "Menu",
+    order: "Commander",
+    book: "Réserver",
+    mine: "Mes visites",
+    you: "Vous",
+    find: "Nous trouver",
+    story: "Notre histoire",
+    reviews: "Avis",
+    photos: "Photos",
+    offers: "Offres",
+    events: "Événements",
+    queue: "File",
+    help: "Aide",
+    signIn: "Se connecter",
+    join: "Créer un compte",
+    desk: "Desk",
+    basket: "Panier",
+    call: "Appeler",
+    terms: "Conditions",
+    privacy: "Confidentialité",
+  },
+
+  common: {
+    back: "Retour",
+    next: "Suivant",
+    done: "Terminé",
+    close: "Fermer",
+    cancel: "Annuler",
+    save: "Enregistrer",
+    edit: "Modifier",
+    remove: "Retirer",
+    tryAgain: "Réessayer",
+    seeAll: "Voir tout",
+    from: "À partir de",
+    total: "Total",
+    free: "Gratuit",
+    openNow: "Ouvert",
+    closedNow: "Fermé",
+    busyNow: "Très demandé",
+    soldOut: "Épuisé",
+    offline: "Vous êtes hors ligne",
+    backOnline: "Connexion rétablie",
+    loading: "Un instant",
+    nothingYet: "Rien pour le moment",
+    couldNotRefresh: "Impossible d'actualiser. Voici ce que nous avions.",
+  },
+
+  pending: {
+    signingIn: "Connexion",
+    signingOut: "Déconnexion",
+    creating: "Création du compte",
+    resetting: "Réinitialisation",
+    sending: "Envoi",
+    saving: "Enregistrement",
+    holding: "Réservation de la table",
+    ordering: "Envoi de la commande",
+    paying: "Paiement",
+    cancelling: "Annulation",
+    joining: "Inscription",
+    posting: "Publication",
+    uploading: "Téléversement",
+    checking: "Vérification",
+    deleting: "Suppression",
+  },
+
+  home: {
+    heroLead: "La meilleure viande",
+    heroTail: "de Buea.",
+    heroBlurb:
+      "Poulet, chèvre et porc grillés à la commande sur le feu, avec les accompagnements qu'il vous faut. Commandez à emporter ou réservez une table, tout depuis votre téléphone.",
+    seeMenu: "Voir le menu",
+    orderNow: "Commander",
+    holdTable: "Réserver une table",
+    platesFrom: "À partir de",
+    callUs: "Appeler",
+    atTheCounter: "Au comptoir",
+
+    favouritesTitle: "Ce que les gens commandent",
+    favouritesLead:
+      "Tout passe sur le feu au moment de la commande, laissez-lui un peu de temps. Le prix affiché est le prix que vous payez.",
+    seeWholeMenu: "Voir tout le menu",
+
+    offerTitle: "Cette semaine",
+    offerLead: "Une offre à connaître.",
+    seeOffer: "Voir l'offre",
+
+    waysTitle: "Trois façons de venir",
+    wayOrderTitle: "Commander à emporter",
+    wayOrderBody: "Payez avec MTN ou Orange Money, ou réglez au comptoir. Présentez votre code en arrivant.",
+    wayOrderAction: "Commencer une commande",
+    wayBookTitle: "Réserver une table",
+    wayBookBody: "Choisissez l'heure et la table. Un acompte la bloque et se déduit de votre addition.",
+    wayBookAction: "Réserver",
+    wayQueueTitle: "Déjà sur place",
+    wayQueueBody: "Salle pleine ? Rejoignez la file depuis votre téléphone et nous vous prévenons dès qu'une table se libère.",
+    wayQueueAction: "Rejoindre la file",
+
+    galleryTitle: "À l'intérieur",
+    galleryLead: "Quelques images de la salle et de ce qui sort du grill.",
+    seeGallery: "Voir les photos",
+
+    accountTitle: "Vous venez souvent ?",
+    accountBody:
+      "Un compte garde vos réservations, vos codes et vos reçus au même endroit, et vous permet de modifier ou d'annuler sans appeler personne.",
+    accountCreate: "Créer un compte",
+    accountHave: "J'en ai déjà un",
+
+    reviewsMore: "Lire les autres",
+
+    findTitle: "Où nous sommes",
+    findHint: "Cherchez le grill au coin de la rue.",
+    directions: "Itinéraire",
+    ourStory: "Notre histoire",
+  },
+
+  yours: {
+    greeting: "Bonsoir",
+    greetingMorning: "Bonjour",
+    greetingAfternoon: "Bonjour",
+    nextTable: "Votre prochaine table",
+    liveOrder: "Votre commande",
+    noTable: "Aucune table réservée",
+    noTableBody: "Choisissez une heure et nous vous en gardons une.",
+    noOrder: "Aucune commande en cours",
+    seeAllVisits: "Toutes vos visites",
+    showPass: "Voir mon pass",
+    trackOrder: "Suivre",
+  },
+
+  menu: {
+    title: "Le menu",
+    lead: "Grillé à la commande. Prix en FCFA, et ce que vous voyez est ce que vous payez.",
+    search: "Chercher dans le menu",
+    noMatch: "Rien ne correspond.",
+    clearSearch: "Effacer",
+    all: "Tout",
+    add: "Ajouter",
+    added: "Ajouté",
+    inBasket: "Dans votre panier",
+    soldOutToday: "Épuisé aujourd'hui",
+    soldOutNote: "De retour demain.",
+    byWeight: "Au poids",
+    viewBasket: "Voir le panier",
+    itemOne: "1 article",
+    itemMany: "{n} articles",
+  },
+
+  order: {
+    title: "Votre commande",
+    lead: "À emporter. Présentez votre code au comptoir en arrivant.",
+    empty: "Votre panier est vide.",
+    emptyBody: "Jetez un œil au menu et ajoutez quelque chose.",
+    goToMenu: "Aller au menu",
+    yourDetails: "Vos coordonnées",
+    name: "Votre nom",
+    phone: "Numéro de téléphone",
+    phoneHint: "Pour vous joindre en cas de souci avec la commande.",
+    pickupTime: "Heure de retrait",
+    pickupHint: "Laissez un peu de temps au grill. Vingt minutes, c'est bien.",
+    note: "Quelque chose à nous signaler ?",
+    notePlaceholder: "Moins de piment, plus de plantain, ce genre de choses.",
+    subtotal: "Sous-total",
+    discount: "Remise",
+    promo: "Code promo",
+    promoApply: "Appliquer",
+    promoApplied: "Code appliqué",
+    giftCard: "Carte cadeau",
+    points: "Points",
+    pointsUse: "Utiliser mes points",
+    pointsWorth: "{n} points, soit {value} FCFA",
+    payNow: "Payer",
+    payHow: "Comment souhaitez-vous payer ?",
+    payMtn: "MTN Mobile Money",
+    payOrange: "Orange Money",
+    payCash: "Espèces au comptoir",
+    payCashNote: "Nous gardons votre commande. Payez en venant la chercher.",
+    placeOrder: "Passer la commande",
+    placed: "Commande reçue. Nous nous y mettons.",
+    yourCode: "Votre code",
+    codeHint: "Présentez ceci au comptoir.",
+  },
+
+  book: {
+    title: "Réserver une table",
+    stepWhen: "Quand",
+    stepWho: "Combien",
+    stepWhere: "Quelle table",
+    stepConfirm: "Confirmer",
+    date: "Quel jour",
+    time: "À quelle heure",
+    party: "Vous êtes combien",
+    partyOne: "Juste moi",
+    partyMany: "{n} personnes",
+    pickTable: "Choisissez votre table sur le plan",
+    tableFree: "Libre",
+    tableTaken: "Prise",
+    tableTooSmall: "Trop petite pour votre groupe",
+    seats: "{n} places",
+    phone: "Numéro de téléphone",
+    phoneHint: "Nous l'utilisons seulement si quelque chose change.",
+    note: "Quelque chose à nous signaler ?",
+    notePlaceholder: "Un anniversaire, une chaise haute, un coin tranquille.",
+    preorder: "Commander à l'avance ?",
+    preorderBody: "Ajoutez des plats maintenant et ils passent sur le feu à votre arrivée.",
+    deposit: "Acompte",
+    depositBody: "{amount} FCFA bloquent la table et se déduisent de votre addition.",
+    lateFee: "Annulez moins d'une heure avant et nous gardons {amount} FCFA.",
+    holdIt: "Réserver ma table",
+    held: "Table réservée. À {when}.",
+    clash: "Cette table est partie pendant que vous choisissiez.",
+    clashBody: "Voici ce qui reste libre.",
+    otherTimes: "Autres heures ce jour-là",
+    otherTables: "Autres tables à cette heure",
+  },
+
+  pay: {
+    title: "Payer",
+    amount: "À payer",
+    wallet: "Quel portefeuille",
+    momoPhone: "Numéro Mobile Money",
+    momoHint: "Le numéro d'où part l'argent.",
+    mtnHint: "Neuf chiffres, commençant par 6.",
+    orangeHint: "Commençant par 69, ou 655 à 659.",
+    send: "Payer",
+    checkPhone: "Regardez votre téléphone",
+    checkPhoneBody: "Nous avons envoyé une demande. Entrez votre code pour l'approuver.",
+    openOrange: "Ouvrir Orange Money",
+    openOrangeBody: "Terminez le paiement dans Orange Money, puis revenez ici.",
+    waiting: "En attente du paiement",
+    expiresIn: "Expire dans {time}",
+    done: "Payé. C'est réglé.",
+    failed: "Ce paiement n'est pas passé.",
+    failedBody: "Rien n'a été prélevé. Vérifiez votre solde et réessayez.",
+    tryAgain: "Réessayer",
+    somethingElse: "Payer autrement",
+    nothingToPay: "Rien à payer. Votre remise a tout couvert.",
+  },
+
+  mine: {
+    title: "Mes visites",
+    tables: "Tables",
+    orders: "Commandes",
+    upcoming: "À venir",
+    past: "Passées",
+    noTables: "Aucune table réservée.",
+    noTablesBody: "Dès que vous en réservez une, elle apparaît ici avec son code.",
+    noOrders: "Aucune commande.",
+    noOrdersBody: "Commandez quelque chose et suivez-le depuis ici.",
+    pass: "Votre pass",
+    passHint: "Présentez ceci à l'entrée.",
+    receipt: "Reçu",
+    addToCalendar: "Ajouter au calendrier",
+    cancelBooking: "Annuler cette réservation",
+    cancelConfirm: "Annuler cette table ?",
+    cancelBody: "Plus d'une heure avant, votre acompte revient en entier.",
+    cancelled: "Annulé. Votre acompte est en route.",
+    feeTitle: "Des frais s'appliquent",
+    feeBody: "C'est dans moins d'une heure, donc {amount} FCFA sont retenus. Annuler quand même ?",
+    orderStatus: {
+      awaiting_payment: "En attente de paiement",
+      pending: "En cuisine",
+      confirmed: "Sur le feu",
+      ready: "Prête à retirer",
+      picked_up: "Retirée",
+      cancelled: "Annulée",
+    },
+    bookingStatus: {
+      pending_payment: "Pas encore bloquée",
+      confirmed: "Bloquée",
+      cancelled: "Annulée",
+      completed: "Passée",
+    },
+  },
+
+  account: {
+    title: "Vous",
+    profile: "Profil",
+    security: "Sécurité",
+    rewards: "Récompenses",
+    name: "Nom",
+    email: "Email",
+    changeEmail: "Changer d'email",
+    emailCodeSent: "Nous avons envoyé un code à cette adresse.",
+    emailCode: "Le code",
+    password: "Mot de passe",
+    currentPassword: "Mot de passe actuel",
+    newPassword: "Nouveau mot de passe",
+    passwordChanged: "Mot de passe changé. Tous les autres appareils ont été déconnectés.",
+    twoStep: "Connexion en deux étapes",
+    twoStepOn: "Activée",
+    twoStepOff: "Désactivée",
+    twoStepBody: "Demander un code depuis votre téléphone en plus du mot de passe.",
+    passkeys: "Clés d'accès",
+    passkeysBody: "Connectez-vous avec votre empreinte ou votre visage au lieu d'un mot de passe.",
+    addPasskey: "Ajouter une clé d'accès",
+    devices: "Connecté sur",
+    thisDevice: "Cet appareil",
+    signOutOthers: "Déconnecter partout ailleurs",
+    signOut: "Se déconnecter",
+    closeAccount: "Fermer mon compte",
+    closeBody:
+      "Votre nom, votre email et vos avis disparaissent. Vos réservations et paiements restent, car ce sont aussi les registres du restaurant.",
+    closeConfirm: "Fermer ce compte définitivement ?",
+    pointsBalance: "Vos points",
+    pointsBody: "Un point pour chaque {per} FCFA dépensés. Utilisez-les sur un acompte ou une commande.",
+    pointsWorth: "Valent {value} FCFA",
+    pointsNeed: "Il vous en faut {n} de plus avant de pouvoir en utiliser.",
+    pointsHistory: "Comment vous les avez gagnés",
+  },
+
+  auth: {
+    signInTitle: "Content de vous revoir",
+    signInLead: "Connectez-vous pour voir vos réservations et vos codes.",
+    joinTitle: "Créer un compte",
+    joinLead: "Une minute, et tout reste au même endroit.",
+    resetTitle: "Réinitialiser votre mot de passe",
+    resetLead: "Nous enverrons un code à votre email.",
+    email: "Email",
+    password: "Mot de passe",
+    name: "Votre nom",
+    signIn: "Se connecter",
+    join: "Créer le compte",
+    usePasskey: "Utiliser une clé d'accès",
+    forgot: "Mot de passe oublié ?",
+    noAccount: "Pas encore de compte ?",
+    haveAccount: "Vous en avez déjà un ?",
+    twoStepTitle: "Encore une étape",
+    twoStepLead: "Entrez le code à six chiffres de votre application d'authentification.",
+    code: "Code",
+    verify: "Vérifier",
+    sendCode: "Envoyez-moi un code",
+    codeSent: "Regardez votre email. Le code dure quinze minutes.",
+    newPassword: "Nouveau mot de passe",
+    setPassword: "Définir mon mot de passe",
+    passwordSet: "C'est fait. Vous pouvez vous connecter avec.",
+  },
+
+  reviews: {
+    title: "Avis",
+    lead: "Ce que les gens ont dit après avoir mangé ici.",
+    write: "Écrire un avis",
+    edit: "Modifier mon avis",
+    yours: "Votre avis",
+    rating: "C'était comment ?",
+    text: "Racontez-nous",
+    post: "Publier",
+    posted: "Publié. Merci d'avoir pris le temps.",
+    reply: "Répondre",
+    replies: "{n} réponses",
+    fromUs: "De Cam Chop Meat",
+    verified: "A mangé ici",
+    none: "Aucun avis pour le moment.",
+    noneBody: "Soyez le premier à dire quelque chose.",
+  },
+
+  gallery: {
+    title: "Photos",
+    lead: "La salle, le feu, et ce qui en sort.",
+    send: "Envoyez-nous une photo",
+    sendBody: "Nous regarderons et publierons les meilleures.",
+    sent: "Bien reçu. Nous allons regarder.",
+    none: "Aucune photo pour le moment.",
+  },
+
+  offers: {
+    title: "Offres",
+    lead: "Ce qui tourne en ce moment.",
+    until: "Jusqu'au",
+    none: "Rien en ce moment.",
+    noneBody: "Repassez, ou suivez-nous sur TikTok.",
+  },
+
+  events: {
+    title: "Privatiser le lieu",
+    lead: "Anniversaires, pots d'entreprise, tout ce qui a une liste d'invités. Dites-nous ce que vous avez en tête.",
+    type: "Quel genre d'événement",
+    when: "Quand",
+    guests: "Combien de personnes",
+    note: "Parlez-nous-en",
+    send: "Envoyer la demande",
+    sent: "Bien reçu. Nous revenons vers vous.",
+    types: {
+      birthday: "Anniversaire",
+      corporate: "Événement d'entreprise",
+      private_dining: "Repas privé",
+      wedding: "Mariage",
+      other: "Autre chose",
+    },
+  },
+
+  queue: {
+    title: "Rejoindre la file",
+    lead: "Salle pleine ? Laissez votre nom et nous vous écrivons dès qu'une table se libère.",
+    name: "Votre nom",
+    phone: "Numéro de téléphone",
+    party: "Vous êtes combien",
+    join: "Inscrivez-moi",
+    joined: "Vous êtes inscrit. Nous vous préviendrons.",
+    position: "Vous êtes le numéro {n}",
+    wait: "Environ {n} minutes",
+    waiting: "{n} en attente",
+  },
+
+  find: {
+    title: "Nous trouver",
+    lead: "Rue Razel, en face de l'école P and T.",
+    address: "Adresse",
+    hours: "Horaires",
+    phone: "Téléphone",
+    whatsapp: "WhatsApp",
+    directions: "Ouvrir dans Maps",
+    call: "Appelez-nous",
+  },
+
+  story: {
+    title: "Notre histoire",
+  },
+
+  help: {
+    title: "Aide",
+    lead: "Demandez-nous ce que vous voulez. Il y a presque toujours quelqu'un.",
+    online: "Quelqu'un est disponible",
+    offline: "Personne n'est disponible pour le moment",
+    replyTime: "Réponse habituelle sous {time}",
+    placeholder: "De quoi avez-vous besoin ?",
+    send: "Envoyer",
+    quickBooking: "Aide pour une réservation",
+    quickOrder: "Aide pour une commande",
+    quickWhere: "Où êtes-vous ?",
+    quickMenu: "Qu'y a-t-il au menu ?",
+    startedBy: "Ouvert par",
+  },
+
+  gate: {
+    maintenanceTitle: "De retour très vite",
+    maintenanceBody: "Nous faisons quelques travaux sur le site. Quelques minutes.",
+    pausedTitle: "Pas en ce moment",
+    pausedBody: "Cette partie du site est en pause. Appelez-nous et nous arrangerons ça.",
+    closedTitle: "Nous sommes fermés",
+    notFoundTitle: "Cette page n'existe pas",
+    notFoundBody: "Elle a peut-être bougé. Essayez le menu, ou revenez au début.",
+    goHome: "Revenir au début",
+    brokeTitle: "Cette page a planté",
+    brokeBody: "Désolé. Rechargez-la, et si cela continue, appelez-nous.",
+    reload: "Recharger",
+  },
+
+  footer: {
+    rights: "Cam Chop Meat, Buea",
+  },
+};
+
+export const COPY = { en: EN, fr: FR } as const;
+export type Locale = keyof typeof COPY;
+
+/**
+ * Fills `{name}` placeholders.
+ *
+ * Deliberately not a template literal at the call site: a string with a hole in
+ * it has to survive being translated, and a translator cannot reorder the parts
+ * of a sentence that has already been concatenated.
+ */
+export function fill(template: string, values: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (whole, key: string) => {
+    const value = values[key];
+    return value === undefined ? whole : String(value);
+  });
+}

@@ -1,190 +1,233 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { api } from "~/lib/api";
 import type { SiteSettings } from "~/lib/api";
-import { useResource } from "~/lib/useResource";
-import { Button } from "~/ui/Button";
-import { TextField } from "~/ui/Field";
+import { useMutation, invalidate } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { money } from "~/lib/format";
+import { Action } from "~/ui/Button";
+import { TextField, TextAreaField } from "~/ui/Field";
 import { Notice } from "~/ui/Feedback";
-import { useToast } from "~/state/toast";
+import { DeskPage, Section } from "./parts";
 import { useVenue } from "~/state/venue";
-import { DeskPage, Loaded } from "./parts";
+import { useToast } from "~/state/toast";
 
 /**
- * The restaurant's own details.
+ * Your phone number, address, hours and social links.
  *
- * Everything on this screen appears on the public site, which is worth saying
- * out loud: a phone number typed wrong here is a phone number nobody can reach
- * you on. The server only accepts the keys listed below, so a typo in a field
- * name silently does nothing rather than inventing a setting.
+ * ── Why this is the most important screen in the console ───────────────────
+ *
+ * Everything the site says about this restaurant is read from here. The footer,
+ * the Find us page, the contact links, the share card, the maintenance screen,
+ * the deposit charged at checkout. Nothing is hardcoded, on purpose, and the
+ * consequence is that a wrong phone number here is a phone number nobody can
+ * reach and only the owner can fix it.
+ *
+ * The money fields are the other half. The deposit and the late cancellation fee
+ * are enforced by the server, and the loyalty numbers govern what a point is
+ * worth. Changing what the scheme costs is not a deploy.
  */
 
-const FIELDS: { key: keyof SiteSettings; label: string; hint?: string; type?: string; group?: string }[] = [
-  { key: "phone", label: "Phone number", hint: "Shown on the site and used for the call button." },
-  { key: "address", label: "Street address", hint: "How somebody would find you on foot." },
-  { key: "city", label: "Town", group: "location" },
-  { key: "region", label: "Region", group: "location" },
-  { key: "hours", label: "Opening hours", hint: "Written out, for example: every day, midday until late." },
-  { key: "tiktok_url", label: "TikTok", type: "url", group: "social" },
-  { key: "ig_url", label: "Instagram", type: "url", group: "social" },
-  { key: "fb_url", label: "Facebook", type: "url", group: "social" },
-  {
-    key: "booking_deposit_fcfa",
-    label: "Table deposit, FCFA",
-    hint: "What a guest pays to hold a table. It comes off their bill. Changing it changes every price the site quotes.",
-    type: "number",
-    group: "deposit",
-  },
-  {
-    key: "late_cancel_fee_fcfa",
-    label: "Late cancellation fee, FCFA",
-    hint: "Kept when somebody cancels inside the hour, because the table sat empty.",
-    type: "number",
-    group: "deposit",
-  },
-  {
-    key: "loyalty_point_value_fcfa",
-    label: "What a point is worth, FCFA",
-    hint: "Guests earn one point per 100 FCFA they spend. At 5 FCFA a point you are giving a regular 5% back.",
-    type: "number",
-  },
-  {
-    key: "loyalty_min_redeem_points",
-    label: "Points needed before they can be spent",
-    hint: "A floor, so the reward is worth having rather than 15 FCFA off.",
-    type: "number",
-  },
-  {
-    key: "loyalty_max_redeem_percent",
-    label: "Most of a bill points may cover, percent",
-    hint: "The rest still arrives as money. 50 means a guest can never pay for more than half an order in points.",
-    type: "number",
-  },
-];
+type Draft = Record<string, string>;
+
+const KEYS = [
+  "phone",
+  "address",
+  "city",
+  "region",
+  "hours",
+  "tiktok_url",
+  "ig_url",
+  "fb_url",
+  "booking_deposit_fcfa",
+  "late_cancel_fee_fcfa",
+  "loyalty_point_value_fcfa",
+  "loyalty_min_redeem_points",
+  "loyalty_max_redeem_percent",
+] as const;
 
 export function Settings() {
-  const settings = useResource(() => api.site.settings(), []);
-  const venue = useVenue();
   const toast = useToast();
-  const [draft, setDraft] = useState<SiteSettings>({});
-  const [busy, setBusy] = useState(false);
+  const { settings, refresh } = useVenue();
+  const [draft, setDraft] = useState<Draft>({});
   const [testTo, setTestTo] = useState("");
 
+  /* Loaded once from whatever the venue provider already has, so this screen
+     never waits on a request of its own. */
   useEffect(() => {
-    if (settings.data) setDraft(settings.data);
-  }, [settings.data]);
+    const next: Draft = {};
+    for (const key of KEYS) next[key] = String((settings as Record<string, unknown>)[key] ?? "");
+    setDraft(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
 
-  const dirty = FIELDS.some((field) => (draft[field.key] ?? "") !== (settings.data?.[field.key] ?? ""));
+  const set = (key: string, value: string) => setDraft((current) => ({ ...current, [key]: value }));
 
-  /** Short fields with a `group` tag share one row instead of a row each — a
-      town and a region cost the same line whether they sit apart or together. */
-  const rows: (typeof FIELDS)[number][][] = [];
-  for (const field of FIELDS) {
-    const last = rows.at(-1);
-    if (field.group && last?.[0]?.group === field.group) last.push(field);
-    else rows.push([field]);
-  }
+  const save = useMutation(async () => {
+    const updates: Partial<SiteSettings> = {};
+    for (const key of KEYS) {
+      const value = draft[key] ?? "";
+      (updates as Record<string, string>)[key] = value.trim();
+    }
+    await api.desk.settings.update(updates);
+    invalidate(K.settings);
+    refresh();
+    toast.done("Saved. The whole site reads these.");
+  });
+
+  const testEmail = useMutation(async () => {
+    const result = await api.desk.settings.sendTestEmail(testTo.trim() || undefined);
+    toast.done(`Sent to ${result.to}.`);
+  });
+
+  const pointValue = Number(draft.loyalty_point_value_fcfa) || 0;
 
   return (
-    <DeskPage title="Details" lead="What the site says about the place.">
-      <Loaded resource={settings}>
-        {() => (
-          <form
-            className="card stack"
-            style={{ maxWidth: "36rem" }}
-            onSubmit={async (event) => {
-              event.preventDefault();
-              setBusy(true);
-              try {
-                const changed: Record<string, string> = {};
-                for (const field of FIELDS) {
-                  const value = draft[field.key] ?? "";
-                  if (value !== (settings.data?.[field.key] ?? "")) changed[field.key] = value;
-                }
-                await api.desk.settings.update(changed);
-                settings.reload();
-                venue.refresh();
-                toast.done("Saved. The site shows it now.");
-              } catch (err) {
-                toast.failed(err);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            {rows.map((row) => {
-              const first = row[0]!;
-              return row.length === 1 ? (
-                <TextField
-                  key={first.key}
-                  label={first.label}
-                  hint={first.hint}
-                  type={first.type ?? "text"}
-                  value={draft[first.key] ?? ""}
-                  maxLength={400}
-                  onChange={(e) => setDraft({ ...draft, [first.key]: e.target.value })}
-                />
-              ) : (
-                <div key={first.group} className="field-grid" style={{ "--field-grid-cols": row.length } as CSSProperties}>
-                  {row.map((field) => (
-                    <TextField
-                      key={field.key}
-                      label={field.label}
-                      hint={field.hint}
-                      type={field.type ?? "text"}
-                      value={draft[field.key] ?? ""}
-                      maxLength={400}
-                      onChange={(e) => setDraft({ ...draft, [field.key]: e.target.value })}
-                    />
-                  ))}
-                </div>
-              );
-            })}
+    <DeskPage
+      title="Details"
+      hint="Everything the site says about this place comes from here."
+      actions={
+        <Action
+          size="sm"
+          tone="primary"
+          pending={save.pending}
+          pendingLabel="Saving"
+          onClick={async () => {
+            await save.run();
+            const error = save.readError();
+            if (error) toast.failed(error, "desk");
+          }}
+        >
+          Save
+        </Action>
+      }
+    >
+      <Notice tone="info">
+        A wrong phone number here is a phone number nobody can reach. Check these before a busy night.
+      </Notice>
 
-            <div className="row">
-              <Button type="submit" tone="primary" busy={busy} disabled={!dirty}>
-                Save
-              </Button>
-              {dirty ? (
-                <Button tone="quiet" onClick={() => setDraft(settings.data ?? {})}>
-                  Undo changes
-                </Button>
-              ) : null}
-            </div>
-          </form>
-        )}
-      </Loaded>
-
-      <section className="card stack" style={{ maxWidth: "36rem" }}>
-        <h2 className="card__title">Test the email</h2>
-        <p className="fine muted">
-          Sends one message to check that password resets can go out. It never contains a reset code.
-        </p>
+      <Section title="Where you are">
         <TextField
-          label="Send it to"
-          type="email"
-          placeholder="Leave empty to send it to yourself"
-          value={testTo}
-          onChange={(e) => setTestTo(e.target.value)}
+          label="Phone"
+          hint="Nine digits, no country code. This is what the Call button rings."
+          value={draft.phone ?? ""}
+          onChange={(event) => set("phone", event.target.value.replace(/\D/g, ""))}
+          inputMode="tel"
         />
-        <div className="row">
-          <Button
-            icon="mail"
-            onClick={async () => {
-              try {
-                const result = await api.desk.settings.sendTestEmail(testTo.trim() || undefined);
-                toast.done(`Sent to ${result.to}.`);
-              } catch (err) {
-                toast.failed(err, "Email is not set up on the server.");
-              }
-            }}
-          >
-            Send a test
-          </Button>
-        </div>
-        <Notice tone="info">
-          If this fails, password resets are switched off and the sign-in page tells people to message you instead.
-        </Notice>
-      </section>
+        <TextField
+          label="Street"
+          value={draft.address ?? ""}
+          onChange={(event) => set("address", event.target.value)}
+        />
+        <TextField label="Town" value={draft.city ?? ""} onChange={(event) => set("city", event.target.value)} />
+        <TextField label="Region" value={draft.region ?? ""} onChange={(event) => set("region", event.target.value)} />
+        <TextAreaField
+          label="Opening hours"
+          hint='In words, as you would say them. For example "Every day, midday until late".'
+          value={draft.hours ?? ""}
+          onChange={(event) => set("hours", event.target.value)}
+          rows={2}
+        />
+      </Section>
+
+      <Section title="Where people find you" hint="Leave any of these empty to hide the link.">
+        <TextField
+          label="TikTok"
+          value={draft.tiktok_url ?? ""}
+          onChange={(event) => set("tiktok_url", event.target.value)}
+          placeholder="https://www.tiktok.com/@cam.chop.meat"
+          inputMode="url"
+        />
+        <TextField
+          label="Instagram"
+          value={draft.ig_url ?? ""}
+          onChange={(event) => set("ig_url", event.target.value)}
+          inputMode="url"
+        />
+        <TextField
+          label="Facebook"
+          value={draft.fb_url ?? ""}
+          onChange={(event) => set("fb_url", event.target.value)}
+          inputMode="url"
+        />
+      </Section>
+
+      <Section title="Money" hint="The server charges what is here, not what is on the board outside.">
+        <TextField
+          label="Table deposit, FCFA"
+          hint="Held to book a table, and taken off the bill."
+          value={draft.booking_deposit_fcfa ?? ""}
+          onChange={(event) => set("booking_deposit_fcfa", event.target.value.replace(/\D/g, ""))}
+          inputMode="numeric"
+        />
+        <TextField
+          label="Late cancellation fee, FCFA"
+          hint="Kept when somebody cancels less than an hour before."
+          value={draft.late_cancel_fee_fcfa ?? ""}
+          onChange={(event) => set("late_cancel_fee_fcfa", event.target.value.replace(/\D/g, ""))}
+          inputMode="numeric"
+        />
+      </Section>
+
+      <Section
+        title="Points"
+        hint="A guest earns one point per 100 FCFA. These three decide what that is worth."
+      >
+        <TextField
+          label="What one point is worth, FCFA"
+          value={draft.loyalty_point_value_fcfa ?? ""}
+          onChange={(event) => set("loyalty_point_value_fcfa", event.target.value.replace(/\D/g, ""))}
+          inputMode="numeric"
+        />
+        <TextField
+          label="Points needed before any can be spent"
+          hint="Stops somebody redeeming four points against a whole bill."
+          value={draft.loyalty_min_redeem_points ?? ""}
+          onChange={(event) => set("loyalty_min_redeem_points", event.target.value.replace(/\D/g, ""))}
+          inputMode="numeric"
+        />
+        <TextField
+          label="Most of one bill points may cover, percent"
+          hint="Half is sensible. However many somebody has saved, the rest still arrives as money."
+          value={draft.loyalty_max_redeem_percent ?? ""}
+          onChange={(event) => set("loyalty_max_redeem_percent", event.target.value.replace(/\D/g, ""))}
+          inputMode="numeric"
+        />
+
+        {pointValue > 0 ? (
+          <p className="fine faint">
+            At this rate, a guest spending {money(10000)} FCFA earns 100 points, worth{" "}
+            {money(100 * pointValue)} FCFA off a future bill.
+          </p>
+        ) : null}
+      </Section>
+
+      <Section
+        title="Email"
+        hint="Password reset codes go by email. Send yourself one to check it is working."
+      >
+        <TextField
+          label="Send a test to"
+          hint="Leave empty to send it to your own address."
+          value={testTo}
+          onChange={(event) => setTestTo(event.target.value)}
+          type="email"
+          inputMode="email"
+        />
+        <Action
+          size="sm"
+          tone="ghost"
+          icon="mail"
+          pending={testEmail.pending}
+          pendingLabel="Sending"
+          onClick={async () => {
+            await testEmail.run();
+            const error = testEmail.readError();
+            if (error) toast.failed(error, "desk");
+          }}
+        >
+          Send a test
+        </Action>
+      </Section>
     </DeskPage>
   );
 }

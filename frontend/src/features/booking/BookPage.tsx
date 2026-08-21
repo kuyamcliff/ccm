@@ -1,256 +1,463 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { api, clashFromError, SLOTS } from "~/lib/api";
-import type { Booking, BookingAlternatives, BookingClash, MenuItem } from "~/lib/api";
-import { ApiError } from "~/lib/http";
-import { addDays, dayLabel, isPastSlot, longDate, money, normalisePhone, timeLabel, todayISO, toISODate } from "~/lib/format";
-import { useAction, useResource } from "~/lib/useResource";
-import { AnchorButton, Button, LinkButton } from "~/ui/Button";
+import { api, SLOTS, MAX_PARTY, clashFromError } from "~/lib/api";
+import type { BookingClash, DiningTable } from "~/lib/api";
+import { useMutation, useQuery, invalidate } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { addDays, dayLabel, isPastSlot, money, normalisePhone, toISODate, todayISO } from "~/lib/format";
+import { say } from "~/lib/say";
 import { Icon } from "~/ui/Icon";
-import { Notice, Skeleton } from "~/ui/Feedback";
+import { Action, Button, LinkButton } from "~/ui/Button";
+import { TextAreaField, PhoneField, Counter, Field } from "~/ui/Field";
+import { Money, Code } from "~/ui/Bits";
+import { Notice, SkeletonRows } from "~/ui/Feedback";
+import { usePress } from "~/ui/press";
+import { PaySheet, type PaymentDriver } from "~/features/pay/PaySheet";
+import { FloorPlan } from "./FloorPlan";
 import { useSession } from "~/state/session";
-import { useToast } from "~/state/toast";
+import { useCopy } from "~/state/locale";
 import { useVenue } from "~/state/venue";
-import { useLocale } from "~/state/locale";
-import { MomoDialog } from "~/features/pay/MomoDialog";
-import { BookingPass } from "~/features/mine/BookingPass";
-import { basketLines, basketTotal, type Basket } from "./OrderStep";
-import { DAYS_AHEAD, ReviewStep, WhenStep, WhereStep, WhoStep } from "./steps";
-
-type Step = "when" | "who" | "where" | "review";
-const ORDER: Step[] = ["when", "who", "where", "review"];
-const TITLES: Record<Step, string> = { when: "When are you coming?", who: "How many of you?", where: "Where would you like to sit?", review: "Check and pay" };
-const DRAFT_KEY = "ccm.booking.draft.v2";
-const DRAFT_TTL_MS = 2 * 60 * 60 * 1000;
-interface BookingDraft { savedAt: number; date: string; time: string | null; party: number; tableId: number | null; phone: string; note: string; basket: Basket; }
-function isStep(value: string | null): value is Step { return value !== null && (ORDER as string[]).includes(value); }
-function firstOpenSlot(date: string): string | null { return SLOTS.find((slot) => !isPastSlot(date, slot)) ?? null; }
-function readDraft(): BookingDraft | null {
-  try {
-    const raw = sessionStorage.getItem(DRAFT_KEY);
-    if (!raw) return null;
-    const draft = JSON.parse(raw) as BookingDraft;
-    if (!draft || typeof draft.savedAt !== "number" || Date.now() - draft.savedAt > DRAFT_TTL_MS) { sessionStorage.removeItem(DRAFT_KEY); return null; }
-    if (typeof draft.date !== "string" || !Array.isArray(Object.entries(draft.basket ?? {}))) return null;
-    return draft;
-  } catch { return null; }
-}
-function clearDraft() { try { sessionStorage.removeItem(DRAFT_KEY); } catch {} }
 
 /**
- * What a clash is called, in the guest's own language.
+ * Holding a table.
  *
- * The server sends the reason as a word — "table", "guest" — and an English
- * sentence for anything that has nowhere to put a word. This screen has
- * somewhere to put it, so it uses the word and writes its own sentence rather
- * than showing a French-speaking guest an English one.
+ * Four steps on one route, with the step in the query string. That is the whole
+ * reason it is in the URL: on a phone the back gesture is how people undo, and a
+ * four-step flow that treats back as "leave the booking" loses the booking. Here
+ * back means "previous step", which is what the gesture means everywhere else on
+ * the device.
+ *
+ * The deposit is stated in words at the point of decision, not buried in a
+ * confirmation, and so is the late cancellation fee. Both are set by the server
+ * and read from Desk > Details.
  */
-const CLASH_TITLE = {
-  en: { table: "That table has just gone", guest: "You are already booked for then" },
-  fr: { table: "Cette table vient de partir", guest: "Vous avez déjà une table à cette heure" },
-} as const;
 
-const CLASH_BODY = {
-  en: {
-    table: "Somebody took it while you were filling this in. Nothing has been charged.",
-    guest: "You already have a table booked for that exact time. Nothing has been charged.",
-  },
-  fr: {
-    table: "Quelqu'un l'a prise pendant que vous remplissiez ceci. Rien n'a été débité.",
-    guest: "Vous avez déjà une table réservée à cette heure exacte. Rien n'a été débité.",
-  },
-} as const;
+type Step = "when" | "who" | "where" | "confirm";
+const ORDER: Step[] = ["when", "who", "where", "confirm"];
+
+/** Two weeks. Further out than that and people are guessing. */
+const DAYS_AHEAD = 14;
 
 export function BookPage() {
-  const { user, ready } = useSession();
-  const { depositFcfa } = useVenue();
-  const { locale } = useLocale();
-  const toast = useToast();
+  const { c, fill } = useCopy();
+  const { depositFcfa, lateCancelFcfa } = useVenue();
+  const { user } = useSession();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const [draft] = useState<BookingDraft | null>(() => readDraft());
-  const [date, setDate] = useState(() => draft?.date || todayISO());
-  const [time, setTime] = useState<string | null>(() => draft?.time ?? firstOpenSlot(draft?.date || todayISO()));
-  const [party, setParty] = useState(() => draft?.party ?? 2);
-  const [tableId, setTableId] = useState<number | null>(() => draft?.tableId ?? null);
-  const [phone, setPhone] = useState(() => draft?.phone ?? "");
-  const [note, setNote] = useState(() => draft?.note ?? "");
-  const [basket, setBasket] = useState<Basket>(() => draft?.basket ?? {});
-  const [menu, setMenu] = useState<MenuItem[] | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-  /* Set only when the slot went while they were filling the form. Kept apart
-     from `problem` because it is not more explanation, it is the way out. */
+
+  const step = (ORDER.includes(params.get("step") as Step) ? params.get("step") : "when") as Step;
+
+  const [date, setDate] = useState(todayISO());
+  const [time, setTime] = useState("");
+  const [party, setParty] = useState(2);
+  const [table, setTable] = useState<DiningTable | null>(null);
+  const [phone, setPhone] = useState("");
+  const [note, setNote] = useState("");
+
+  const [held, setHeld] = useState<{ id: number; code: string | null } | null>(null);
+  const [paying, setPaying] = useState(false);
   const [clash, setClash] = useState<BookingClash | null>(null);
-  const [pending, setPending] = useState<{ booking: Booking; dueNow: number; hasFood: boolean } | null>(null);
-  const [paid, setPaid] = useState<Booking | null>(null);
-  const raw = params.get("step");
-  const step: Step = isStep(raw) ? raw : "when";
-  const index = ORDER.indexOf(step);
-  const days = useMemo(() => Array.from({ length: DAYS_AHEAD }, (_, i) => toISODate(addDays(new Date(), i))), []);
-  const floor = useResource(() => (time ? api.booking.floor(date, time) : api.booking.floor()), [date, time]);
-  const create = useAction(api.booking.create);
-  const tables = floor.data?.tables ?? [];
-  const chosenTable = tables.find((table) => table.id === tableId) ?? null;
-  const foodTotal = basketTotal(basket, menu);
-  const dueNow = depositFcfa + foodTotal;
-  const phoneReady = normalisePhone(phone).length >= 8;
+  const [problem, setProblem] = useState<string | null>(null);
 
-  useEffect(() => { if (index > 0 && !time) setParams({}, { replace: true }); }, [index, time, setParams]);
+  const go = (next: Step) => setParams({ step: next }, { replace: false });
 
-  /* The review step is taller than a phone, and the pay button sits in a bar
-     pinned over the bottom of it. A message appended below the summary
-     therefore lands under that bar and under the tab bar beneath it: the guest
-     taps pay, nothing appears to happen, and the reason is off the screen.
-     Bring it to them instead of expecting them to go looking. */
-  const problemRef = useRef<HTMLDivElement>(null);
+  const days = useMemo(
+    () => Array.from({ length: DAYS_AHEAD }, (_, offset) => toISODate(addDays(new Date(), offset))),
+    []
+  );
+
+  /* Only fetched once a day and a time are chosen, because the availability of a
+     table is meaningless without both. */
+  const floor = useQuery(
+    K.tables(date, time),
+    () => api.booking.floor(date, time),
+    { enabled: Boolean(date && time), staleMs: 20_000 }
+  );
+
+  /* A table that was free when it was chosen and is not any more must not stay
+     selected while the person fills in their phone number. */
   useEffect(() => {
-    if (!problem) return;
-    problemRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [problem, clash]);
+    if (!table || !floor.data) return;
+    const live = floor.data.tables.find((entry) => entry.id === table.id);
+    if (!live || live.available === false || live.capacity < party) setTable(null);
+  }, [floor.data, table, party]);
 
-  useEffect(() => {
-    if (!ready || !user || pending || paid) return;
-    try {
-      const next: BookingDraft = { savedAt: Date.now(), date, time, party, tableId, phone, note, basket };
-      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(next));
-    } catch {
-      /* Private browsing or a full storage bucket. The in-memory flow still works. */
-    }
-  }, [ready, user, pending, paid, date, time, party, tableId, phone, note, basket]);
+  const hold = useMutation(async () => {
+    setProblem(null);
+    setClash(null);
+    const reservation = await api.booking.create({
+      date,
+      time,
+      partySize: party,
+      phone: normalisePhone(phone),
+      note: note.trim(),
+      tableId: table?.id ?? null,
+    });
+    invalidate(K.myBookings);
+    invalidate("book.tables*");
+    setHeld({ id: reservation.id, code: reservation.ccm_code });
+    setPaying(true);
+  });
 
-  function clearProblem() { setProblem(null); setClash(null); }
-  function go(next: Step) { clearProblem(); setParams({ step: next }); }
-  function back() { clearProblem(); navigate(-1); }
+  const driver: PaymentDriver = {
+    allowDiscounts: true,
+    start: ({ momoPhone, wallet, promoCode, giftCardCode, usePoints, idempotencyKey }) =>
+      api.booking
+        .payDeposit({ reservationId: held!.id, momoPhone, wallet, promoCode, giftCardCode, usePoints, idempotencyKey })
+        .then((prompt) => ({
+          reference: prompt.reference,
+          amount_fcfa: prompt.amount_fcfa,
+          zero_cost: prompt.zero_cost,
+          expires_in_seconds: prompt.expires_in_seconds,
+          payment_url: prompt.payment_url,
+        })),
+    poll: (reference) => api.booking.paymentStatus(reference),
+    abandon: (reference) => api.booking.abandonPayment(reference),
+  };
 
-  async function submit() {
-    clearProblem();
-    if (!time) { go("when"); return; }
-    const created = await create.run({ date, time, partySize: party, phone: normalisePhone(phone), note, tableId, items: basketLines(basket) });
-    if (!created) {
-      const failure = create.readError();
-      setProblem(failure instanceof ApiError ? failure.message : "That booking could not be made. You can retry without losing what you entered.");
-      setClash(clashFromError(failure));
-      return;
-    }
-    setPending({ booking: created, dueNow, hasFood: basketLines(basket).length > 0 });
-  }
+  /* ── Held, waiting on the deposit ─────────────────────────────────────────*/
+  if (held && !paying) {
+    return (
+      <div className="page section stack">
+        <header className="stack stack--tight">
+          <h1 className="display display--xl">{fill(c.book.held, { when: `${dayLabel(date)} at ${time}` })}</h1>
+        </header>
 
-  /** Takes one of the offered times. The table goes with it: what was free at
-      half seven says nothing about eight, so the guest picks again. */
-  function takeTime(slot: string) {
-    clearProblem();
-    setTime(slot);
-    setTableId(null);
-    setParams({ step: "where" });
-  }
+        <div className="carry">
+          <p className="label">{c.mine.pass}</p>
+          {held.code ? <Code value={held.code} size="lg" /> : null}
+          <p className="fine muted">{c.mine.passHint}</p>
+        </div>
 
-  /** Takes one of the offered tables, at the time they already chose. */
-  function takeTable(id: number) {
-    clearProblem();
-    setTableId(id);
-    setParams({ step: "review" });
-  }
-
-  if (!ready) return <div className="page section stack"><Skeleton height="3rem" width="16rem" /><Skeleton height="18rem" radius="var(--r-lg)" /></div>;
-
-  if (!user) {
-    return <div className="page section"><div className="section-head"><hr className="heat-rule" /><h1 className="display display--xl">{locale === "fr" ? "Réserver une table" : "Book a table"}</h1></div><div className="stack stack--loose" style={{ maxWidth: "32rem" }}><p className="lead">{locale === "fr" ? "La réservation a besoin d'un compte pour garder votre table, votre code et votre reçu au même endroit." : "Booking needs an account so your table, code and receipt stay together and you can change or cancel without calling."}</p><div className="actions"><LinkButton to="/join" tone="primary" size="lg">{locale === "fr" ? "Créer un compte" : "Create an account"}</LinkButton><LinkButton to="/signin" tone="ghost" size="lg">{locale === "fr" ? "J'ai déjà un compte" : "I already have one"}</LinkButton></div><p className="fine faint">{locale === "fr" ? "Pressé ? Commandez à emporter ou rejoignez la file si vous êtes déjà sur place." : "In a hurry? Order takeaway or join the queue if you're already outside."}</p></div></div>;
-  }
-
-  if (paid) {
-    clearDraft();
-    return <div className="page section stack stack--loose"><div className="section-head"><hr className="heat-rule" /><h1 className="display display--xl">{locale === "fr" ? "Table confirmée" : "Table held"}</h1><p className="lead">{locale === "fr" ? "Présentez ceci à l'entrée. Votre réservation est aussi dans Mes visites." : "Show this at the door. It is also in My visits, so you do not need to keep this page open."}</p></div><BookingPass booking={{ ...paid, status: "confirmed", payment_status: "paid" }} /><div className="actions"><AnchorButton tone="primary" icon="calendar" href={api.booking.calendarUrl(paid.id)}>{locale === "fr" ? "Ajouter au calendrier" : "Add to calendar"}</AnchorButton><LinkButton to="/mine" tone="ghost" iconEnd="arrow-right">{locale === "fr" ? "Voir mes réservations" : "See my bookings"}</LinkButton><Button tone="ghost" onClick={() => { clearDraft(); setPaid(null); setPending(null); setTime(null); setTableId(null); setBasket({}); setParams({}, { replace: true }); }}> {locale === "fr" ? "Réserver encore" : "Book another"}</Button></div></div>;
-  }
-
-  const forward = step === "review" ? <Button tone="primary" size="lg" icon="wallet" busy={create.busy} onClick={submit}>{locale === "fr" ? `Payer ${money(dueNow)} FCFA` : `Pay ${money(dueNow)} FCFA`}</Button> : <Button tone="primary" size="lg" iconEnd="arrow-right" disabled={(step === "when" && !time) || (step === "who" && !phoneReady)} onClick={() => go(ORDER[index + 1]!)}>{locale === "fr" ? "Continuer" : "Continue"}</Button>;
-  const recap = step === "when" ? (time ? `${dayLabel(date)}, ${timeLabel(time)}` : (locale === "fr" ? "Choisissez une date et une heure" : "Pick a day and a time")) : step === "who" ? (phoneReady ? `${party === 1 ? (locale === "fr" ? "Seul" : "Just me") : `${party} ${locale === "fr" ? "personnes" : "people"}`}, ${dayLabel(date)}` : (locale === "fr" ? "Nous avons besoin d'un numéro" : "We need a phone number")) : step === "where" ? (chosenTable ? `${locale === "fr" ? "Table" : "Table"} ${chosenTable.label}, ${chosenTable.capacity} ${locale === "fr" ? "places" : "seats"}` : (locale === "fr" ? "N'importe quelle table" : "Any table")) : `${money(dueNow)} FCFA ${locale === "fr" ? "à payer" : "to pay now"}`;
-
-  return <div className="booking">
-    {draft && !params.get("step") ? <div className="page" style={{ paddingTop: "var(--s-4)" }}><Notice tone="good" title={locale === "fr" ? "Votre réservation est toujours là" : "Your booking is still here"}>{locale === "fr" ? "Nous avons gardé ce que vous aviez déjà saisi. Vous pouvez continuer sans recommencer." : "We kept what you had already entered, so you can continue without starting again."}</Notice></div> : null}
-    <header className="booking__head"><div className="page booking__head-in"><button type="button" className="booking__back" onClick={back} aria-label={locale === "fr" ? "Retour" : "Back"}><Icon name="arrow-left" size={20} /></button><span className="label">{locale === "fr" ? `Étape ${index + 1} sur ${ORDER.length}` : `Step ${index + 1} of ${ORDER.length}`}</span><ol className="booking__ticks">{ORDER.map((name, i) => <li key={name}><button type="button" data-state={i < index ? "done" : i === index ? "now" : "todo"} disabled={i > index} aria-label={`${locale === "fr" ? "Étape" : "Step"} ${i + 1}, ${TITLES[name]}`} aria-current={i === index ? "step" : undefined} onClick={() => go(name)} /></li>)}</ol></div></header>
-    <div className="page booking__body">
-      <h1 className="display display--xl booking__q">{locale === "fr" ? ({ when: "Quand venez-vous ?", who: "Combien serez-vous ?", where: "Où souhaitez-vous vous asseoir ?", review: "Vérifiez et payez" } as Record<Step, string>)[step] : TITLES[step]}</h1>
-      {step === "when" ? <WhenStep days={days} date={date} time={time} onDate={(next) => { setDate(next); setTime(firstOpenSlot(next)); setTableId(null); }} onTime={(next) => { setTime(next); setTableId(null); }} /> : null}
-      {step === "who" ? <WhoStep party={party} phone={phone} note={note} onParty={(next) => { setParty(next); if (chosenTable && chosenTable.capacity < next) setTableId(null); }} onPhone={setPhone} onNote={setNote} /> : null}
-      {step === "where" && time ? <WhereStep date={date} time={time} party={party} tables={tables} fixtures={floor.data?.fixtures ?? []} loading={floor.loading} tableId={tableId} onSelect={setTableId} /> : null}
-      {step === "review" && time ? <ReviewStep date={date} time={time} party={party} table={chosenTable} basket={basket} menu={menu} depositFcfa={depositFcfa} foodTotal={foodTotal} onBasket={setBasket} onMenuLoaded={setMenu} onEdit={go} /> : null}
-      <div ref={problemRef} className="booking__problem">
-        {problem && clash ? <Notice tone="warn" role="alert" title={CLASH_TITLE[locale === "fr" ? "fr" : "en"][clash.reason]}>{CLASH_BODY[locale === "fr" ? "fr" : "en"][clash.reason]}{clash.alternatives ? <ClashWayOut alternatives={clash.alternatives} locale={locale} onTime={takeTime} onTable={takeTable} /> : null}</Notice> : null}
-        {problem && !clash ? <Notice tone="bad" title={locale === "fr" ? "Nous n'avons pas pu continuer" : "We couldn't continue"}>{problem}<div className="fine" style={{ marginTop: "var(--s-2)" }}>{locale === "fr" ? "Vos choix sont toujours enregistrés. Vérifiez votre connexion et réessayez." : "Your choices are still saved. Check your connection and try again."}</div></Notice> : null}
+        <div className="bar bar--wrap">
+          <LinkButton to="/mine" tone="primary" size="sm" icon="ticket">
+            {c.nav.mine}
+          </LinkButton>
+          <LinkButton to="/menu" tone="ghost" size="sm">
+            {c.nav.menu}
+          </LinkButton>
+        </div>
       </div>
+    );
+  }
+
+  const stepIndex = ORDER.indexOf(step);
+
+  return (
+    <div className="page section stack book">
+      <header className="stack stack--tight">
+        <h1 className="display display--xl">{c.book.title}</h1>
+        <Steps current={stepIndex} labels={[c.book.stepWhen, c.book.stepWho, c.book.stepWhere, c.book.stepConfirm]} />
+      </header>
+
+      {clash ? (
+        <Notice tone="warn" title={c.book.clash}>
+          <div className="stack stack--tight">
+            <p>{c.book.clashBody}</p>
+            {clash.alternatives?.times.length ? (
+              <div className="stack stack--tight">
+                <span className="label">{c.book.otherTimes}</span>
+                <div className="bar bar--wrap bar--tight">
+                  {clash.alternatives.times.map((slot) => (
+                    <Chip
+                      key={slot}
+                      label={slot}
+                      onSelect={() => {
+                        setTime(slot);
+                        setTable(null);
+                        setClash(null);
+                        go("where");
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {clash.alternatives?.tables.length ? (
+              <div className="stack stack--tight">
+                <span className="label">{c.book.otherTables}</span>
+                <div className="bar bar--wrap bar--tight">
+                  {clash.alternatives.tables.map((entry) => (
+                    <Chip
+                      key={entry.id}
+                      label={`${entry.label} (${entry.capacity})`}
+                      onSelect={() => {
+                        setTable({
+                          id: entry.id,
+                          label: entry.label,
+                          zone: entry.zone,
+                          capacity: entry.capacity,
+                          pos_x: 0,
+                          pos_y: 0,
+                          active: 1,
+                        });
+                        setClash(null);
+                        go("confirm");
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </Notice>
+      ) : null}
+
+      {/* ── 1. When ──────────────────────────────────────────────────────────*/}
+      {step === "when" ? (
+        <div className="stack">
+          <Field label={c.book.date}>
+            {() => (
+              <div className="rail rail--chips" data-scroller="">
+                <div className="rail__track">
+                  {days.map((day) => (
+                    <Chip key={day} label={dayLabel(day)} on={day === date} onSelect={() => setDate(day)} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </Field>
+
+          <Field label={c.book.time}>
+            {() => (
+              <div className="slots">
+                {SLOTS.map((slot) => {
+                  const past = isPastSlot(date, slot);
+                  return (
+                    <Chip
+                      key={slot}
+                      label={slot}
+                      on={slot === time}
+                      disabled={past}
+                      onSelect={() => {
+                        setTime(slot);
+                        setTable(null);
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </Field>
+
+          <Button tone="primary" block iconEnd="arrow-right" disabled={!time} onClick={() => go("who")}>
+            {c.common.next}
+          </Button>
+        </div>
+      ) : null}
+
+      {/* ── 2. How many ──────────────────────────────────────────────────────*/}
+      {step === "who" ? (
+        <div className="stack">
+          <Field label={c.book.party} hint="More than eight? Have a look at booking the place out instead.">
+            {() => (
+              <Counter
+                value={party}
+                onChange={(next) => {
+                  setParty(next);
+                  setTable(null);
+                }}
+                min={1}
+                max={MAX_PARTY}
+                label={c.book.party}
+              />
+            )}
+          </Field>
+
+          <div className="bar bar--tight">
+            <Button tone="quiet" block icon="arrow-left" onClick={() => go("when")}>
+              {c.common.back}
+            </Button>
+            <Button tone="primary" block iconEnd="arrow-right" onClick={() => go("where")}>
+              {c.common.next}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── 3. Which table ───────────────────────────────────────────────────*/}
+      {step === "where" ? (
+        <div className="stack">
+          <p className="lead">{c.book.pickTable}</p>
+
+          {floor.loading ? (
+            <SkeletonRows count={3} />
+          ) : (
+            <FloorPlan
+              tables={floor.data?.tables ?? []}
+              fixtures={floor.data?.fixtures ?? []}
+              party={party}
+              chosenId={table?.id ?? null}
+              onChoose={setTable}
+              labels={{
+                free: c.book.tableFree,
+                taken: c.book.tableTaken,
+                tooSmall: c.book.tableTooSmall,
+                seats: (n) => fill(c.book.seats, { n }),
+              }}
+            />
+          )}
+
+          {table ? (
+            <Notice tone="good">
+              Table {table.label}
+              {table.zone ? `, ${table.zone}` : ""}. {fill(c.book.seats, { n: table.capacity })}.
+            </Notice>
+          ) : null}
+
+          <div className="bar bar--tight">
+            <Button tone="quiet" block icon="arrow-left" onClick={() => go("who")}>
+              {c.common.back}
+            </Button>
+            <Button tone="primary" block iconEnd="arrow-right" disabled={!table} onClick={() => go("confirm")}>
+              {c.common.next}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── 4. Confirm ───────────────────────────────────────────────────────*/}
+      {step === "confirm" ? (
+        <form
+          className="stack"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            await hold.run();
+            const error = hold.readError();
+            if (!error) return;
+            const detected = clashFromError(error);
+            if (detected) {
+              setClash(detected);
+              return;
+            }
+            setProblem(say(error, "book"));
+          }}
+        >
+          <div className="rows">
+            <div className="row">
+              <span className="grow label">{c.book.stepWhen}</span>
+              <span>
+                {dayLabel(date)}, {time}
+              </span>
+            </div>
+            <div className="row">
+              <span className="grow label">{c.book.stepWho}</span>
+              <span>{party === 1 ? c.book.partyOne : fill(c.book.partyMany, { n: party })}</span>
+            </div>
+            <div className="row">
+              <span className="grow label">{c.book.stepWhere}</span>
+              <span>{table ? `Table ${table.label}` : "Any free table"}</span>
+            </div>
+            <div className="row">
+              <span className="grow label">{c.book.deposit}</span>
+              <Money value={depositFcfa} size="fine" />
+            </div>
+          </div>
+
+          <PhoneField label={c.book.phone} hint={c.book.phoneHint} value={phone} onChange={setPhone} required />
+
+          <TextAreaField
+            label={c.book.note}
+            placeholder={c.book.notePlaceholder}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            rows={2}
+            maxLength={300}
+          />
+
+          {/* The two facts about money, in words, before anybody commits. */}
+          <div className="stack stack--tight">
+            <p className="fine muted">{fill(c.book.depositBody, { amount: money(depositFcfa) })}</p>
+            <p className="fine faint">{fill(c.book.lateFee, { amount: money(lateCancelFcfa) })}</p>
+          </div>
+
+          {problem ? <Notice tone="bad">{problem}</Notice> : null}
+
+          {!user ? (
+            <Notice tone="info">
+              You need an account to hold a table.{" "}
+              <LinkButton to="/signin" tone="quiet" size="sm">
+                {c.nav.signIn}
+              </LinkButton>
+            </Notice>
+          ) : null}
+
+          <div className="bar bar--tight">
+            <Button tone="quiet" block icon="arrow-left" onClick={() => go("where")}>
+              {c.common.back}
+            </Button>
+            <Action
+              type="submit"
+              tone="primary"
+              block
+              pending={hold.pending}
+              pendingLabel={c.pending.holding}
+              disabled={!user || normalisePhone(phone).length !== 9}
+            >
+              {c.book.holdIt}
+            </Action>
+          </div>
+        </form>
+      ) : null}
+
+      {held && paying ? (
+        <PaySheet
+          open
+          onClose={() => setPaying(false)}
+          onPaid={() => {
+            setPaying(false);
+            invalidate(K.myBookings);
+            navigate("/mine", { replace: true });
+          }}
+          amountFcfa={depositFcfa}
+          title={c.book.deposit}
+          what={`${dayLabel(date)}, ${time}${table ? `, table ${table.label}` : ""}`}
+          driver={driver}
+        />
+      ) : null}
     </div>
-    <div className="booking__foot"><div className="page row row--between"><span className="booking__recap">{recap}</span>{forward}</div></div>
-    {pending ? <MomoDialog
-      open
-      amountFcfa={pending.dueNow}
-      title={pending.hasFood ? (locale === "fr" ? "Payer l'acompte et la commande" : "Pay the deposit and your order") : (locale === "fr" ? "Payer l'acompte" : "Pay the deposit")}
-      what={`${longDate(pending.booking.date)} at ${timeLabel(pending.booking.time)}, ${pending.booking.party_size} people`}
-      driver={{
-        allowDiscounts: true,
-        start: (input) => api.booking.payDeposit({ reservationId: pending.booking.id, momoPhone: input.momoPhone, wallet: input.wallet, promoCode: input.promoCode, giftCardCode: input.giftCardCode, usePoints: input.usePoints, idempotencyKey: input.idempotencyKey }).then((prompt) => ({ reference: prompt.reference, amount_fcfa: prompt.amount_fcfa, zero_cost: prompt.zero_cost, expires_in_seconds: prompt.expires_in_seconds, payment_url: prompt.payment_url })),
-        poll: api.booking.paymentStatus,
-        abandon: api.booking.abandonPayment,
-      }}
-      onClose={() => { setPending(null); toast.say(locale === "fr" ? "Votre table reste réservée pendant 30 minutes pendant le paiement." : "Your table is held for 30 minutes while you pay."); navigate("/mine"); }}
-      onPaid={() => { setPaid(pending.booking); setPending(null); }}
-    /> : null}
-  </div>;
+  );
 }
 
-/**
- * The way out of a slot that went while the guest was filling in the form.
- *
- * A refusal on its own sends somebody who has already answered four questions
- * back to the floor plan to work out for themselves what is left, on a phone.
- * These are the two answers they were about to go looking for — the same
- * evening at a nearby time, or a different table at the time they wanted — and
- * each one is a single tap that keeps everything else they entered.
- *
- * Suggestions can go stale between being offered and being tapped, on a busy
- * Friday. That is not a problem to design around: the tap re-books, and a
- * second clash comes back with fresh suggestions.
- */
-function ClashWayOut({
-  alternatives,
-  locale,
-  onTime,
-  onTable,
-}: {
-  alternatives: BookingAlternatives;
-  locale: string;
-  onTime: (slot: string) => void;
-  onTable: (id: number) => void;
-}) {
+/* ── Bits ───────────────────────────────────────────────────────────────────*/
+
+function Steps({ current, labels }: { current: number; labels: string[] }) {
   return (
-    <div className="clash">
-      {alternatives.times.length > 0 ? (
-        <div className="clash__group">
-          <p className="fine faint">{locale === "fr" ? "Le même jour, tout près :" : "The same day, close to it:"}</p>
-          <div className="clash__choices">
-            {alternatives.times.map((slot) => (
-              <button key={slot} type="button" className="chip" onClick={() => onTime(slot)}>
-                {timeLabel(slot)}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {alternatives.tables.length > 0 ? (
-        <div className="clash__group">
-          <p className="fine faint">{locale === "fr" ? "Encore libre à cette heure :" : "Still free at that time:"}</p>
-          <div className="clash__choices">
-            {alternatives.tables.map((table) => (
-              <button key={table.id} type="button" className="chip" onClick={() => onTable(table.id)}>
-                {`Table ${table.label}`}
-                <span className="faint">
-                  {table.zone ? `${table.zone}, ` : ""}
-                  {table.capacity} {locale === "fr" ? "places" : "seats"}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </div>
+    <ol className="steps" aria-label="Progress">
+      {labels.map((label, index) => (
+        <li key={label} className="steps__item" data-state={index < current ? "done" : index === current ? "now" : undefined}>
+          <span className="steps__dot" aria-hidden="true">
+            {index < current ? <Icon name="check" size={11} /> : index + 1}
+          </span>
+          <span className="steps__label micro">{label}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function Chip({
+  label,
+  on,
+  disabled,
+  onSelect,
+}: {
+  label: string;
+  on?: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
+}) {
+  const press = usePress({ disabled });
+  return (
+    <button
+      type="button"
+      className="chip"
+      data-on={on ? "true" : undefined}
+      disabled={disabled}
+      onClick={onSelect}
+      {...press.pressProps}
+    >
+      {label}
+    </button>
   );
 }

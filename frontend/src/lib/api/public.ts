@@ -8,10 +8,51 @@ import type {
   Offer,
   Review,
   SiteSettings,
+  User,
 } from "./types";
+
+/**
+ * Everything the first paint needs, in one response.
+ *
+ * See `backend/src/routes/bootstrap.ts` for why this endpoint exists. In short:
+ * the site used to make three sequential round trips before it knew the URL of
+ * a single photograph.
+ */
+export interface BootPayload {
+  /** Null for a visitor. Exactly what `/api/auth/me` would have returned. */
+  user: User | null;
+  settings: SiteSettings;
+  topItems: PopularItem[];
+  topReview: Review | null;
+}
 
 /** Everything a signed-out visitor can read or send. */
 export const publicApi = {
+  /**
+   * The one request the app opens with.
+   *
+   * Falls back to the three separate calls if the endpoint is not there. That
+   * is not defensive padding: the frontend and the backend deploy separately, to
+   * Vercel and to Render, and there is a window during any release where a
+   * browser holding the new bundle is talking to the old API. Without this, that
+   * window is a white screen.
+   */
+  boot: async (): Promise<BootPayload> => {
+    try {
+      return await http.get<BootPayload>("/api/bootstrap");
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      if (status !== 404) throw error;
+
+      const [user, settings, highlights] = await Promise.all([
+        http.get<{ user: User }>("/api/auth/me").then((r) => r.user).catch(() => null),
+        http.get<{ settings: SiteSettings }>("/api/site-settings").then((r) => r.settings),
+        http.get<{ topReview: Review | null; topItems: PopularItem[] }>("/api/popular"),
+      ]);
+      return { user, settings, topItems: highlights.topItems, topReview: highlights.topReview };
+    }
+  },
+
   menu: () => http.get<{ menu: MenuItem[] }>("/api/menu").then((r) => r.menu),
 
   settings: () => http.get<{ settings: SiteSettings }>("/api/site-settings").then((r) => r.settings),

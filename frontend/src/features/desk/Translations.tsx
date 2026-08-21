@@ -1,101 +1,105 @@
 import { api } from "~/lib/api";
-import type { TranslationEntry } from "~/lib/api";
-import { useResource } from "~/lib/useResource";
-import { Button } from "~/ui/Button";
-import { Icon } from "~/ui/Icon";
-import { EmptyState, ErrorState, SkeletonCards } from "~/ui/Feedback";
-import { DeskPage } from "./parts";
+import { useQuery } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { LinkButton } from "~/ui/Button";
+import { Meter } from "~/ui/Bits";
+import { DeskPage, Loaded, Nothing, State, TableWrap } from "./parts";
 
 /**
- * What the site still says in English when a customer has asked for French.
+ * What of the owner's own wording is still only in English.
  *
- * Only the wording the owner types themselves. The application's own strings
- * are held level by the compiler and a test, so listing them here would pad
- * the number with work nobody on this screen can do — and a report that mixes
- * "you need to write this" with "a developer needs to write this" gets
- * ignored, which is worse than not having one.
+ * The application's own text ships in both languages and is checked at build
+ * time, so it is never listed here. What this covers is everything typed into
+ * the console: the closed sign, the announcement bar, the legal pages, the
+ * service messages. Those live in the database and nothing can check them but a
+ * person.
+ *
+ * Read-only on purpose. Each row says which screen the wording is changed on and
+ * links there, rather than offering a second place to edit the same field, which
+ * is how two versions of one sentence come to exist.
  */
 
-const STATUS: Record<TranslationEntry["status"], { label: string; tone: string }> = {
-  missing: { label: "Nothing in French", tone: "bad" },
-  copied: { label: "Still the English", tone: "warn" },
-  done: { label: "Translated", tone: "good" },
+const STATUS: Record<string, { tone: "bad" | "warn" | "good"; word: string }> = {
+  missing: { tone: "bad", word: "Empty" },
+  copied: { tone: "warn", word: "Still English" },
+  done: { tone: "good", word: "Done" },
+};
+
+/** Where each kind of wording is actually edited. */
+const WHERE_TO: Record<string, string> = {
+  "Site control": "/desk/site-control",
+  "Terms and privacy": "/desk/legal",
+  Details: "/desk/settings",
+  Offers: "/desk/offers",
 };
 
 export function Translations() {
-  const report = useResource(() => api.desk.translations(), []);
-
-  if (report.loading) return <DeskPage title="Translations"><SkeletonCards count={3} height="5rem" /></DeskPage>;
-  if (report.error) {
-    return (
-      <DeskPage title="Translations">
-        <ErrorState error={report.error} onRetry={report.reload} />
-      </DeskPage>
-    );
-  }
-
-  const data = report.data ?? { total: 0, done: 0, outstanding: [] };
-  /* Whole numbers only, and never 100 while anything is outstanding: rounding
-     99.6 up to 100 with two things still to write is how a report stops being
-     believed. */
-  const percent = data.total === 0 ? 100 : Math.floor((data.done / data.total) * 100);
+  const report = useQuery(K.desk.translations, () => api.desk.translations(), { staleMs: 60_000 });
 
   return (
-    <DeskPage
-      title="Translations"
-      lead="Everything you have written that a customer reading in French would otherwise see in English."
-      actions={<Button tone="ghost" icon="refresh" onClick={report.reload}>Check again</Button>}
-    >
-      <section className="card stack">
-        <div className="row row--between row--wrap">
-          <div>
-            <p className="label">French coverage</p>
-            <p className="display display--lg">{percent}%</p>
-          </div>
-          <p className="fine muted">
-            {data.done} of {data.total} {data.total === 1 ? "piece" : "pieces"} of your own wording
-          </p>
-        </div>
-        <div
-          className="translation-bar"
-          role="progressbar"
-          aria-valuenow={percent}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label="French coverage"
-        >
-          <span style={{ width: `${percent}%` }} />
-        </div>
-      </section>
+    <DeskPage title="Translations" hint="Your own wording that has not been put into French yet.">
+      <Loaded query={report}>
+        {(data) => (
+          <>
+            <div className="dk-progress">
+              <div className="bar bar--between">
+                <span className="label">Translated</span>
+                <span className="strong">
+                  {data.done} of {data.total}
+                </span>
+              </div>
+              <Meter
+                value={data.done}
+                max={Math.max(1, data.total)}
+                label="Translation progress"
+                tone={data.done === data.total ? "good" : "hot"}
+              />
+            </div>
 
-      {data.outstanding.length === 0 ? (
-        <EmptyState icon="check-circle" title="Nothing waiting">
-          {data.total === 0
-            ? "You have not written any customer-facing messages yet. When you do, anything missing its French will show up here."
-            : "Everything you have written says something in French."}
-        </EmptyState>
-      ) : (
-        <div className="stack">
-          {data.outstanding.map((entry) => {
-            const status = STATUS[entry.status];
-            return (
-              <article key={entry.id} className="card stack stack--tight">
-                <div className="row row--between row--wrap">
-                  <strong>{entry.label}</strong>
-                  <span className={`badge badge--${status.tone}`}>{status.label}</span>
-                </div>
-                {/* The English itself, so they can translate it from here
-                    rather than going to look for what it was they wrote. */}
-                <p className="fine translation-entry__english">“{entry.english}”</p>
-                <p className="fine faint row" style={{ gap: "var(--s-2)" }}>
-                  <Icon name="arrow-right" size={14} />
-                  Change it on {entry.where}
-                </p>
-              </article>
-            );
-          })}
-        </div>
-      )}
+            {data.outstanding.length === 0 ? (
+              <Nothing>Everything you have typed exists in both languages.</Nothing>
+            ) : (
+              <TableWrap label="Untranslated wording">
+                <thead>
+                  <tr>
+                    <th>What</th>
+                    <th>English</th>
+                    <th>State</th>
+                    <th aria-label="Where to change it" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.outstanding.map((entry) => {
+                    const status = STATUS[entry.status] ?? STATUS.missing!;
+                    const to = WHERE_TO[entry.where];
+                    return (
+                      <tr key={entry.id}>
+                        <td>
+                          <span className="dk-cell">
+                            <span>{entry.label}</span>
+                            <span className="fine faint">{entry.where}</span>
+                          </span>
+                        </td>
+                        <td className="dk-wrapcell fine">{entry.english || <span className="faint">Empty</span>}</td>
+                        <td>
+                          <State tone={status.tone}>{status.word}</State>
+                        </td>
+                        <td>
+                          {to ? (
+                            <LinkButton to={to} size="sm" tone="ghost" iconEnd="arrow-right">
+                              Change it
+                            </LinkButton>
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </TableWrap>
+            )}
+          </>
+        )}
+      </Loaded>
     </DeskPage>
   );
 }

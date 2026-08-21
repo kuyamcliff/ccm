@@ -1,1282 +1,906 @@
 /*
- * The staff console.
+ * The console.
  *
- * Sized down in 2026-08 with the rest of the site. Everything here inherits the
- * shared type and space tokens, so the ramp coming down took most of it; what
- * is left below is the handful of figures this file sets for itself.
+ * Ships with the desk chunk, so a diner never downloads a byte of it.
  *
- * Same tokens, different temperature. Where the customer site is spacious and
- * photographic, this is dense and quiet: someone is reading it mid-service with
- * a queue in front of them, so nothing here is decorative and the type is a
- * step smaller throughout.
+ * Denser than the customer site throughout, and that is the whole brief: this is
+ * read standing up, mid-service, on a phone held in one hand, looking for one
+ * booking out of forty. Where the customer side spends space to feel calm, this
+ * spends it to fit more on screen.
  *
- * Loaded only with the console chunk, so none of it reaches a diner.
+ * What it does not change is the press response and the pending states. A button
+ * that looks dead is worse at eight on a Friday than it is on a menu.
  */
 
-.desk {
-  --desk-bar: 3.5rem;
-  --desk-rail: 15rem;
-
-  display: flex;
-  flex-direction: column;
+.dk {
+  --dk-rail: 14rem;
   min-height: 100dvh;
-  background: var(--bg-sunk);
+  background: var(--bg);
 }
 
-/* ── Top bar ─────────────────────────────────────────────────────────── */
+/* ══ Top bar ═══════════════════════════════════════════════════════════════*/
 
-.desk__bar {
+.dk-top {
   position: sticky;
   top: 0;
   z-index: var(--z-nav);
   display: flex;
   align-items: center;
-  gap: var(--s-3);
-  height: var(--desk-bar);
-  padding-inline: var(--s-4);
-  background: var(--ink-900);
+  gap: var(--s-2);
+  height: calc(3rem + var(--safe-t));
+  padding: var(--safe-t) var(--s-4) 0;
+  background: rgba(7, 7, 7, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--line);
 }
 
-.desk__who {
-  display: none;
+.dk-brand {
+  display: inline-flex;
   align-items: center;
   gap: var(--s-2);
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: var(--w-shout);
+  letter-spacing: -0.02em;
 }
 
-@media (min-width: 48rem) {
-  .desk__who {
-    display: flex;
+.dk-top__who,
+.dk-top__site {
+  display: none;
+}
+
+@media (min-width: 30rem) {
+  .dk-top__who,
+  .dk-top__site {
+    display: inline;
   }
 }
 
-.desk__body {
-  flex: 1;
-  display: flex;
-  min-height: 0;
-}
+/* ══ The rail ══════════════════════════════════════════════════════════════
+ *
+ * A drawer on a phone, a fixed column from 64rem. Sliding rather than appearing,
+ * on a transform, so it composites.
+ */
 
-/* ── Rail ────────────────────────────────────────────────────────────────
-   A drawer under 64rem, a fixed column above it. */
-
-.desk__rail {
+.dk-rail {
   position: fixed;
-  inset: var(--desk-bar) auto 0 0;
+  top: calc(3rem + var(--safe-t));
+  bottom: 0;
+  left: 0;
   z-index: var(--z-overlay);
   width: min(17rem, 82vw);
-  padding: var(--s-4) var(--s-3);
+  padding: var(--s-4) var(--s-3) var(--s-6);
   overflow-y: auto;
-  background: var(--ink-900);
+  overscroll-behavior: contain;
+  background: var(--ink-950);
   border-right: 1px solid var(--line);
-  transform: translateX(-102%);
-  transition: transform var(--dur-2) var(--ease);
+  transform: translate3d(-100%, 0, 0);
+  transition: transform var(--dur-3) var(--ease-out);
 }
 
-.desk__rail--open {
+.dk[data-drawer="open"] .dk-rail {
   transform: none;
 }
 
-.desk__scrim {
+.dk-scrim {
   position: fixed;
-  inset: var(--desk-bar) 0 0;
+  inset: 0;
   z-index: var(--z-sticky);
-  background: rgba(5, 5, 5, 0.6);
-  border: 0;
+  background: rgba(0, 0, 0, 0.55);
+  animation: fade var(--dur-2) var(--ease-out);
 }
 
 @media (min-width: 64rem) {
-  .desk__rail {
-    position: sticky;
-    top: var(--desk-bar);
-    height: calc(100dvh - var(--desk-bar));
-    width: var(--desk-rail);
-    flex: none;
+  .dk-rail {
     transform: none;
+    width: var(--dk-rail);
   }
 
-  .desk__burger,
-  .desk__scrim {
+  .dk-scrim,
+  .dk-top__burger {
     display: none;
   }
 }
 
-.desk__group {
-  margin-bottom: var(--s-5);
+.dk-rail__group + .dk-rail__group {
+  margin-top: var(--s-5);
 }
 
-.desk__grouptitle {
-  font-size: var(--t-label);
-  letter-spacing: var(--track-label);
-  text-transform: uppercase;
-  color: var(--text-3);
-  padding-inline: var(--s-3);
-  margin-bottom: var(--s-2);
+.dk-rail__title {
+  padding: 0 var(--s-3) var(--s-2);
 }
 
-.desk__link {
+.dk-rail__link {
   display: flex;
   align-items: center;
   gap: var(--s-3);
-  min-height: 2.5rem;
-  padding: var(--s-2) var(--s-3);
+  min-height: 2.25rem;
+  padding: 0 var(--s-3);
   border-radius: var(--r-sm);
+  font-size: var(--t-fine);
+  font-weight: var(--w-mid);
   color: var(--text-2);
-  font-size: var(--t-small);
-  font-weight: 600;
-  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+  transition:
+    background-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out),
+    transform var(--dur-3) var(--ease-spring);
 }
 
-.desk__link:hover {
-  background: rgba(255, 255, 255, 0.05);
+.dk-rail__link:hover {
   color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.desk__link:active {
-  background: rgba(255, 255, 255, 0.08);
+.dk-rail__link[data-pressed="true"] {
+  transform: scale(0.985);
 }
 
-.desk__link svg {
-  color: var(--text-3);
-  flex: none;
-}
-
-/* The current screen is marked by an ember edge as well as colour. */
-.desk__link[aria-current="page"] {
-  background: var(--red-wash);
+.dk-rail__link.active {
   color: var(--text);
-  box-shadow: inset 2px 0 0 var(--red);
+  background: var(--ink-850);
+  font-weight: var(--w-strong);
 }
 
-.desk__link[aria-current="page"] svg {
-  color: var(--red-hi);
+.dk-rail__link.active svg {
+  color: var(--red);
 }
 
-.desk__main {
-  flex: 1;
-  min-width: 0;
-  padding: var(--s-4) var(--s-4) var(--s-7);
+/* ══ The page ══════════════════════════════════════════════════════════════*/
+
+.dk-main {
+  padding: var(--s-4) var(--s-4) var(--s-8);
 }
 
 @media (min-width: 64rem) {
-  .desk__main {
-    padding: var(--s-5);
+  .dk-main {
+    margin-left: var(--dk-rail);
+    padding: var(--s-5) var(--s-6) var(--s-8);
   }
 }
 
-/* ── Page furniture ──────────────────────────────────────────────────── */
-
-.desk-page {
+.dk-page {
   display: flex;
   flex-direction: column;
-  gap: var(--s-5);
-  max-width: 80rem;
-}
-
-.desk-page__head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
   gap: var(--s-4);
-  flex-wrap: wrap;
-  padding-bottom: var(--s-4);
-  border-bottom: 1px solid var(--line);
+  max-width: 76rem;
 }
 
-.desk-page__actions {
+.dk-head {
   display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.dk-title {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: var(--w-display);
+  letter-spacing: var(--track-display);
+  line-height: 1.15;
+}
+
+.dk-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--line);
+}
+
+.dk-section:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.dk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+/* ══ Search ════════════════════════════════════════════════════════════════*/
+
+.dk-search {
+  display: flex;
+  align-items: center;
   gap: var(--s-2);
-  flex-wrap: wrap;
-}
-
-.desk-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
-}
-
-.desk-toolbar {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--s-3);
-  flex-wrap: wrap;
-  padding: var(--s-3);
-  background: var(--ink-900);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-}
-
-.desk-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-1);
-  min-width: 9rem;
-}
-
-.desk-field--grow {
   flex: 1;
-  min-width: 12rem;
-}
-
-/* Console inputs are a size down from the site's: a form here is a filter, not
-   a conversation. */
-.desk-toolbar .input,
-.desk-toolbar .select {
-  min-height: 2.375rem;
-  padding-block: var(--s-2);
-  font-size: var(--t-fine);
-}
-
-.desk-table {
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--ink-900);
-  max-height: 70dvh;
-}
-
-.desk-nothing {
-  padding: var(--s-5);
-  text-align: center;
-  border: 1px dashed var(--line-2);
-  border-radius: var(--r-md);
-}
-
-.desk-thumb {
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: var(--r-sm);
-  object-fit: cover;
-}
-
-/* ── Stats ───────────────────────────────────────────────────────────── */
-
-.stat-grid {
-  display: grid;
-  gap: var(--s-3);
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-}
-
-.stat {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-2);
-  padding: var(--s-3);
+  min-width: 11rem;
+  padding: 0 var(--s-3);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-full);
+  color: var(--text-3);
+  transition: border-color var(--dur-1) var(--ease-out);
 }
 
-.stat__icon {
+.dk-search:focus-within {
+  border-color: var(--text-3);
+}
+
+.dk-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: 2.25rem;
+  background: none;
+  border: 0;
+  /* Sixteen pixels, even here. iOS zooms below it and the console is used on
+     phones as much as the customer site is. */
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.dk-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.dk-search button {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
   color: var(--text-3);
 }
 
-.stat__value {
-  font-size: var(--t-title);
-  line-height: 1.15;
-  font-family: var(--font-num);
-  font-variant-numeric: tabular-nums;
-}
+/* ══ Numbers across the top ════════════════════════════════════════════════*/
 
-/* `.money` is nowrap everywhere else, on purpose — a price in a table row or
-   a receipt should never break. A stat card is narrower than either, and a
-   lifetime total is the one figure here big enough to outgrow it; letting
-   just the unit drop under the number here keeps the number itself whole. */
-.stat__value .money {
-  white-space: normal;
-}
-
-.delta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: var(--t-fine);
-  font-weight: 700;
-}
-
-.delta--up {
-  color: var(--good);
-}
-
-.delta--down {
-  color: var(--bad);
-}
-
-/* An arrow that points the way the number went, so the direction does not
-   depend on telling green from red. */
-.delta--down svg {
-  transform: rotate(45deg);
-}
-
-.delta--up svg {
-  transform: rotate(-45deg);
-}
-
-/* ── Charts ──────────────────────────────────────────────────────────── */
-
-.chart-grid {
+.dk-stats {
   display: grid;
-  gap: var(--s-4);
-  /* `min(20rem, 100%)` rather than a bare 20rem: on the narrowest phones this
-     site supports, a 320px floor is wider than the column has to give, and an
-     auto-fit track never shrinks below its floor — it pushes the page instead. */
-  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
-}
-
-.chart-grid__wide {
-  grid-column: 1 / -1;
-}
-
-.chart {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
   gap: var(--s-3);
 }
 
-.chart__head {
+.dk-stat {
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s-3);
+  background: var(--surface);
+  border-radius: var(--r-md);
+  min-width: 0;
+}
+
+.dk-stat__value {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: var(--w-display);
+  letter-spacing: var(--track-head);
+  line-height: 1.15;
+}
+
+/* ══ Tables ════════════════════════════════════════════════════════════════
+ *
+ * The wrapper is what stops a wide table pushing the whole page sideways, which
+ * on a phone takes the navigation off screen with it.
+ */
+
+.dk-tablewrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.dk-tablewrap:focus-visible {
+  outline: 2px solid var(--white);
+  outline-offset: 2px;
+}
+
+.dk-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-fine);
+}
+
+.dk-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  font-size: var(--t-label);
+  font-weight: var(--w-strong);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: var(--s-3);
+  background: var(--ink-900);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.dk-table td {
+  padding: var(--s-3);
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.dk-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.dk-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Two lines in one cell: a name over an email, a code over a description. */
+.dk-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+/* The one column per table allowed to wrap. Everything else stays on one line
+   and the table scrolls, which is easier to scan than a ragged grid. */
+.dk-wrapcell {
+  min-width: 12rem;
+  max-width: 22rem;
+  white-space: normal;
+}
+
+.dk-metercell {
+  min-width: 8rem;
+}
+
+.dk-pager {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: var(--s-3);
 }
 
-.chart__readout {
+/* ══ Small pieces ══════════════════════════════════════════════════════════*/
+
+.dk-state {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem var(--s-2);
+  border-radius: var(--r-xs);
+  font-size: var(--t-micro);
+  font-weight: var(--w-shout);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--ink-800);
+  color: var(--text-2);
+}
+
+.dk-state--good {
+  background: var(--good-wash);
+  color: var(--good);
+}
+
+.dk-state--warn {
+  background: var(--warn-wash);
+  color: var(--warn);
+}
+
+.dk-state--bad {
+  background: var(--bad-wash);
+  color: var(--bad);
+}
+
+.dk-state--hot {
+  background: var(--red-wash);
+  color: var(--red-hi);
+}
+
+.dk-nothing {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-5);
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-md);
+  color: var(--text-2);
+}
+
+.dk-time {
+  font-family: var(--font-display);
+  font-weight: var(--w-display);
+  font-size: var(--t-small);
+  font-variant-numeric: tabular-nums;
+  min-width: 3rem;
+}
+
+.dk-code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.75rem;
+  color: var(--text-2);
+  word-break: break-all;
+}
+
+.dk-bullets {
+  list-style: disc;
+  padding-left: 1.1em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+/* ══ The kitchen board ═════════════════════════════════════════════════════
+ *
+ * The one console screen read from two feet away with both hands full, so it is
+ * the one that gets cards rather than rows.
+ */
+
+.dk-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--s-3);
+}
+
+.dk-order {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+
+/* Ready is the state somebody is looking for across a room. */
+.dk-order[data-ready="true"] {
+  border-color: rgba(46, 194, 107, 0.4);
+  background: linear-gradient(var(--good-wash), var(--good-wash)) var(--surface);
+}
+
+.dk-order__lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  font-size: var(--t-small);
+}
+
+.dk-order__lines li {
+  display: flex;
+  gap: var(--s-2);
+}
+
+.dk-order__qty {
+  min-width: 1.4rem;
+  font-weight: var(--w-shout);
+  color: var(--red);
+  font-variant-numeric: tabular-nums;
+}
+
+.dk-order__note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  padding: var(--s-2);
+  border-radius: var(--r-sm);
+  background: var(--warn-wash);
+  color: var(--warn);
+}
+
+.dk-queueno {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--ink-800);
+  font-family: var(--font-display);
+  font-weight: var(--w-shout);
+  font-size: var(--t-fine);
+  flex: none;
+}
+
+/* ══ The door ══════════════════════════════════════════════════════════════
+ *
+ * The one screen read at a distance, at night. Everything else in this console
+ * is dense on purpose; this is the opposite, on purpose.
+ */
+
+.dk-door__manual {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s-3);
+}
+
+.dk-door__manual > .field {
+  flex: 1;
+}
+
+.dk-verdict {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-6) var(--s-4);
+  border-radius: var(--r-lg);
+  border: 2px solid;
+  text-align: center;
+  animation: rise var(--dur-3) var(--ease-out);
+}
+
+.dk-verdict[data-tone="good"] {
+  border-color: var(--good);
+  background: var(--good-wash);
+  color: var(--good);
+}
+
+.dk-verdict[data-tone="warn"] {
+  border-color: var(--warn);
+  background: var(--warn-wash);
+  color: var(--warn);
+}
+
+.dk-verdict[data-tone="bad"] {
+  border-color: var(--bad);
+  background: var(--bad-wash);
+  color: var(--bad);
+}
+
+.dk-verdict__word {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 8vw, 2.75rem);
+  font-weight: var(--w-shout);
+  letter-spacing: var(--track-hero);
+  line-height: 1;
+}
+
+.dk-verdict .lead,
+.dk-verdict__facts {
+  color: var(--text);
+}
+
+.dk-verdict__facts {
+  width: min(100%, 26rem);
+  text-align: left;
+}
+
+.dk-verdict__actions {
+  justify-content: center;
+}
+
+.dk-scan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  align-items: center;
+}
+
+.dk-scan__video {
+  width: 100%;
+  max-width: 26rem;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--r-md);
+  background: var(--black);
+}
+
+.dk-scan__frame {
+  position: absolute;
+  width: 60%;
+  max-width: 14rem;
+  aspect-ratio: 1;
+  border: 2px solid var(--white);
+  border-radius: var(--r-md);
+  opacity: 0.55;
+  pointer-events: none;
+  /* Centred over the video without a wrapper, since the column is centred. */
+  align-self: center;
+  margin-top: -14rem;
+}
+
+/* ══ Menu, photos, reviews ═════════════════════════════════════════════════*/
+
+.dk-dish {
+  --rows-inset: 3.25rem;
+}
+
+.dk-dish[data-off="true"] {
+  opacity: 0.5;
+}
+
+.dk-dish__photo {
+  width: 2.5rem;
+  flex: none;
+}
+
+/* Sold out, on the console's own list. The customer menu draws the same line. */
+.dk-struck {
+  text-decoration: line-through;
+  text-decoration-color: var(--red);
+  text-decoration-thickness: 1.5px;
+}
+
+.dk-photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--s-3);
+}
+
+.dk-photo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-2);
+  background: var(--surface);
+  border-radius: var(--r-md);
+}
+
+.dk-reply {
+  padding: var(--s-3);
+  border-left: 2px solid var(--red);
+  background: var(--surface);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.dk-scopes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0 var(--s-5);
+}
+
+.dk-service {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.dk-service:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.dk-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-4);
+  background: var(--surface);
+  border-radius: var(--r-md);
+}
+
+/* ══ The floor editor ══════════════════════════════════════════════════════
+ *
+ * The customer's plan scales to fit the screen and never scrolls. This one is
+ * the opposite: an editor needs the coordinates at a workable size, so the
+ * canvas is fixed and the wrapper scrolls both ways.
+ */
+
+.dk-canvaswrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-sunk);
+  max-height: 70vh;
+}
+
+.dk-canvas {
+  position: relative;
+  /* A faint grid, so a dragged table has something to line up against. */
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 20px 20px;
+  touch-action: none;
+}
+
+.dk-tablemark {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin: -1.375rem 0 0 -1.375rem;
+  border-radius: 50%;
+  background: var(--ink-700);
+  border: 2px solid var(--ink-600);
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  transition:
+    border-color var(--dur-1) var(--ease-out),
+    background-color var(--dur-1) var(--ease-out);
+}
+
+.dk-tablemark[data-big="true"] {
+  width: 4rem;
+  border-radius: var(--r-sm);
+  margin-left: -2rem;
+}
+
+.dk-tablemark[data-on="true"] {
+  border-color: var(--red);
+  background: var(--red-lo);
+  z-index: 2;
+}
+
+.dk-tablemark[data-off="true"] {
+  opacity: 0.4;
+  border-style: dashed;
+}
+
+.dk-tablemark__label {
+  font-family: var(--font-display);
+  font-weight: var(--w-shout);
+  font-size: var(--t-fine);
+  line-height: 1;
+}
+
+.dk-tablemark__seats {
+  color: var(--text-3);
+  line-height: 1;
+}
+
+.dk-fixture {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-xs);
+  background: var(--ink-850);
+  border: 1px dashed var(--ink-600);
+  color: var(--text-3);
+  font-size: var(--t-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.dk-fixture[data-on="true"] {
+  border-color: var(--red);
+  border-style: solid;
+  color: var(--text);
+}
+
+/* The grill is the one fixture worth recognising at a glance: it is what people
+   orient the rest of the room around. */
+.dk-fixture--grill {
+  background: var(--red-wash);
+  border-color: var(--red-line);
+  color: var(--red-hi);
+}
+
+/*
+ * The nudge pad.
+ *
+ * A drag on a phone cannot reliably place a table within a few pixels, and a few
+ * pixels is the difference between two adjacent tables. This is what makes the
+ * editor usable on the device most staff actually have.
+ */
+.dk-nudge {
+  display: grid;
+  grid-template-columns: repeat(3, 2.5rem);
+  grid-template-rows: repeat(2, 2.5rem);
+  gap: var(--s-1);
+  justify-content: start;
+}
+
+.dk-nudge__up {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.dk-nudge__left {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.dk-nudge__down {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.dk-nudge__right {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+/* ══ Charts ════════════════════════════════════════════════════════════════*/
+
+.chart {
+  display: flex;
+  flex-direction: column;
   gap: var(--s-2);
 }
 
 .chart__svg {
   width: 100%;
-  height: 11rem;
+  height: 7rem;
   overflow: visible;
 }
 
-.chart__axis {
-  display: flex;
-  justify-content: space-between;
+.chart__line {
+  fill: none;
+  stroke: var(--red);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
 }
 
-/* Vertical bars. The column is the track, the fill is the value; both are
-   anchored to the same baseline so heights are comparable. */
-.vbars {
+.chart__area {
+  fill: var(--red-wash);
+  stroke: none;
+}
+
+.chart__foot {
+  display: flex;
+}
+
+.chart__bars {
   display: flex;
   align-items: flex-end;
-  justify-content: center;
   gap: 2px;
-  height: 11rem;
+  height: 7rem;
 }
 
-.vbar {
+.chart__bar {
   flex: 1;
   min-width: 0;
-  /* Two hours of data must not become two colour fields the width of the
-     panel: a bar's width stops meaning anything past a point, and a slab
-     reads as a design element rather than a measurement. */
-  max-width: 4.5rem;
   display: flex;
   flex-direction: column;
-  gap: var(--s-2);
+  justify-content: flex-end;
   height: 100%;
-}
-
-.vbar__col {
-  flex: 1;
-  display: flex;
-  align-items: flex-end;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: var(--r-xs);
-}
-
-.vbar__fill {
-  width: 100%;
-  background: var(--red);
-  border-radius: var(--r-xs) var(--r-xs) 0 0;
-  transition: height var(--dur-3) var(--ease);
-}
-
-.vbar__label {
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Horizontal bars, for labels that are words. */
-.hbars {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
-}
-
-.hbar {
-  display: grid;
-  grid-template-columns: minmax(6rem, 12rem) 1fr auto;
-  align-items: center;
-  gap: var(--s-3);
-  font-size: var(--t-fine);
-}
-
-.hbar__label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-2);
-}
-
-.hbar__track {
-  height: 0.75rem;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: var(--r-xs);
-  overflow: hidden;
-}
-
-.hbar__fill {
-  display: block;
-  height: 100%;
-  background: var(--red);
-  border-radius: 0 var(--r-xs) var(--r-xs) 0;
-}
-
-.hbar__value {
-  min-width: 3.5rem;
-  text-align: end;
-}
-
-/* ── The door ────────────────────────────────────────────────────────── */
-
-.door {
-  display: grid;
-  gap: var(--s-5);
-  align-items: start;
-}
-
-@media (min-width: 60rem) {
-  .door {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.door__scanner {
-  position: relative;
-  aspect-ratio: 4 / 3;
-  display: grid;
-  place-items: center;
-  background: var(--black);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-lg);
-  overflow: hidden;
-}
-
-.door__video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.door__idle {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--s-3);
-  padding: var(--s-4);
-  color: var(--text-3);
-  text-align: center;
-}
-
-/* The reticle is where to hold the phone. It is drawn, not photographed, so it
-   stays crisp at any camera resolution. */
-.door__reticle {
-  position: absolute;
-  inset: 18%;
-  border: 2px solid var(--red);
-  border-radius: var(--r-lg);
-  box-shadow: 0 0 0 100vmax rgba(5, 5, 5, 0.45);
-  pointer-events: none;
-}
-
-.door__stop {
-  position: absolute;
-  bottom: var(--s-3);
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(5, 5, 5, 0.7);
-}
-
-/* The verdict fills the panel and is readable at arm's length. */
-.verdict {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-2);
-  padding: var(--s-3);
-  border-radius: var(--r-lg);
-  border: 1px solid var(--line-2);
-  background: var(--surface);
-}
-
-.verdict--good {
-  border-color: var(--good);
-  background: linear-gradient(180deg, var(--good-wash), transparent 60%), var(--surface);
-}
-
-.verdict--warn {
-  border-color: var(--warn);
-  background: linear-gradient(180deg, var(--warn-wash), transparent 60%), var(--surface);
-}
-
-.verdict--bad {
-  border-color: var(--bad);
-  background: linear-gradient(180deg, var(--bad-wash), transparent 60%), var(--surface);
-}
-
-.verdict--good .verdict__title {
-  color: var(--good);
-}
-.verdict--warn .verdict__title {
-  color: var(--warn);
-}
-.verdict--bad .verdict__title {
-  color: var(--bad);
-}
-
-.verdict__facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
-  gap: var(--s-3);
-}
-
-.verdict__facts dd {
-  margin: 0.2rem 0 0;
-  font-size: var(--t-small);
-}
-
-/* ── Order board ─────────────────────────────────────────────────────── */
-
-.order-board {
-  display: grid;
-  gap: var(--s-3);
-  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
-}
-
-.order-card__no {
-  font-size: var(--t-lead);
-  letter-spacing: 0.06em;
-}
-
-.order-card__time {
-  font-size: var(--t-lead);
-  color: var(--red-hi);
-}
-
-/* ── Photo review ────────────────────────────────────────────────────── */
-
-.photo-grid {
-  display: grid;
-  gap: var(--s-3);
-  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-}
-
-.photo-card {
-  margin: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  overflow: hidden;
-  background: var(--surface);
-}
-
-.photo-card img,
-.photo-card .photo--blank {
-  aspect-ratio: 4 / 3;
-  width: 100%;
-  object-fit: cover;
-}
-
-.photo-card figcaption {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-2);
-  padding: var(--s-3);
-}
-
-/* ── Inbox ───────────────────────────────────────────────────────────── */
-
-.inbox {
-  display: grid;
-  gap: var(--s-4);
-  min-height: 60dvh;
-}
-
-/* On a phone, one pane at a time: the list, or the conversation. */
-.inbox--open .inbox__list {
-  display: none;
-}
-
-.inbox:not(.inbox--open) .inbox__thread {
-  display: none;
-}
-
-@media (min-width: 64rem) {
-  .inbox {
-    grid-template-columns: 20rem 1fr;
-  }
-
-  .inbox--open .inbox__list,
-  .inbox:not(.inbox--open) .inbox__thread {
-    display: flex;
-  }
-
-  .inbox__back {
-    display: none;
-  }
-}
-
-.inbox__list {
-  display: flex;
-  flex-direction: column;
   gap: var(--s-1);
-  max-height: 70dvh;
-  overflow-y: auto;
-  padding-right: var(--s-1);
 }
 
-.inbox__item {
-  display: flex;
-  gap: var(--s-3);
-  align-items: flex-start;
-  padding: var(--s-3);
-  border-radius: var(--r-md);
-  border: 1px solid transparent;
-  text-align: start;
-  transition: background var(--dur-1) var(--ease);
+.chart__barfill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 2px 2px 0 0;
+  background: var(--red);
+  transform-origin: bottom;
+  transition: transform var(--dur-3) var(--ease-out);
 }
 
-.inbox__item:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.inbox__item[aria-current="true"] {
-  background: var(--surface);
-  border-color: var(--line-2);
-}
-
-.inbox__body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-  flex: 1;
-}
-
-.inbox__preview {
+.chart__barlabel {
+  color: var(--text-3);
+  text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.inbox__thread {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
-  padding: var(--s-4);
-  background: var(--surface);
+/* ══ Developer ═════════════════════════════════════════════════════════════*/
+
+.dk-json,
+.dk-stack {
+  width: 100%;
+  padding: var(--s-3);
+  background: var(--black);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  min-height: 0;
+  border-radius: var(--r-sm);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: var(--text-2);
+  resize: vertical;
 }
 
-.inbox__head {
+.dk-stack {
+  overflow-x: auto;
+  white-space: pre;
+  max-height: 20rem;
+  margin: 0;
+}
+
+/* ══ The reply box in the inbox ════════════════════════════════════════════*/
+
+.dk-reply__form {
   display: flex;
-  align-items: center;
-  gap: var(--s-3);
-  padding-bottom: var(--s-3);
-  border-bottom: 1px solid var(--line);
-}
-
-.inbox__thread .chat__log {
-  max-height: 52dvh;
-}
-
-/* ── Touch ───────────────────────────────────────────────────────────────
-   The console is drawn tight on purpose: a filter row is not a conversation,
-   and the owner reads a hundred bookings at a glance on a desk. None of that
-   reasoning survives contact with a thumb, so on a touchscreen the controls
-   go back up to 44px. The density stays wherever there is a mouse. */
-
-@media (pointer: coarse) {
-  .desk-toolbar .input,
-  .desk-toolbar .select {
-    min-height: var(--tap);
-  }
-}
-
-/* ── Adding to the room ──────────────────────────────────────────────────
-   A grid of choices, not a form. A fixture has nothing worth typing before it
-   exists — picking the kind is the whole decision, and where it goes is
-   answered by dragging it rather than by entering coordinates. */
-
-.fixture-picker {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  align-items: flex-end;
   gap: var(--s-2);
-}
-
-.fixture-choice {
-  min-height: var(--tap);
-  padding: var(--s-3);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-md);
-  background: var(--ink-900);
-  color: var(--text);
-  font-size: var(--t-small);
-  font-weight: 700;
-  transition:
-    border-color var(--dur-1) var(--ease),
-    background var(--dur-1) var(--ease);
-}
-
-.fixture-choice:hover {
-  border-color: var(--line-hot);
-  background: var(--surface-2);
-}
-
-/* ── The floor ────────────────────────────────────────────────────────────
-   The guest's plan and this one draw the same tables and share `.plan__table`
-   and the fixture styling in pages.css. Red means taken in both, which is the
-   point: two pictures of one room that disagree are worse than one picture. */
-
-.plan-frame {
-  border-radius: var(--r-md);
-  border: 1px solid var(--line);
-  background: linear-gradient(160deg, var(--ink-900), var(--ink-1000));
-  padding: var(--s-3);
-}
-
-/*
- * The plan fits the width it is given, on a phone as much as on a desk.
- *
- * It used to hold a 34rem canvas and scroll sideways, reasoning that dropping
- * a table precisely matters more than seeing the whole room. That is true
- * while you are arranging it and wrong every other minute of the day: during
- * service this is a picture staff read at a glance, and half a room off the
- * right-hand edge is half a room nobody checks. Precision did not have to pay
- * for it — the arrow pad under the plan places a table exactly without needing
- * a canvas wider than the screen.
- */
-.plan {
-  position: relative;
   width: 100%;
 }
 
-/* Looking is not touching. Only the editing mode turns tables into something
-   you can pick up, which is what stops a plan sliding about under a thumb
-   while somebody is checking who is on table four. */
-.plan .plan__table[data-state] {
-  cursor: pointer;
+.chat__list--desk {
+  max-height: 55vh;
 }
-
-.plan--edit .plan__table[data-state] {
-  cursor: grab;
-  touch-action: none;
-}
-
-.plan--edit .plan__table[data-state]:active {
-  cursor: grabbing;
-}
-
-/* Out of service. Deliberately not red: it is not spoken for, it is switched
-   off, and conflating the two sends staff looking for a guest who does not
-   exist. Dashed as well as dim, so it survives a colourblind glance. */
-.plan__table[data-state="blocked"] {
-  opacity: 0.45;
-  border-style: dashed;
-}
-
-.plan__table[data-picked="true"] {
-  outline: 2px solid var(--white);
-  outline-offset: 2px;
-  z-index: 3;
-}
-
-.plan__table[data-dragging="true"] {
-  z-index: 4;
-}
-
-/* ── The card over a table ─────────────────────────────────────────────────
-   A mouse raises it by hovering. A thumb raises it by tapping, because a
-   touchscreen has no hover to give and the information is just as wanted. It
-   takes no pointer events of its own, so it can never eat the tap that would
-   dismiss it. */
-
-.plan-peek {
-  position: absolute;
-  z-index: 6;
-  transform: translate(-50%, calc(-100% - 2.1rem));
-  min-width: 8.5rem;
-  max-width: 13rem;
-  padding: var(--s-2) var(--s-3);
-  border-radius: var(--r-md);
-  border: 1px solid var(--line-2);
-  background: var(--ink-1000);
-  box-shadow: 0 12px 34px -14px rgba(0, 0, 0, 0.9);
-  pointer-events: none;
-  text-align: left;
-}
-
-/* A table near the top has nothing above it to sit in, so the card drops
-   underneath rather than off the edge of the plan. */
-.plan-peek[data-below="true"] {
-  transform: translate(-50%, 2.1rem);
-}
-
-.plan-peek__top {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  font-size: var(--t-fine);
-  color: var(--text-2);
-}
-
-.plan-peek__dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: var(--ink-700);
-  border: 1px solid var(--line-2);
-}
-
-.plan-peek__dot[data-state="taken"] {
-  background: var(--red);
-  border-color: var(--red);
-}
-
-.plan-peek__dot[data-state="free"] {
-  background: var(--good);
-  border-color: var(--good);
-}
-
-.plan-peek__who {
-  margin-top: 0.15rem;
-  font-weight: 700;
-  color: var(--white);
-  font-size: var(--t-fine);
-}
-
-.plan-peek__line {
-  font-size: var(--t-micro);
-  color: var(--text-3);
-}
-
-/* ── Around the plan ──────────────────────────────────────────────────────*/
-
-.floor-banner {
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
-  flex-wrap: wrap;
-  padding: var(--s-3);
-  border-radius: var(--r-md);
-  border: 1px solid var(--line-hot);
-  background: var(--red-wash);
-  color: var(--text-2);
-  font-size: var(--t-fine);
-}
-
-.floor-banner > span {
-  flex: 1 1 12rem;
-}
-
-.floor-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-2) var(--s-4);
-  font-size: var(--t-fine);
-  color: var(--text-3);
-}
-
-.floor-stats strong {
-  color: var(--white);
-  font-size: var(--t-head);
-  margin-right: 0.3rem;
-}
-
-.floor-stats span[data-hot="true"] strong {
-  color: var(--red-hi);
-}
-
-.floor-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s-3);
-  flex-wrap: wrap;
-  padding: var(--s-3);
-  border-radius: var(--r-md);
-  border: 1px solid var(--line);
-  background: var(--surface);
-}
-
-.floor-bar__who {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
-}
-
-.floor-add {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-2);
-}
-
-/* Label above value, so a long name never squeezes its own label off the
-   line on a narrow phone. */
-.detail-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
-  gap: var(--s-3);
-}
-
-.detail-list dd {
-  color: var(--white);
-  font-weight: 600;
-}
-
-.plan-hint {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  margin-top: var(--s-2);
-  font-size: var(--t-fine);
-  color: var(--text-3);
-}
-
-.plan-hint__zones {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-2);
-}
-
-.plan-tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-3);
-}
-
-.plan-tools__who {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  font-size: var(--t-fine);
-  color: var(--text-2);
-}
-
-/* A proper cross rather than four buttons in reading order: up sits above
-   down, left sits left of right, and the shape itself says which is which
-   before anybody reads an arrow. */
-.plan-tools__pad {
-  display: grid;
-  grid-template-columns: repeat(3, 2.25rem);
-  grid-template-rows: repeat(2, 2.25rem);
-  gap: 2px;
-}
-
-.plan-tools__pad > *:nth-child(1) {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-.plan-tools__pad > *:nth-child(2) {
-  grid-column: 1;
-  grid-row: 2;
-}
-
-.plan-tools__pad > *:nth-child(3) {
-  grid-column: 2;
-  grid-row: 2;
-}
-
-.plan-tools__pad > *:nth-child(4) {
-  grid-column: 3;
-  grid-row: 2;
-}
-
-/* A fixture in the console is something you can grab; on the guest plan it is
-   scenery and takes no pointer at all. */
-.plan__fixture--edit {
-  pointer-events: auto;
-  cursor: grab;
-  touch-action: none;
-}
-
-.plan__fixture--edit[data-picked="true"] {
-  border-style: solid;
-  border-color: var(--red);
-  color: var(--text);
-  box-shadow: var(--shadow-red);
-  z-index: 2;
-}
-
-/* ── The console on a phone ──────────────────────────────────────────────
- *
- * Everything below here exists because the console was drawn for a desk and
- * then carried into a restaurant, where it is read one-handed beside a grill.
- */
-
-/*
- * Tables become cards.
- *
- * A seven-column table on a 390px screen scrolls sideways, and what sits off
- * the right-hand edge is the status and the buttons — so the row could be read
- * but not acted on. Each row stacks instead, and every value keeps the name of
- * its column beside it (written on by `TableWrap`), which is what makes a
- * stacked row readable rather than a list of loose facts.
- */
-@media (max-width: 60rem) {
-  .desk-table {
-    max-height: none;
-    overflow: visible;
-    border: 0;
-    background: transparent;
-  }
-
-  .desk-table .table,
-  .desk-table .table tbody,
-  .desk-table .table tr,
-  .desk-table .table td {
-    display: block;
-    width: 100%;
-  }
-
-  /* The headings are on the cells now. Kept in the document for screen
-     readers, which still announce the table properly. */
-  .desk-table .table thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-  }
-
-  .desk-table .table tbody tr {
-    margin-bottom: var(--s-2);
-    padding: var(--s-2) var(--s-3);
-    background: var(--ink-900);
-    border: 1px solid var(--line);
-    border-radius: var(--r-md);
-  }
-
-  .desk-table .table tbody tr:hover td {
-    background: transparent;
-  }
-
-  /* A label column and a value column, rather than one pushed to each end.
-     Several of these cells hold more than a word — a guest's name, number and
-     the note about their table — and `space-between` squeezed all of it into
-     the right-hand half where it wrapped to five lines. */
-  .desk-table .table td {
-    display: grid;
-    /* `1fr` alone means `minmax(auto, 1fr)`: the column still floors at its
-       content's min-content, so one unbroken value — a long SKU, an email —
-       holds the column open and widens the whole page. `minmax(0, 1fr)` lets
-       it shrink the rest of the way and wrap instead. */
-    grid-template-columns: 5rem minmax(0, 1fr);
-    align-items: baseline;
-    gap: var(--s-2);
-    padding: 0.2rem 0;
-    border-bottom: 1px solid var(--line);
-    text-align: start;
-    font-size: var(--t-fine);
-  }
-
-  .desk-table .table td:last-child {
-    border-bottom: 0;
-    padding-bottom: 0;
-  }
-
-  .desk-table .table td::before {
-    content: attr(data-label);
-    flex: none;
-    font-size: var(--t-micro);
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-3);
-  }
-
-  /* A cell with nothing in it is noise once it has a label beside it. */
-  .desk-table .table td:empty {
-    display: none;
-  }
-
-  /* Numbers stop being a column to scan down and become one value on a card,
-     so the right alignment that made the column readable now just looks lost. */
-  .desk-table .table .table__num {
-    text-align: start;
-  }
-
-  /* The actions are the reason this change exists. They get the full width of
-     the card and sit at the end of it, where a thumb already is. */
-  .desk-table .table td:not([data-label]) {
-    display: flex;
-    justify-content: flex-end;
-    padding-top: var(--s-2);
-  }
-
-  .desk-table .table td:not([data-label]) .table__actions {
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    width: 100%;
-  }
-
-  /* A badge is a word with a shape around it, so it has to size to the word.
-     As the only child of a grid cell it stretched to the full column and read
-     as a bar rather than as a status. Text is deliberately left to stretch —
-     it needs the width to wrap in. */
-  .desk-table .table td > .badge,
-  .desk-table .table td > .mono {
-    justify-self: start;
-  }
-
-  /* Cells that hold a control rather than a fact — a switch, a select — read
-     better with the control against the right edge. */
-  .desk-table .table td > .switch,
-  .desk-table .table td > .select {
-    justify-self: end;
-  }
-
-  /* Buttons in a card wrap rather than squeeze, and the row keeps them
-     together instead of leaving one stranded on a line of its own. */
-  .desk-table .table .table__actions {
-    gap: var(--s-2);
-    align-items: center;
-  }
-}
-
-/*
- * Stat cards, two to a row.
- *
- * At an 11rem minimum they fell to a single column on a phone, so three
- * numbers took four hundred pixels and pushed the thing you came to read off
- * the bottom of the screen.
- */
-@media (max-width: 48rem) {
-  .stat-grid {
-    grid-template-columns: repeat(auto-fit, minmax(min(8.5rem, 100%), 1fr));
-  }
-
-  .stat {
-    padding: var(--s-3);
-    gap: var(--s-1);
-  }
-
-  .stat__value {
-    font-size: var(--t-head);
-  }
-}
-
-/* Filters are a stack of full-width fields on a phone, which is a screenful
-   before any data. Two to a row, and the search keeps its own line. */
-@media (max-width: 48rem) {
-  .desk-field {
-    min-width: 0;
-    flex: 1 1 8rem;
-  }
-
-  .desk-field--grow {
-    flex-basis: 100%;
-    min-width: 0;
-  }
-}
-
-/* Touch targets in the console chrome. The rail is the console's whole
-   navigation and every item in it was drawn at 40px; the brand at 32px. */
-@media (pointer: coarse) {
-  .desk__link,
-  .desk__bar a,
-  .desk__bar .btn--sm {
-    min-height: var(--tap);
-  }
-
-  .desk-table .table__actions .btn {
-    min-height: var(--tap);
-    min-width: var(--tap);
-  }
-
-  .desk .switch {
-    min-height: var(--tap);
-  }
-
-  .guest-row {
-    min-height: var(--tap);
-  }
-}
-
-/* ── Switches and cards, at console density ─────────────────────────────
-   A settings screen with two dozen switches on it is the console's own
-   worst case: at the site's ordinary switch and card sizing, one page of
-   toggles reads as a wall. Smaller than the site's, larger than a checkbox —
-   still 44px under a thumb, which the touch override above restores. */
-.desk .switch {
-  gap: var(--s-2);
-  min-height: 2.25rem;
-}
-
-.desk .switch__track {
-  width: 2.375rem;
-  height: 1.375rem;
-}
-
-.desk .switch__track::after {
-  width: 0.95rem;
-  height: 0.95rem;
-}
-
-.desk .switch input:checked + .switch__track::after {
-  transform: translateX(1rem);
-}
-
-.desk .check__text {
-  font-size: var(--t-fine);
-}
-
-/* A guest's note about their table: worth noticing, not worth shouting. In the
-   accent colour it was the loudest thing in the row — louder than the guest's
-   name and louder than whether they had paid. A rule and a warmer grey say
-   "read this" without taking over. */
-.desk-note {
-  margin-top: var(--s-1);
-  padding-left: var(--s-2);
-  border-left: 2px solid var(--line-hot);
-  color: var(--text-2);
-}
-
-/* A booking code is one token — breaking "CCM-2026-00001" over three lines at
-   its hyphens makes it unreadable at exactly the moment somebody is comparing
-   it against a phone screen at the door. */
-.desk-table .table td.mono {
-  white-space: nowrap;
-}
-
-/* ── Guest list ──────────────────────────────────────────────────────────
-   A name, an email, a role — nothing a row does not need to identify who it
-   is, since the account underneath it can run into the thousands. Every
-   action that used to sit in the row now sits behind opening it. */
-.guest-list { display: flex; flex-direction: column; }
-.guest-row { display: flex; align-items: center; gap: var(--s-3); width: 100%; padding: var(--s-2) 0; border-bottom: 1px solid var(--line); text-align: left; color: var(--text); transition: background-color var(--dur-1) var(--ease); }
-.guest-row:hover { background: rgba(255, 255, 255, 0.03); }
-.guest-row:active { transform: scale(0.995); }
-.guest-row > svg { flex: none; color: var(--text-3); }
-.guest-row__body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; flex: 1; }
-.guest-row__body strong { font-size: var(--t-fine); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.guest-row__body .fine { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.guest-list__end { text-align: center; padding: var(--s-3) 0; }
-
-/* ── Translation coverage ─────────────────────────────────────────────────
-   One bar, because the number beside it is the point and a chart would be
-   decoration over a single figure. */
-.translation-bar { height: 0.5rem; border-radius: var(--r-full); background: var(--surface-2); overflow: hidden; }
-.translation-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--good); transition: width var(--dur-2) var(--ease); }
-/* The owner's own words, quoted back so they can translate from this screen
-   instead of going to find what it was they wrote. */
-.translation-entry__english { margin: 0; padding-left: var(--s-3); border-left: 2px solid var(--line-2); color: var(--text-2); }

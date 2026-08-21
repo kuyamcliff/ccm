@@ -1,208 +1,214 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api } from "~/lib/api";
 import type { MenuItem } from "~/lib/api";
-import { IMAGE_ACCEPT, ImageError, readImageFile } from "~/lib/imageFile";
-import { useResource } from "~/lib/useResource";
-import { Button, IconButton } from "~/ui/Button";
-import { TextAreaField, TextField } from "~/ui/Field";
-import { Money } from "~/ui/Bits";
-import { Photo } from "~/ui/Photo";
-import { Notice } from "~/ui/Feedback";
+import { useMutation, useQuery, invalidate } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { money, parseTags } from "~/lib/format";
+import { readImageFile } from "~/lib/imageFile";
+import { itemMatches, tokens } from "~/lib/search";
+import { Action, Button, IconButton } from "~/ui/Button";
+import { TextField, TextAreaField, Switch } from "~/ui/Field";
 import { Sheet, useConfirm } from "~/ui/Sheet";
+import { Img } from "~/ui/Img";
+import { DeskPage, Loaded, Nothing, Search, State, Toolbar } from "./parts";
 import { useToast } from "~/state/toast";
-import { DeskPage, Loaded, Nothing, TableWrap, Toolbar } from "./parts";
 
 /**
- * The menu, as the owner keeps it.
+ * Dishes, prices, photographs, and what is showing.
  *
- * Prices are whole francs, and a dish can have none: leaving the price empty
- * and writing "by weight" in its place is how the goat is actually sold. The
- * ordering page treats those as counter-only rather than putting them in a
- * basket it cannot total.
+ * ── Sold out tonight ───────────────────────────────────────────────────────
+ *
+ * The one new thing here, and it fixes a real operational problem. When the goat
+ * runs out at nine, the only way to take it off the board used to be
+ * deactivating the dish, which meant remembering to switch it back tomorrow.
+ * Nobody remembers. So a dish now sells out **until a time**, and the server
+ * clears it automatically at opening.
+ *
+ * Sold out and hidden are deliberately different states:
+ *
+ *   sold out   still on the customer menu, struck through, cannot be ordered,
+ *              back by itself tomorrow. "We do this, just not tonight."
+ *   hidden     off the menu entirely, until somebody puts it back. For a dish
+ *              that has been discontinued.
+ *
+ * Either way the server refuses to sell it, so this is not the enforcement.
  */
 
-type Draft = Partial<MenuItem> & { image_url?: string | null };
+interface Draft {
+  id: number | null;
+  category: string;
+  name: string;
+  description: string;
+  price_fcfa: string;
+  price_label: string;
+  image_url: string | null;
+  dietary_tags: string;
+  is_active: boolean;
+}
 
 const BLANK: Draft = {
+  id: null,
   category: "",
   name: "",
   description: "",
-  price_fcfa: null,
-  price_label: null,
+  price_fcfa: "",
+  price_label: "",
   image_url: null,
-  position: 0,
-  is_active: 1,
+  dietary_tags: "",
+  is_active: true,
 };
 
 export function MenuAdmin() {
-  const menu = useResource(() => api.desk.menu.list(), []);
   const toast = useToast();
-  const { confirm, confirmElement } = useConfirm();
+  const { confirm, element } = useConfirm();
 
+  const [query, setQuery] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
-  async function save() {
-    if (!draft) return;
-    if (!draft.name?.trim() || !draft.category?.trim()) {
-      setProblem("A dish needs a name and a section.");
-      return;
-    }
+  const menu = useQuery(K.desk.menu, () => api.desk.menu.list(), { staleMs: 30_000 });
 
-    setBusy(true);
-    try {
-      const payload: Partial<MenuItem> = {
-        category: draft.category.trim(),
-        name: draft.name.trim(),
-        description: draft.description ?? "",
-        price_fcfa: draft.price_fcfa ?? null,
-        price_label: draft.price_label?.trim() || null,
-        position: draft.position ?? 0,
-        is_active: draft.is_active ?? 1,
-      };
-      // Only send the image when it changed: resending the stored path is
-      // harmless but resending a data URI would rewrite the file every save.
-      if (draft.image_url !== undefined) payload.image_url = draft.image_url;
-
-      if (draft.id) await api.desk.menu.update(draft.id, payload);
-      else await api.desk.menu.create(payload);
-
-      setDraft(null);
-      setProblem(null);
-      menu.reload();
-      toast.done("Menu saved.");
-    } catch (err) {
-      toast.failed(err);
-    } finally {
-      setBusy(false);
-    }
+  function refresh() {
+    invalidate("desk.menu*");
+    /* The customer menu is a different cache key and it has just changed too. */
+    invalidate(K.menu);
+    invalidate(K.highlights);
+    menu.reload();
   }
+
+  const toggleSoldOut = useMutation(async (item: MenuItem) => {
+    await api.desk.menu.update(item.id, { sold_out: item.sold_out === 1 ? 0 : 1 });
+    refresh();
+  });
+
+  const toggleActive = useMutation(async (item: MenuItem) => {
+    await api.desk.menu.update(item.id, { is_active: item.is_active === 1 ? 0 : 1 });
+    refresh();
+  });
+
+  const save = useMutation(async () => {
+    if (!draft) return;
+    const payload: Partial<MenuItem> = {
+      category: draft.category.trim(),
+      name: draft.name.trim(),
+      description: draft.description.trim(),
+      price_fcfa: draft.price_fcfa.trim() ? Number(draft.price_fcfa.replace(/\D/g, "")) : null,
+      price_label: draft.price_label.trim() || null,
+      image_url: draft.image_url,
+      dietary_tags: draft.dietary_tags.trim(),
+      is_active: draft.is_active ? 1 : 0,
+    };
+    if (draft.id === null) await api.desk.menu.create(payload);
+    else await api.desk.menu.update(draft.id, payload);
+    setDraft(null);
+    refresh();
+    toast.done("Saved.");
+  });
+
+  const remove = useMutation(async (id: number) => {
+    await api.desk.menu.remove(id);
+    setDraft(null);
+    refresh();
+    toast.done("Deleted.");
+  });
+
+  const groups = useMemo(() => {
+    const all = menu.data ?? [];
+    const needles = tokens(query);
+    const shown = all.filter((item) =>
+      needles.length === 0 ? true : itemMatches({ haystack: `${item.name} ${item.description} ${item.category}` }, needles)
+    );
+
+    const seen: string[] = [];
+    for (const item of shown) if (item.category && !seen.includes(item.category)) seen.push(item.category);
+    return seen.map((category) => ({ category, items: shown.filter((item) => item.category === category) }));
+  }, [menu.data, query]);
 
   return (
     <DeskPage
       title="Menu"
-      lead="What the site shows and what the ordering page can total."
+      hint="Sold out puts a line through it for tonight. Hidden takes it off entirely."
       actions={
-        <Button tone="primary" icon="plus" onClick={() => setDraft({ ...BLANK })}>
+        <Button size="sm" tone="primary" icon="plus" onClick={() => setDraft({ ...BLANK })}>
           Add a dish
         </Button>
       }
     >
-      {confirmElement}
+      <Toolbar>
+        <Search value={query} onChange={setQuery} placeholder="Search dishes" />
+      </Toolbar>
 
-      <Loaded resource={menu}>
-        {(rows) =>
-          rows.length === 0 ? (
-            <Nothing>Nothing on the menu yet.</Nothing>
+      <Loaded query={menu}>
+        {() =>
+          groups.length === 0 ? (
+            <Nothing icon="list">Nothing on the menu yet.</Nothing>
           ) : (
-            <>
-              <Toolbar>
-                <p className="fine faint">
-                  {rows.length} dishes, {rows.filter((item) => item.is_active).length} showing
-                </p>
-              </Toolbar>
+            groups.map((group) => (
+              <section key={group.category} className="dk-section">
+                <h2 className="label">{group.category}</h2>
+                <div className="rows rows--inset">
+                  {group.items.map((item) => (
+                    <div
+                      key={item.id}
+                      className="row dk-dish"
+                      data-off={item.is_active === 0 ? "true" : undefined}
+                    >
+                      <Img src={item.image_url} alt="" ratio={1} radius="var(--r-sm)" className="dk-dish__photo" />
 
-              <TableWrap>
-                <thead>
-                  <tr>
-                    <th />
-                    <th>Dish</th>
-                    <th>Section</th>
-                    <th className="table__num">Price</th>
-                    <th className="table__num">Order</th>
-                    <th>Showing</th>
-                    <th>Sold out</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((item) => (
-                    <tr key={item.id}>
-                      <td>
-                        <Photo className="desk-thumb" src={item.image_url} alt="" />
-                      </td>
-                      <td>
-                        <strong>{item.name}</strong>
-                        <p className="fine faint">{item.description}</p>
-                      </td>
-                      <td>{item.category}</td>
-                      <td className="table__num">
-                        {item.price_fcfa != null ? <Money value={item.price_fcfa} /> : <span className="fine">{item.price_label ?? "By weight"}</span>}
-                      </td>
-                      <td className="table__num">{item.position}</td>
-                      <td>
-                        <label className="switch">
-                          <input
-                            type="checkbox"
-                            role="switch"
-                            checked={item.is_active === 1}
-                            onChange={async (event) => {
-                              try {
-                                await api.desk.menu.update(item.id, { is_active: event.target.checked ? 1 : 0 });
-                                menu.reload();
-                              } catch (err) {
-                                toast.failed(err);
-                              }
-                            }}
-                          />
-                          <span className="switch__track" aria-hidden="true" />
-                          <span className="sr-only">{item.name} on the menu</span>
-                        </label>
-                      </td>
-                      <td>
-                        {/* Separate from "showing" on purpose. Taking a dish
-                            off the menu hides that it exists; selling out says
-                            come back tomorrow, and the kitchen flips this one
-                            several times a week. */}
-                        <label className="switch">
-                          <input
-                            type="checkbox"
-                            role="switch"
-                            checked={item.sold_out === 1}
-                            onChange={async (event) => {
-                              try {
-                                await api.desk.menu.update(item.id, { sold_out: event.target.checked ? 1 : 0 });
-                                menu.reload();
-                              } catch (err) {
-                                toast.failed(err);
-                              }
-                            }}
-                          />
-                          <span className="switch__track" aria-hidden="true" />
-                          <span className="sr-only">{item.name} sold out today</span>
-                        </label>
-                      </td>
-                      <td>
-                        <div className="table__actions">
-                          <IconButton name="edit" label={`Edit ${item.name}`} size="sm" onClick={() => setDraft({ ...item })} />
-                          <IconButton
-                            name="trash"
-                            label={`Delete ${item.name}`}
-                            size="sm"
-                            onClick={async () => {
-                              const ok = await confirm({
-                                title: `Delete ${item.name}?`,
-                                body: "Orders already placed keep it. Switching it off instead hides it without losing the record.",
-                                confirmLabel: "Delete",
-                              });
-                              if (!ok) return;
-                              try {
-                                await api.desk.menu.remove(item.id);
-                                menu.reload();
-                                toast.done("Deleted.");
-                              } catch (err) {
-                                toast.failed(err);
-                              }
-                            }}
-                          />
-                        </div>
-                      </td>
-                    </tr>
+                      <span className="grow stack stack--tight">
+                        <span className="bar bar--tight">
+                          <span className={item.sold_out === 1 ? "small dk-struck" : "small"}>{item.name}</span>
+                          {item.sold_out === 1 ? <State tone="warn">Sold out</State> : null}
+                          {item.is_active === 0 ? <State>Hidden</State> : null}
+                        </span>
+                        <span className="fine faint clip">
+                          {item.price_fcfa != null ? `${money(item.price_fcfa)} FCFA` : item.price_label || "By weight"}
+                          {item.description ? ` · ${item.description}` : ""}
+                        </span>
+                      </span>
+
+                      <div className="bar bar--tight nowrap">
+                        <Action
+                          size="sm"
+                          tone={item.sold_out === 1 ? "ghost" : "quiet"}
+                          pending={toggleSoldOut.pending}
+                          pendingLabel="Saving"
+                          onClick={() => void toggleSoldOut.run(item)}
+                        >
+                          {item.sold_out === 1 ? "Back on" : "Sold out"}
+                        </Action>
+                        <Action
+                          size="sm"
+                          tone="quiet"
+                          pending={toggleActive.pending}
+                          pendingLabel="Saving"
+                          onClick={() => void toggleActive.run(item)}
+                        >
+                          {item.is_active === 0 ? "Show" : "Hide"}
+                        </Action>
+                        <IconButton
+                          name="edit"
+                          label={`Edit ${item.name}`}
+                          size="sm"
+                          onClick={() =>
+                            setDraft({
+                              id: item.id,
+                              category: item.category,
+                              name: item.name,
+                              description: item.description,
+                              price_fcfa: item.price_fcfa != null ? String(item.price_fcfa) : "",
+                              price_label: item.price_label ?? "",
+                              image_url: item.image_url,
+                              dietary_tags: item.dietary_tags,
+                              is_active: item.is_active !== 0,
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </TableWrap>
-            </>
+                </div>
+              </section>
+            ))
           )
         }
       </Loaded>
@@ -210,95 +216,130 @@ export function MenuAdmin() {
       <Sheet
         open={draft !== null}
         onClose={() => setDraft(null)}
-        busy={busy}
-        title={draft?.id ? "Edit dish" : "New dish"}
+        title={draft?.id === null ? "Add a dish" : "Edit dish"}
         footer={
           <>
-            <Button tone="ghost" onClick={() => setDraft(null)}>
-              Cancel
-            </Button>
-            <Button tone="primary" busy={busy} onClick={save}>
+            {draft?.id !== null && draft ? (
+              <Action
+                tone="quiet"
+                pending={remove.pending}
+                pendingLabel="Deleting"
+                onClick={async () => {
+                  const sure = await confirm({
+                    title: `Delete ${draft.name}?`,
+                    body: "This removes it for good. To take it off for tonight only, use Sold out instead.",
+                    confirmLabel: "Delete it",
+                  });
+                  if (!sure) return;
+                  await remove.run(draft.id!);
+                }}
+              >
+                Delete
+              </Action>
+            ) : null}
+            <Action
+              tone="primary"
+              pending={save.pending}
+              pendingLabel="Saving"
+              disabled={!draft?.name.trim() || !draft?.category.trim()}
+              onClick={async () => {
+                await save.run();
+                const error = save.readError();
+                if (error) toast.failed(error, "desk");
+              }}
+            >
               Save
-            </Button>
+            </Action>
           </>
         }
       >
         {draft ? (
-          <>
+          <div className="stack">
+            <label className="dropzone">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/avif"
+                className="sr-only"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const dataUrl = await readImageFile(file);
+                    setDraft({ ...draft, image_url: dataUrl });
+                  } catch (error) {
+                    toast.failed(error, "upload");
+                  }
+                }}
+              />
+              {draft.image_url ? (
+                <Img src={draft.image_url} alt="" ratio={4 / 3} />
+              ) : (
+                <span className="dropzone__prompt fine muted">
+                  Add a photograph. Real pictures of your own grill are the single biggest upgrade this site can get.
+                </span>
+              )}
+            </label>
+
             <TextField
               label="Name"
-              value={draft.name ?? ""}
-              maxLength={120}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              value={draft.name}
+              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
               required
             />
             <TextField
-              label="Section"
-              hint="Dishes are grouped by this. Reuse the exact wording to keep them together."
-              value={draft.category ?? ""}
-              maxLength={60}
-              onChange={(e) => setDraft({ ...draft, category: e.target.value })}
+              label="Category"
+              hint="Grouped by this on the menu. Reuse an existing one to keep the list short."
+              value={draft.category}
+              onChange={(event) => setDraft({ ...draft, category: event.target.value })}
               required
             />
             <TextAreaField
               label="Description"
-              value={draft.description ?? ""}
-              maxLength={400}
-              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+              value={draft.description}
+              onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+              rows={2}
+              maxLength={300}
             />
             <TextField
               label="Price in FCFA"
-              type="number"
+              hint="Leave empty for anything sold by weight, and put the wording below instead."
+              value={draft.price_fcfa}
+              onChange={(event) => setDraft({ ...draft, price_fcfa: event.target.value.replace(/\D/g, "") })}
               inputMode="numeric"
-              hint="Leave empty for anything sold by weight, then fill in the line below."
-              value={draft.price_fcfa ?? ""}
-              onChange={(e) => setDraft({ ...draft, price_fcfa: e.target.value ? Number(e.target.value) : null })}
             />
             <TextField
-              label="Price in words"
-              placeholder="By weight, ask at the counter"
-              value={draft.price_label ?? ""}
-              maxLength={40}
-              onChange={(e) => setDraft({ ...draft, price_label: e.target.value })}
+              label="Price wording"
+              hint='Only when there is no fixed price. For example "By weight".'
+              value={draft.price_label}
+              onChange={(event) => setDraft({ ...draft, price_label: event.target.value })}
             />
             <TextField
-              label="Position in its section"
-              type="number"
-              value={draft.position ?? 0}
-              onChange={(e) => setDraft({ ...draft, position: Number(e.target.value) })}
+              label="Tags"
+              hint="Comma separated. Shown as small labels on the dish."
+              value={parseTags(draft.dietary_tags).join(", ") || draft.dietary_tags}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  dietary_tags: JSON.stringify(
+                    event.target.value
+                      .split(",")
+                      .map((tag) => tag.trim())
+                      .filter(Boolean)
+                  ),
+                })
+              }
             />
-
-            <div className="field">
-              <span className="field__label">Photo</span>
-              <label className="dropzone">
-                {draft.image_url ? <img src={draft.image_url} alt="" /> : <span className="dropzone__hint">Choose a photo</span>}
-                <input
-                  type="file"
-                  accept={IMAGE_ACCEPT}
-                  className="sr-only"
-                  onChange={async (event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    try {
-                      setDraft({ ...draft, image_url: await readImageFile(file) });
-                      setProblem(null);
-                    } catch (err) {
-                      setProblem(err instanceof ImageError ? err.message : "That photo could not be used.");
-                    }
-                  }}
-                />
-              </label>
-              {draft.image_url ? (
-                <Button size="sm" tone="quiet" onClick={() => setDraft({ ...draft, image_url: null })}>
-                  Remove the photo
-                </Button>
-              ) : null}
-            </div>
-
-            {problem ? <Notice tone="bad">{problem}</Notice> : null}
-          </>
+            <Switch
+              label="Showing on the menu"
+              hint="Turn this off to take the dish off the site entirely."
+              checked={draft.is_active}
+              onChange={(next) => setDraft({ ...draft, is_active: next })}
+            />
+          </div>
         ) : null}
       </Sheet>
+
+      {element}
     </DeskPage>
   );
 }

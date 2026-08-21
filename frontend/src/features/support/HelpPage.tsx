@@ -1,95 +1,55 @@
-import { Link } from "react-router-dom";
 import { Icon } from "~/ui/Icon";
-import { useVenue } from "~/state/venue";
+import { LinkButton, AnchorButton } from "~/ui/Button";
+import { phoneLabel } from "~/lib/format";
 import { Conversation } from "./Conversation";
+import { useCopy } from "~/state/locale";
+import { useVenue } from "~/state/venue";
 
 /**
- * Help, with the chat as the main event.
+ * Help.
  *
- * The answers beside it are the four things people actually write in about, so
- * most visitors get what they came for without waiting for a reply.
+ * The chat is the main thing on the page, but it is not the only way through:
+ * somebody with a problem at eight on a Friday should not have to wait for a
+ * reply if they could just ring. So the phone number and WhatsApp are above the
+ * chat, not buried under it.
  */
-
-const ANSWERS = [
-  {
-    q: "Can I change or cancel a booking?",
-    a: (
-      <>
-        Yes, from <Link to="/mine">Mine</Link>. Cancel more than an hour before and the deposit comes back. Inside the
-        hour we keep 1,500 FCFA, because the table sat empty.
-      </>
-    ),
-  },
-  {
-    q: "My mobile money prompt never arrived",
-    a: (
-      <>
-        It expires after about 90 seconds. Open the booking or order in <Link to="/mine">Mine</Link> and press pay
-        again. Nothing is taken until you enter your PIN, so a failed attempt has not charged you.
-      </>
-    ),
-  },
-  {
-    q: "How long does an order take?",
-    a: "Everything is cooked fresh when you order it, so give it half an hour from the time you pick. On a busy Friday, longer.",
-  },
-  {
-    q: "Do you deliver?",
-    a: "Not ourselves. Order takeaway and send someone, or use a bike rider you trust.",
-  },
-];
-
 export function HelpPage() {
-  const { phone, phoneHref, whatsappHref, address, hours } = useVenue();
+  const { c } = useCopy();
+  const { phone, phoneHref, whatsappHref, siteConfig } = useVenue();
 
   return (
-    <div className="page section">
-      <div className="section-head">
-        <hr className="heat-rule" />
-        <h1 className="display display--xl">Help</h1>
-        <p className="lead">Write to us here. If it is urgent and we are open, calling gets you an answer faster.</p>
+    <div className="page section stack help">
+      <header className="stack stack--tight">
+        <h1 className="display display--xl">{c.help.title}</h1>
+        <p className="lead">{c.help.lead}</p>
+      </header>
+
+      <div className="bar bar--wrap bar--tight">
+        {siteConfig.support.phone && phone && phoneHref ? (
+          <AnchorButton href={phoneHref} tone="ghost" size="sm" icon="phone">
+            {phoneLabel(phone)}
+          </AnchorButton>
+        ) : null}
+        {siteConfig.support.whatsapp && whatsappHref ? (
+          <AnchorButton href={whatsappHref} tone="ghost" size="sm" icon="message" newTab>
+            WhatsApp
+          </AnchorButton>
+        ) : null}
+        <LinkButton to="/find" tone="quiet" size="sm" icon="pin">
+          {c.find.title}
+        </LinkButton>
       </div>
 
-      <div className="help-layout">
-        <div className="card">
-          <Conversation active />
+      {siteConfig.support.enabled ? (
+        <Conversation active />
+      ) : (
+        <div className="rows">
+          <div className="row">
+            <Icon name="clock" size={17} className="row__lead" />
+            <span className="grow fine">{c.help.offline}</span>
+          </div>
         </div>
-
-        <aside className="stack stack--loose">
-          <section className="card stack">
-            <h2 className="card__title">Reach us</h2>
-            {phoneHref ? (
-              <a className="row" href={phoneHref}>
-                <Icon name="phone" size={18} /> {phone}
-              </a>
-            ) : null}
-            {whatsappHref ? (
-              <a className="row" href={whatsappHref} target="_blank" rel="noreferrer noopener">
-                <Icon name="message" size={18} /> WhatsApp
-              </a>
-            ) : null}
-            <p className="row">
-              <Icon name="pin" size={18} /> {address}
-            </p>
-            <p className="row">
-              <Icon name="clock" size={18} /> {hours}
-            </p>
-          </section>
-
-          <section className="stack">
-            <h2 className="card__title">Asked often</h2>
-            {ANSWERS.map((entry) => (
-              <details key={entry.q} className="qa">
-                <summary>
-                  {entry.q}
-                  <Icon name="chevron-down" size={18} />
-                </summary>
-                <p className="fine muted">{entry.a}</p>
-              </details>
-            ))}
-          </section>
-        </aside>
-      </div>
+      )}
     </div>
   );
 }

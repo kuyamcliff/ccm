@@ -1,34 +1,29 @@
 import { useState } from "react";
 import { api, EVENT_TYPES } from "~/lib/api";
 import type { EventType } from "~/lib/api";
-import { ApiError } from "~/lib/http";
+import { useMutation } from "~/lib/store";
 import { normalisePhone, todayISO } from "~/lib/format";
-import { useAction } from "~/lib/useResource";
-import { Button, LinkButton } from "~/ui/Button";
-import { PhoneField, SelectField, TextAreaField, TextField } from "~/ui/Field";
-import { Notice } from "~/ui/Feedback";
+import { Action, LinkButton } from "~/ui/Button";
+import { TextField, TextAreaField, SelectField, PhoneField, Counter, Field } from "~/ui/Field";
+import { EmptyState } from "~/ui/Feedback";
 import { useSession } from "~/state/session";
-import { useVenue } from "~/state/venue";
+import { useToast } from "~/state/toast";
+import { useCopy } from "~/state/locale";
 
 /**
- * Private events.
+ * Booking the place out.
  *
- * This is an enquiry, not a booking, and the page says so: parties this size
- * get quoted and confirmed by a person. Pretending otherwise would have people
- * turning up to a room nobody set up.
+ * An enquiry, not a booking: a birthday for forty people is a conversation, and
+ * pretending a form can settle it would set an expectation the restaurant then
+ * has to walk back. So the form collects enough to have that conversation and
+ * says plainly that somebody will come back to them.
+ *
+ * The enquiry lands in Desk > Events.
  */
-
-const LABELS: Record<EventType, string> = {
-  birthday: "Birthday",
-  corporate: "Company do",
-  private_dining: "Private dining",
-  wedding: "Wedding",
-  other: "Something else",
-};
-
 export function EventsPage() {
+  const { c } = useCopy();
   const { user } = useSession();
-  const { phone: venuePhone, phoneHref } = useVenue();
+  const toast = useToast();
 
   const [name, setName] = useState(user?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
@@ -38,137 +33,126 @@ export function EventsPage() {
   const [time, setTime] = useState("19:00");
   const [guests, setGuests] = useState(20);
   const [note, setNote] = useState("");
-  const [problem, setProblem] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
-  const send = useAction(api.site.enquireAboutEvent);
+  const send = useMutation(async () => {
+    await api.site.enquireAboutEvent({
+      name: name.trim(),
+      email: email.trim(),
+      phone: normalisePhone(phone),
+      event_type: type,
+      date,
+      time,
+      guest_count: guests,
+      note: note.trim() || undefined,
+    });
+    setSent(true);
+    toast.done(c.events.sent);
+  });
 
   if (sent) {
     return (
-      <div className="page section stack stack--loose" style={{ maxWidth: "32rem" }}>
-        <div className="section-head">
-          <hr className="heat-rule" />
-          <h1 className="display display--xl">Enquiry sent</h1>
-        </div>
-        <p className="lead">
-          We will come back to you on {email} or {phone} to talk through the food and the room. If it is soon, calling is
-          faster.
-        </p>
-        {phoneHref ? (
-          <a className="btn btn--primary" href={phoneHref}>
-            Call {venuePhone}
-          </a>
-        ) : null}
-        <LinkButton to="/" tone="ghost">
-          Back to the start
-        </LinkButton>
+      <div className="page section">
+        <EmptyState
+          icon="check-circle"
+          title={c.events.sent}
+          body="Somebody will be in touch to talk it through and confirm what we can do."
+          action={
+            <LinkButton to="/menu" tone="ghost" size="sm">
+              {c.nav.menu}
+            </LinkButton>
+          }
+        />
       </div>
     );
   }
 
+  const ready = name.trim().length > 1 && email.trim().includes("@") && normalisePhone(phone).length === 9 && date;
+
   return (
-    <div className="page section">
-      <div className="section-head">
-        <hr className="heat-rule" />
-        <h1 className="display display--xl">Book the place out</h1>
-        <p className="lead">
-          Birthdays, company nights, anything from 5 people up. Tell us what you have in mind and we will work out the
-          food and the price with you.
-        </p>
-      </div>
+    <div className="page section stack">
+      <header className="stack stack--tight">
+        <h1 className="display display--xl">{c.events.title}</h1>
+        <p className="lead">{c.events.lead}</p>
+      </header>
 
       <form
-        className="card stack"
-        style={{ maxWidth: "38rem" }}
+        className="stack"
         onSubmit={async (event) => {
           event.preventDefault();
-          setProblem(null);
-          const digits = normalisePhone(phone);
-          if (!date) {
-            setProblem("Pick a date, even a rough one.");
-            return;
-          }
-          if (digits.length < 8) {
-            setProblem("Enter a phone number we can reach you on.");
-            return;
-          }
-          const result = await send.run({
-            name: name.trim(),
-            email: email.trim(),
-            phone: digits,
-            event_type: type,
-            date,
-            time,
-            guest_count: guests,
-            note: note.trim() || undefined,
-          });
-          if (!result) {
-            const failure = send.readError();
-            setProblem(failure instanceof ApiError ? failure.message : "That did not send.");
-            return;
-          }
-          setSent(true);
+          await send.run();
+          const error = send.readError();
+          if (error) toast.failed(error, "enquire");
         }}
       >
-        <div className="grid grid--two">
-          <TextField label="Your name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required />
-          <TextField
-            label="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-            required
-          />
-        </div>
-
-        <PhoneField label="Phone number" value={phone} onChange={setPhone} required />
-
-        <SelectField label="What is the occasion" value={type} onChange={(e) => setType(e.target.value as EventType)}>
+        <SelectField label={c.events.type} value={type} onChange={(event) => setType(event.target.value as EventType)}>
           {EVENT_TYPES.map((value) => (
             <option key={value} value={value}>
-              {LABELS[value]}
+              {c.events.types[value]}
             </option>
           ))}
         </SelectField>
 
-        <div className="grid grid--two">
+        <div className="pair">
           <TextField
-            label="Date"
+            label={c.events.when}
             type="date"
-            min={todayISO()}
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            min={todayISO()}
+            onChange={(event) => setDate(event.target.value)}
             required
           />
-          <TextField label="Start time" type="time" value={time} onChange={(e) => setTime(e.target.value)} required />
+          <TextField
+            label={c.book.time}
+            type="time"
+            value={time}
+            onChange={(event) => setTime(event.target.value)}
+            required
+          />
         </div>
 
+        <Field label={c.events.guests}>
+          {() => <Counter value={guests} onChange={setGuests} min={2} max={200} label={c.events.guests} />}
+        </Field>
+
         <TextField
-          label="How many people"
-          type="number"
-          inputMode="numeric"
-          min={5}
-          max={500}
-          hint="Between 5 and 500. A rough number is fine."
-          value={guests}
-          onChange={(e) => setGuests(Number(e.target.value))}
+          label={c.auth.name}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          autoComplete="name"
           required
         />
 
-        <TextAreaField
-          label="Tell us about it"
-          placeholder="What you want to eat, whether you need the whole place, music, anything else."
-          value={note}
-          maxLength={600}
-          onChange={(e) => setNote(e.target.value)}
+        <TextField
+          label={c.auth.email}
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          autoComplete="email"
+          inputMode="email"
+          required
         />
 
-        {problem ? <Notice tone="bad">{problem}</Notice> : null}
+        <PhoneField label={c.queue.phone} value={phone} onChange={setPhone} required />
 
-        <Button type="submit" tone="primary" size="lg" busy={send.busy}>
-          Send the enquiry
-        </Button>
+        <TextAreaField
+          label={c.events.note}
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder="What is the occasion, and is there anything you need from us?"
+          rows={4}
+        />
+
+        <Action
+          type="submit"
+          tone="primary"
+          block
+          pending={send.pending}
+          pendingLabel={c.pending.sending}
+          disabled={!ready}
+        >
+          {c.events.send}
+        </Action>
       </form>
     </div>
   );

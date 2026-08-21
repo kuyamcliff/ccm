@@ -7,6 +7,7 @@ import { db, loadIdColumns, pool } from "./db.js";
 import { UPLOAD_DIR } from "./lib/media.js";
 import { migrateInlineMedia } from "./lib/migrate-media.js";
 import { migrateSchema } from "./lib/migrate-schema.js";
+import { bootstrapDeveloper } from "./lib/bootstrapDeveloper.js";
 import { newErrorReference } from "./lib/errorReference.js";
 import { migrateUxControls } from "./lib/migrate-ux-controls.js";
 import { backfillLegacyBookingCodes } from "./lib/bookingCode.js";
@@ -24,6 +25,10 @@ import { settingsRouter } from "./routes/settings.js";
 import { receiptsRouter } from "./routes/receipts.js";
 import { accountRouter } from "./routes/account.js";
 import { popularRouter } from "./routes/popular.js";
+import { bootstrapRouter } from "./routes/bootstrap.js";
+import { cronRouter } from "./routes/cron.js";
+import { devRouter } from "./routes/dev.js";
+import { recordError } from "./lib/errorLog.js";
 import { loyaltyRouter } from "./routes/loyalty.js";
 import { promosRouter } from "./routes/promos.js";
 import { offersRouter } from "./routes/offers.js";
@@ -42,6 +47,7 @@ import { accessRouter } from "./routes/access.js";
 initTelegramLogger();
 await migrateSchema();
 await migrateUxControls();
+await bootstrapDeveloper();
 await migrateInlineMedia();
 await backfillLegacyBookingCodes();
 await loadIdColumns();
@@ -65,6 +71,12 @@ app.use("/api", rateLimit("global", { windowMs: 60 * 1000, max: 300, message: "Y
 app.use("/api", maintenanceGate);
 
 app.get("/api/health", async (_req, res) => { res.setHeader("Cache-Control", "no-store"); try { await db.prepare("SELECT 1").get(); res.json({ ok: true, database: "up", uptime_seconds: Math.round(process.uptime()) }); } catch (err) { console.error("[health] database check failed", err); res.status(503).json({ ok: false, database: "down" }); } });
+/* First, because it is the first thing the browser asks for and everything it
+   returns is what the page needs before it can draw. See routes/bootstrap.ts. */
+app.use("/api/bootstrap", bootstrapRouter);
+/* The scheduler's own endpoint. Guarded by a shared secret rather than a
+   session, because the caller is a cron job and has no account. */
+app.use("/api/cron", cronRouter);
 app.use("/api/auth", authRouter);
 app.post("/api/reservations", requireSiteService("booking"));
 app.use("/api/reservations", reservationsRouter);
@@ -93,6 +105,7 @@ app.use("/api/support", supportRouter);
 app.use("/api/recovery", recoveryRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/access", accessRouter);
+app.use("/api/dev", devRouter);
 app.use("/api", (_req, res) => res.status(404).json({ error: "Not found." }));
 app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (err && typeof err === "object" && "type" in err) { const type = (err as { type: string }).type; if (type === "entity.too.large") { res.status(413).json({ error: "That file is too large. Keep uploads under 6 MB." }); return; } if (type === "entity.parse.failed") { res.status(400).json({ error: "That request was malformed." }); return; } }
@@ -102,6 +115,19 @@ app.use((err: unknown, req: express.Request, res: express.Response, next: expres
      failure instead of asking what time it happened. */
   const reference = newErrorReference();
   console.error(`[error] ${reference} ${req.method} ${req.originalUrl}`, err);
+
+  /* Also kept in memory so the developer console can look a reference up
+     without anybody having to reach the platform's log viewer. The path is
+     taken without its query string on purpose: those carry search terms and
+     sometimes tokens. See lib/errorLog.ts. */
+  recordError({
+    reference,
+    method: req.method,
+    path: req.originalUrl.split("?")[0] ?? req.originalUrl,
+    status: 500,
+    message: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? (err.stack ?? null) : null,
+  });
   if (res.headersSent) { next(err); return; }
   res.status(500).json({ error: "Something broke on our side. Try again.", reference });
 });

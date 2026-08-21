@@ -1,68 +1,322 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { api } from "~/lib/api";
 import type { Booking, TakeawayOrder } from "~/lib/api";
-import { dayLabel, parseLines, stampLabel, timeLabel } from "~/lib/format";
-import { type Resource, useResource } from "~/lib/useResource";
-import { AnchorButton, Button, LinkButton } from "~/ui/Button";
-import { Badge, Money } from "~/ui/Bits";
-import { EmptyState, ErrorState, SkeletonCards } from "~/ui/Feedback";
+import { ApiError } from "~/lib/http";
+import { useMutation, useQuery, usePoll, invalidate } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { dayLabel, money, parseLines, timeLabel } from "~/lib/format";
+import { Icon } from "~/ui/Icon";
+import { Action, LinkButton } from "~/ui/Button";
+import { Segmented } from "~/ui/Field";
+import { Badge, Code, Money } from "~/ui/Bits";
+import { EmptyState, ErrorState, SkeletonRows } from "~/ui/Feedback";
 import { useConfirm } from "~/ui/Sheet";
-import { useToast } from "~/state/toast";
-import { useVenue } from "~/state/venue";
-import { useLocale } from "~/state/locale";
-import { useBasket } from "~/state/basket";
 import { BookingPass } from "./BookingPass";
-import { MomoDialog } from "~/features/pay/MomoDialog";
+import { useToast } from "~/state/toast";
+import { useCopy } from "~/state/locale";
 
-const ORDER_STATUS: Record<TakeawayOrder["status"], { label: { en: string; fr: string }; tone: "neutral" | "good" | "warn" | "bad" | "hot" }> = {
-  awaiting_payment: { label: { en: "Not paid", fr: "Non payé" }, tone: "warn" },
-  pending: { label: { en: "Sent", fr: "Envoyée" }, tone: "warn" },
-  confirmed: { label: { en: "Accepted", fr: "Acceptée" }, tone: "hot" },
-  ready: { label: { en: "Ready to collect", fr: "Prête à retirer" }, tone: "good" },
-  picked_up: { label: { en: "Collected", fr: "Retirée" }, tone: "neutral" },
-  cancelled: { label: { en: "Cancelled", fr: "Annulée" }, tone: "bad" },
-};
-function downloadBlob(blob: Blob, filename: string) { const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url); }
-function hasMenuId(line: { id?: number; name: string; qty: number; price: number }): line is { id: number; name: string; qty: number; price: number } { return Number.isInteger(line.id) && (line.id ?? 0) > 0; }
+/**
+ * Everything this person has going on with the restaurant.
+ *
+ * Two tabs, because tables and orders are different objects with different
+ * lifecycles and merging them into one feed makes both harder to scan.
+ *
+ * The orders tab polls while an order is live, because "is it ready yet" is the
+ * one question this screen exists to answer and the answer changes without the
+ * person doing anything.
+ */
 
-function Bookings({ bookings }: { bookings: Resource<Booking[]> }) {
-  const { depositFcfa } = useVenue(); const toast = useToast(); const { confirm, confirmElement } = useConfirm(); const [payFor, setPayFor] = useState<Booking | null>(null); const { locale } = useLocale();
-  async function cancel(booking: Booking) { const ok = await confirm({ title: locale === "fr" ? "Annuler cette table ?" : "Cancel this table?", body: locale === "fr" ? `${dayLabel(booking.date)} à ${timeLabel(booking.time)}. Un acompte payé plus d'une heure à l'avance revient au client.` : `${dayLabel(booking.date)} at ${timeLabel(booking.time)}. If you have paid a deposit more than an hour ahead, it comes back to you.`, confirmLabel: locale === "fr" ? "Annuler" : "Cancel it" }); if (!ok) return; try { const result = await api.booking.cancel(booking.id); if ("requires_fee" in result) { toast.failed(new Error(locale === "fr" ? `Une pénalité de ${result.fee_fcfa.toLocaleString("fr-FR")} FCFA s'applique. Contactez-nous.` : `Cancelling this late keeps a ${result.fee_fcfa.toLocaleString("en-US")} FCFA fee. Call us instead.`)); return; } toast.done(locale === "fr" ? "Table libérée." : "Table released."); bookings.reload(); } catch (err) { toast.failed(err); } }
-  async function hide(booking: Booking) { try { await api.booking.hide(booking.id); bookings.set((current) => (current ?? []).filter((row) => row.id !== booking.id)); } catch (err) { toast.failed(err); } }
-  async function receipt(booking: Booking) { try { downloadBlob(await api.me.bookingReceiptFile(booking.id), `${booking.ccm_code ?? booking.id}.pdf`); } catch (err) { toast.failed(err, locale === "fr" ? "Ce reçu n'est pas encore prêt." : "That receipt is not ready yet."); } }
-  if (bookings.loading) return <SkeletonCards count={2} height="14rem" />;
-  if (bookings.error) return <ErrorState error={bookings.error} onRetry={bookings.reload} />;
-  const rows = bookings.data ?? [];
-  if (rows.length === 0) return <EmptyState icon="calendar" title={locale === "fr" ? "Aucune table réservée" : "No tables booked"} action={<LinkButton to="/book" tone="primary">{locale === "fr" ? "Réserver" : "Book one"}</LinkButton>}>{locale === "fr" ? "Votre réservation, votre code et vos reçus apparaîtront ici." : "When you book, it shows up here with the code for the door."}</EmptyState>;
-  return <div className="stack stack--loose">{confirmElement}{rows.map((booking) => <BookingPass key={booking.id} booking={booking} compact actions={<>{booking.status === "pending_payment" ? <Button tone="primary" size="sm" icon="wallet" onClick={() => setPayFor(booking)}>{locale === "fr" ? "Payer l'acompte" : "Pay the deposit"}</Button> : null}{booking.status === "confirmed" || booking.status === "pending_payment" ? <AnchorButton size="sm" tone="ghost" icon="calendar" href={api.booking.calendarUrl(booking.id)}>{locale === "fr" ? "Ajouter au calendrier" : "Add to calendar"}</AnchorButton> : null}{booking.payment_status === "paid" ? <Button size="sm" tone="ghost" icon="download" onClick={() => receipt(booking)}>{locale === "fr" ? "Reçu" : "Receipt"}</Button> : null}{booking.status === "confirmed" || booking.status === "pending_payment" ? <Button size="sm" tone="danger" onClick={() => cancel(booking)}>{locale === "fr" ? "Annuler" : "Cancel"}</Button> : <Button size="sm" tone="quiet" onClick={() => hide(booking)}>{locale === "fr" ? "Retirer" : "Remove"}</Button>}</>} />)}{payFor ? <MomoDialog open amountFcfa={depositFcfa} title={locale === "fr" ? "Payer l'acompte" : "Pay the deposit"} what={`${dayLabel(payFor.date)} ${locale === "fr" ? "à" : "at"} ${timeLabel(payFor.time)}`} driver={{ allowDiscounts: true, start: (input) => api.booking.payDeposit({ reservationId: payFor.id, momoPhone: input.momoPhone, wallet: input.wallet, promoCode: input.promoCode, giftCardCode: input.giftCardCode, usePoints: input.usePoints, idempotencyKey: input.idempotencyKey }).then((prompt) => ({ reference: prompt.reference, amount_fcfa: prompt.amount_fcfa, zero_cost: prompt.zero_cost, expires_in_seconds: prompt.expires_in_seconds, payment_url: prompt.payment_url })), poll: api.booking.paymentStatus, abandon: api.booking.abandonPayment }} onClose={() => setPayFor(null)} onPaid={() => { setPayFor(null); toast.done(locale === "fr" ? "Acompte reçu. Votre table est confirmée." : "Deposit received. Your table is confirmed."); bookings.reload(); }} /> : null}</div>;
+type Tab = "tables" | "orders";
+
+/** Statuses where the kitchen is still going to do something. */
+const LIVE = new Set(["awaiting_payment", "pending", "confirmed", "ready"]);
+
+/**
+ * The late cancellation fee, if this failure is one.
+ *
+ * Returns null for anything else, so an ordinary failure falls through to the
+ * usual handling rather than being mistaken for a quote.
+ */
+function feeFromError(error: unknown): number | null {
+  if (!(error instanceof ApiError) || error.status !== 402) return null;
+  const body = error.body as { requires_fee?: boolean; fee_fcfa?: number } | undefined;
+  if (!body?.requires_fee || typeof body.fee_fcfa !== "number") return null;
+  return body.fee_fcfa;
 }
-
-function Orders({ orders }: { orders: Resource<TakeawayOrder[]> }) {
-  const toast = useToast(); const [payFor, setPayFor] = useState<TakeawayOrder | null>(null); const { locale } = useLocale(); const { add, clear } = useBasket(); const navigate = useNavigate(); const menu = useResource(() => api.site.menu(), []);
-  const orderAgain = (order: TakeawayOrder) => {
-    const lines = parseLines(order.items_json).filter(hasMenuId);
-    if (lines.length === 0) { toast.say(locale === "fr" ? "Les articles de cette ancienne commande ne peuvent pas être ajoutés automatiquement. Ouvrez le menu pour recommencer." : "Those older items cannot be restored automatically. Open the menu to order again."); navigate("/menu"); return; }
-    if (menu.data) {
-      const validIds = new Set(menu.data.filter((item) => item.price_fcfa != null).map((item) => item.id));
-      const available = lines.filter((line) => validIds.has(line.id));
-      if (!available.length) { toast.say(locale === "fr" ? "Ces articles ne sont plus disponibles. Nous vous avons ouvert le menu." : "Those items are no longer available. We opened the menu for you."); navigate("/menu"); return; }
-      clear(); for (const line of available) add(line.id, line.qty);
-      toast.done(locale === "fr" ? "Votre commande précédente est de retour dans le panier." : "Your previous order is back in the basket."); navigate("/order"); return;
-    }
-    toast.say(locale === "fr" ? "Vérification du menu…" : "Checking today's menu…");
-  };
-  if (orders.loading) return <SkeletonCards count={2} height="10rem" />;
-  if (orders.error) return <ErrorState error={orders.error} onRetry={orders.reload} />;
-  const rows = orders.data ?? [];
-  if (rows.length === 0) return <EmptyState icon="bag" title={locale === "fr" ? "Aucune commande" : "No orders yet"} action={<LinkButton to="/menu" tone="primary">{locale === "fr" ? "Voir le menu" : "Go to the menu"}</LinkButton>}>{locale === "fr" ? "Commandez à l'avance et retirez votre repas sans attendre." : "Order ahead and collect it without queueing."}</EmptyState>;
-  return <div className="stack">{rows.map((order) => { const status = ORDER_STATUS[order.status]; const lines = parseLines(order.items_json); const unpaid = order.payment_status !== "paid" && order.status !== "cancelled"; return <article key={order.id} className="order-card stack stack--tight"><div className="row row--between"><div className="order-card__id"><span className="order-card__label">{locale === "fr" ? "Commande" : "Order"}</span><span className="mono order-card__no">{order.order_no}</span></div><Badge tone={status.tone}>{status.label[locale]}</Badge></div><ul className="lines lines--tight">{lines.map((line, index) => <li key={`${line.name}-${index}`}><span className="mono lines__qty">{line.qty}</span><span>{line.name}</span><Money value={line.price * line.qty} className="push" /></li>)}</ul><div className="order-card__total row row--between"><span className="fine muted">{locale === "fr" ? "Retrait à" : "Collect"} {timeLabel(order.pickup_time)}</span><strong><Money value={order.total_fcfa} /></strong></div>{unpaid ? <p className="order-card__warn fine">{locale === "fr" ? "Non payée — la cuisine ne l'a pas commencée." : "Not paid yet — the kitchen hasn't started it."}</p> : null}<div className="row row--wrap order-card__actions">{unpaid ? <Button tone="primary" size="sm" icon="wallet" onClick={() => setPayFor(order)}>{locale === "fr" ? "Payer maintenant" : "Pay now"}</Button> : <><Button size="sm" tone="ghost" icon="download" onClick={async () => { try { downloadBlob(await api.me.orderReceiptFile(order.order_no), `${order.order_no}.pdf`); } catch (err) { toast.failed(err); } }}>{locale === "fr" ? "Reçu" : "Receipt"}</Button>{order.status !== "cancelled" ? <Button size="sm" tone="quiet" icon="bag" onClick={() => orderAgain(order)}>{locale === "fr" ? "Commander encore" : "Order again"}</Button> : null}</>}<span className="fine faint push">{locale === "fr" ? "Commandée" : "Ordered"} {stampLabel(order.created_at)}</span></div></article>; })}{payFor ? <MomoDialog open amountFcfa={payFor.total_fcfa} title={locale === "fr" ? "Payer la commande" : "Pay for your order"} what={`Order ${payFor.order_no}, ${locale === "fr" ? "retrait à" : "collect at"} ${timeLabel(payFor.pickup_time)}`} driver={{ start: (input) => api.orders.pay(payFor.order_no, input.momoPhone, input.wallet, input.idempotencyKey).then((prompt) => ({ reference: prompt.reference, amount_fcfa: prompt.amount_fcfa, expires_in_seconds: prompt.expires_in_seconds, payment_url: prompt.payment_url })), poll: api.orders.paymentStatus, abandon: api.orders.abandonPayment }} onClose={() => setPayFor(null)} onPaid={() => { setPayFor(null); toast.done(locale === "fr" ? "Paiement reçu. Nous commençons la préparation." : "Paid. We will start on it."); orders.reload(); }} /> : null}</div>;
-}
-
-function activeBookingCount(rows: Booking[] | null): number { return (rows ?? []).filter((b) => b.status === "confirmed" || b.status === "pending_payment").length; }
-function activeOrderCount(rows: TakeawayOrder[] | null): number { return (rows ?? []).filter((o) => o.status !== "cancelled" && o.status !== "picked_up").length; }
 
 export function MinePage() {
-  const [tab, setTab] = useState<"tables" | "orders">("tables"); const { locale } = useLocale(); const bookings = useResource(() => api.booking.mine(), []); const orders = useResource(() => api.orders.mine(), []); const tableCount = activeBookingCount(bookings.data); const orderCount = activeOrderCount(orders.data);
-  return <div className="page section"><div className="section-head"><hr className="heat-rule" /><h1 className="display display--xl">{locale === "fr" ? "Mes visites" : "My visits"}</h1></div><div className="row row--between row--wrap"><div className="tabs" role="tablist" aria-label={locale === "fr" ? "Ce que vous avez avec nous" : "What you have with us"}><button type="button" role="tab" className="tab" aria-selected={tab === "tables"} onClick={() => setTab("tables")}>{locale === "fr" ? "Tables" : "Tables"} {tableCount ? `(${tableCount})` : ""}</button><button type="button" role="tab" className="tab" aria-selected={tab === "orders"} onClick={() => setTab("orders")}>{locale === "fr" ? "Commandes" : "Orders"} {orderCount ? `(${orderCount})` : ""}</button></div></div>{tab === "tables" ? <Bookings bookings={bookings} /> : <Orders orders={orders} />}</div>;
+  const { c } = useCopy();
+  const [tab, setTab] = useState<Tab>("tables");
+
+  return (
+    <div className="page section stack">
+      <header className="stack stack--tight">
+        <h1 className="display display--xl">{c.mine.title}</h1>
+      </header>
+
+      <Segmented
+        value={tab}
+        onChange={setTab}
+        label={c.mine.title}
+        options={[
+          { value: "tables", label: c.mine.tables, icon: "calendar" },
+          { value: "orders", label: c.mine.orders, icon: "bag" },
+        ]}
+      />
+
+      {tab === "tables" ? <Tables /> : <Orders />}
+    </div>
+  );
+}
+
+/* ── Tables ─────────────────────────────────────────────────────────────────*/
+
+function Tables() {
+  const { c, fill } = useCopy();
+
+  const toast = useToast();
+  const { confirm, element } = useConfirm();
+
+  const { data, loading, error, reload } = useQuery(K.myBookings, () => api.booking.mine(), { staleMs: 30_000 });
+
+  const cancel = useMutation(async (booking: Booking) => {
+    try {
+      await api.booking.cancel(booking.id);
+    } catch (error) {
+      /*
+       * A 402 here is a quote, not a refusal.
+       *
+       * Inside the last hour of a paid booking the server answers with the fee
+       * instead of cancelling, so the guest decides with the number in front of
+       * them rather than finding out afterwards. This is one of only two places
+       * in the product where the server's body carries a fact the browser cannot
+       * work out for itself, so it is read rather than translated by `lib/say`.
+       */
+      const fee = feeFromError(error);
+      if (fee === null) throw error;
+
+      const sure = await confirm({
+        title: c.mine.feeTitle,
+        body: fill(c.mine.feeBody, { amount: money(fee) }),
+        confirmLabel: c.mine.cancelBooking,
+        cancelLabel: "Keep it",
+      });
+      if (!sure) return;
+
+      /* Saying yes to the number they were just shown. */
+      await api.booking.cancel(booking.id, true);
+    }
+
+    invalidate(K.myBookings);
+    reload();
+    toast.done(c.mine.cancelled);
+  });
+
+  if (error) return <ErrorState error={error} intent="load" onRetry={reload} />;
+  if (loading) return <SkeletonRows count={3} />;
+
+  const bookings = data ?? [];
+  const now = new Date();
+  const upcoming = bookings.filter(
+    (booking) => booking.status !== "cancelled" && new Date(`${booking.date}T${booking.time}`) >= now
+  );
+  const past = bookings.filter(
+    (booking) => booking.status === "cancelled" || new Date(`${booking.date}T${booking.time}`) < now
+  );
+
+  if (bookings.length === 0) {
+    return (
+      <EmptyState
+        icon="calendar"
+        title={c.mine.noTables}
+        body={c.mine.noTablesBody}
+        action={
+          <LinkButton to="/book" tone="primary" size="sm" icon="calendar">
+            {c.home.holdTable}
+          </LinkButton>
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="stack stack--loose">
+      {upcoming.length > 0 ? (
+        <section className="stack">
+          <h2 className="label">{c.mine.upcoming}</h2>
+          {upcoming.map((booking) => (
+            <div key={booking.id} className="stack stack--snug">
+              <BookingPass booking={booking} />
+              {booking.status !== "cancelled" ? (
+                <Action
+                  tone="quiet"
+                  size="sm"
+                  block
+                  pending={cancel.pending}
+                  pendingLabel={c.pending.cancelling}
+                  onClick={async () => {
+                    const sure = await confirm({
+                      title: c.mine.cancelConfirm,
+                      body: c.mine.cancelBody,
+                      confirmLabel: c.mine.cancelBooking,
+                      cancelLabel: "Keep it",
+                    });
+                    if (!sure) return;
+                    await cancel.run(booking);
+                    const failure = cancel.readError();
+                    if (failure) toast.failed(failure, "cancelBooking");
+                  }}
+                >
+                  {c.mine.cancelBooking}
+                </Action>
+              ) : null}
+            </div>
+          ))}
+        </section>
+      ) : null}
+
+      {past.length > 0 ? (
+        <section className="stack stack--snug">
+          <h2 className="label">{c.mine.past}</h2>
+          <div className="rows">
+            {past.map((booking) => (
+              <div key={booking.id} className="row">
+                <Icon name="calendar" size={17} className="row__lead" />
+                <span className="grow stack stack--tight">
+                  <span className="small">
+                    {dayLabel(booking.date)}, {timeLabel(booking.time)}
+                  </span>
+                  {booking.table_label ? <span className="fine faint">Table {booking.table_label}</span> : null}
+                </span>
+                <Badge tone={booking.status === "cancelled" ? "bad" : "neutral"}>
+                  {c.mine.bookingStatus[booking.status]}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {element}
+    </div>
+  );
+}
+
+/* ── Orders ─────────────────────────────────────────────────────────────────*/
+
+function Orders() {
+  const { c } = useCopy();
+  const { data, loading, error, reload } = useQuery(K.myOrders, () => api.orders.mine(), { staleMs: 20_000 });
+
+  const orders = data ?? [];
+  const live = orders.filter((order) => LIVE.has(order.status));
+
+  /* Only while something is actually cooking. A finished list does not need
+     refreshing every twenty seconds, and a phone in a pocket does not need to be
+     asking. */
+  usePoll(() => reload(), live.length > 0 ? 20_000 : null);
+
+  if (error) return <ErrorState error={error} intent="load" onRetry={reload} />;
+  if (loading) return <SkeletonRows count={3} />;
+
+  if (orders.length === 0) {
+    return (
+      <EmptyState
+        icon="bag"
+        title={c.mine.noOrders}
+        body={c.mine.noOrdersBody}
+        action={
+          <LinkButton to="/menu" tone="primary" size="sm" icon="list">
+            {c.order.goToMenu}
+          </LinkButton>
+        }
+      />
+    );
+  }
+
+  const done = orders.filter((order) => !LIVE.has(order.status));
+
+  return (
+    <div className="stack stack--loose">
+      {live.length > 0 ? (
+        <section className="stack">
+          <h2 className="label">{c.mine.upcoming}</h2>
+          {live.map((order) => (
+            <LiveOrder key={order.id} order={order} />
+          ))}
+        </section>
+      ) : null}
+
+      {done.length > 0 ? (
+        <section className="stack stack--snug">
+          <h2 className="label">{c.mine.past}</h2>
+          <div className="rows">
+            {done.map((order) => (
+              <div key={order.id} className="row">
+                <Icon name="bag" size={17} className="row__lead" />
+                <span className="grow stack stack--tight">
+                  <span className="small clip">
+                    {parseLines(order.items_json)
+                      .map((line) => `${line.qty} ${line.name}`)
+                      .join(", ")}
+                  </span>
+                  <span className="fine faint">{order.order_no}</span>
+                </span>
+                <Money value={order.total_fcfa} size="fine" />
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * One order that has not been collected yet.
+ *
+ * The status is a stepped track rather than a word, because "with the kitchen"
+ * and "on the fire" mean nothing on their own: what somebody wants to know is
+ * how many steps are left before they can walk over.
+ */
+function LiveOrder({ order }: { order: TakeawayOrder }) {
+  const { c } = useCopy();
+  const stages: TakeawayOrder["status"][] = ["pending", "confirmed", "ready", "picked_up"];
+  const reached = Math.max(0, stages.indexOf(order.status));
+  const unpaid = order.payment_status !== "paid" && order.status !== "awaiting_payment";
+
+  return (
+    <div className="carry order-live">
+      <div className="bar bar--between">
+        <span className="label">{c.yours.liveOrder}</span>
+        <Badge tone={order.status === "ready" ? "good" : "neutral"}>{c.mine.orderStatus[order.status]}</Badge>
+      </div>
+
+      <Code value={order.order_no} size="md" />
+
+      <ol className="track" aria-label={c.mine.orderStatus[order.status]}>
+        {stages.map((stage, index) => (
+          <li key={stage} className="track__step" data-state={index <= reached ? "done" : undefined}>
+            <span className="track__dot" aria-hidden="true" />
+            <span className="micro">{c.mine.orderStatus[stage]}</span>
+          </li>
+        ))}
+      </ol>
+
+      <p className="fine muted clip-2">
+        {parseLines(order.items_json)
+          .map((line) => `${line.qty} ${line.name}`)
+          .join(", ")}
+      </p>
+
+      <div className="bar bar--between">
+        <span className="fine faint">
+          {c.order.pickupTime}: {order.pickup_time}
+        </span>
+        <Money value={order.total_fcfa} size="fine" />
+      </div>
+
+      {unpaid ? <Badge tone="warn">{c.order.payCash}</Badge> : null}
+    </div>
+  );
 }

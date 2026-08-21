@@ -1,126 +1,171 @@
 import { api } from "~/lib/api";
+import { useMutation, useQuery, usePoll, invalidate } from "~/lib/store";
+import { K } from "~/lib/keys";
 import { phoneLabel, timeAgo } from "~/lib/format";
-import { usePoll, useResource } from "~/lib/useResource";
-import { Button } from "~/ui/Button";
+import { Action, Button } from "~/ui/Button";
 import { useConfirm } from "~/ui/Sheet";
+import { Icon } from "~/ui/Icon";
+import { DeskPage, Loaded, Nothing, State } from "./parts";
 import { useToast } from "~/state/toast";
-import { DeskPage, Loaded, Nothing, State, TableWrap, Toolbar } from "./parts";
 
 /**
- * The waiting list.
+ * The walk-in queue on a full night.
  *
- * Ordered by how long people have been standing there, which is the only order
- * that matters when the room is full. Waiting entries stay at the top; anything
- * settled drops below.
+ * Three buttons per row and they are the three things that happen: tell them a
+ * table is free, sit them down, or take them off because they left.
+ *
+ * "Tell them" sends the message the backend already has a template for, so the
+ * guest gets a text rather than somebody shouting a name across a car park. It
+ * is the first button because it is the one that has to happen before the other
+ * two are true.
  */
+
+const WAITING = new Set(["waiting", "notified"]);
+
 export function Queue() {
-  const entries = useResource(() => api.desk.waitlist.list(), []);
   const toast = useToast();
-  const { confirm, confirmElement } = useConfirm();
+  const { confirm, element } = useConfirm();
 
-  usePoll(entries.reload, 45_000);
+  const queue = useQuery(K.desk.queue, () => api.desk.waitlist.list(), { staleMs: 15_000 });
+  usePoll(() => queue.reload(), 30_000);
 
-  async function set(id: number, status: string, said: string) {
-    try {
-      await api.desk.waitlist.setStatus(id, status);
-      entries.reload();
-      toast.done(said);
-    } catch (err) {
-      toast.failed(err);
-    }
-  }
+  const setStatus = useMutation(async (input: { id: number; status: string; said: string }) => {
+    await api.desk.waitlist.setStatus(input.id, input.status);
+    invalidate("desk.queue*");
+    queue.reload();
+    toast.done(input.said);
+  });
+
+  const clear = useMutation(async () => {
+    await api.desk.waitlist.clear();
+    invalidate("desk.queue*");
+    queue.reload();
+    toast.done("Queue cleared.");
+  });
+
+  const entries = queue.data ?? [];
+  const waiting = entries.filter((entry) => WAITING.has(entry.status));
+  const gone = entries.filter((entry) => !WAITING.has(entry.status));
 
   return (
-    <DeskPage title="Queue" lead="Everyone waiting for a table tonight.">
-      {confirmElement}
+    <DeskPage
+      title="Queue"
+      hint="Who is waiting, and how long they have been."
+      actions={
+        waiting.length === 0 && gone.length > 0 ? (
+          <Action
+            size="sm"
+            tone="quiet"
+            icon="trash"
+            pending={clear.pending}
+            pendingLabel="Clearing"
+            onClick={async () => {
+              const sure = await confirm({
+                title: "Clear the queue?",
+                body: "Everybody already seated or gone comes off the list. Anybody still waiting stays.",
+                confirmLabel: "Clear it",
+              });
+              if (!sure) return;
+              await clear.run();
+            }}
+          >
+            Clear
+          </Action>
+        ) : null
+      }
+    >
+      <Loaded query={queue}>
+        {() => (
+          <>
+            {waiting.length === 0 ? (
+              <Nothing icon="users">Nobody waiting. Good night so far.</Nothing>
+            ) : (
+              <div className="rows">
+                {waiting.map((entry, index) => (
+                  <div key={entry.id} className="row row--tall">
+                    <span className="dk-queueno">{index + 1}</span>
 
-      <Toolbar>
-        <Button tone="ghost" icon="refresh" onClick={entries.reload}>
-          Refresh
-        </Button>
-        <Button
-          tone="danger"
-          className="push"
-          onClick={async () => {
-            const ok = await confirm({
-              title: "Clear the queue?",
-              body: "Everyone still waiting comes off the list. Do this at closing, not during service.",
-              confirmLabel: "Clear it",
-            });
-            if (!ok) return;
-            try {
-              await api.desk.waitlist.clear();
-              entries.reload();
-              toast.done("Queue cleared.");
-            } catch (err) {
-              toast.failed(err);
-            }
-          }}
-        >
-          Clear the queue
-        </Button>
-      </Toolbar>
+                    <span className="grow stack stack--tight">
+                      <span className="small strong">{entry.name}</span>
+                      <span className="fine faint">
+                        {entry.party_size} people · {phoneLabel(entry.phone)} · waiting {timeAgo(entry.joined_at)}
+                      </span>
+                      {entry.note ? (
+                        <span className="fine">
+                          <Icon name="info" size={12} /> {entry.note}
+                        </span>
+                      ) : null}
+                    </span>
 
-      <Loaded resource={entries}>
-        {(rows) => {
-          const waiting = rows.filter((entry) => entry.status === "waiting" || entry.status === "notified");
-          const rest = rows.filter((entry) => entry.status !== "waiting" && entry.status !== "notified");
-          const ordered = [...waiting, ...rest];
+                    {entry.status === "notified" ? <State tone="warn">Told</State> : null}
 
-          if (ordered.length === 0) return <Nothing>Nobody waiting.</Nothing>;
-
-          return (
-            <TableWrap>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Name</th>
-                  <th className="table__num">People</th>
-                  <th>Waiting</th>
-                  <th>Status</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {ordered.map((entry, index) => (
-                  <tr key={entry.id}>
-                    <td className="mono">{entry.status === "waiting" || entry.status === "notified" ? index + 1 : "Off the list"}</td>
-                    <td>
-                      {entry.name}
-                      <span className="fine faint"> {phoneLabel(entry.phone)}</span>
-                      {entry.note ? <p className="fine hot">{entry.note}</p> : null}
-                    </td>
-                    <td className="table__num">{entry.party_size}</td>
-                    <td className="fine">{timeAgo(entry.joined_at)}</td>
-                    <td>
-                      <State value={entry.status} />
-                    </td>
-                    <td>
-                      <div className="table__actions">
-                        {entry.status === "waiting" ? (
-                          <Button size="sm" tone="ghost" icon="phone" onClick={() => set(entry.id, "notified", "Marked as called.")}>
-                            Called them
-                          </Button>
-                        ) : null}
-                        {entry.status === "waiting" || entry.status === "notified" ? (
-                          <>
-                            <Button size="sm" tone="primary" onClick={() => set(entry.id, "seated", "Seated.")}>
-                              Seated
-                            </Button>
-                            <Button size="sm" tone="danger" onClick={() => set(entry.id, "no_show", "Marked as no show.")}>
-                              No show
-                            </Button>
-                          </>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
+                    <div className="bar bar--tight nowrap">
+                      {entry.status === "waiting" ? (
+                        <Action
+                          size="sm"
+                          tone="primary"
+                          pending={setStatus.pending}
+                          pendingLabel="Sending"
+                          onClick={() =>
+                            void setStatus.run({ id: entry.id, status: "notified", said: "Told them." })
+                          }
+                        >
+                          Tell them
+                        </Action>
+                      ) : null}
+                      <Action
+                        size="sm"
+                        tone="ghost"
+                        pending={setStatus.pending}
+                        pendingLabel="Saving"
+                        onClick={() => void setStatus.run({ id: entry.id, status: "seated", said: "Seated." })}
+                      >
+                        Seated
+                      </Action>
+                      <Button
+                        size="sm"
+                        tone="quiet"
+                        onClick={async () => {
+                          const sure = await confirm({
+                            title: `Take ${entry.name} off the list?`,
+                            body: "Use this when somebody has left without eating.",
+                            confirmLabel: "Take them off",
+                          });
+                          if (!sure) return;
+                          await setStatus.run({ id: entry.id, status: "no_show", said: "Taken off." });
+                        }}
+                      >
+                        Gone
+                      </Button>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </TableWrap>
-          );
-        }}
+              </div>
+            )}
+
+            {gone.length > 0 ? (
+              <section className="dk-section">
+                <h2 className="head">Earlier tonight</h2>
+                <div className="rows">
+                  {gone.map((entry) => (
+                    <div key={entry.id} className="row">
+                      <span className="grow stack stack--tight">
+                        <span className="small">{entry.name}</span>
+                        <span className="fine faint">{entry.party_size} people</span>
+                      </span>
+                      <State tone={entry.status === "seated" ? "good" : "neutral"}>
+                        {entry.status === "seated" ? "Seated" : entry.status === "no_show" ? "Left" : entry.status}
+                      </State>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+          </>
+        )}
       </Loaded>
+
+      {element}
     </DeskPage>
   );
 }

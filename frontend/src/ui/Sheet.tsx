@@ -1,200 +1,300 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Button, IconButton } from "./Button";
+import { usePrefersReducedMotion } from "./motion";
 
 /**
- * One overlay for the whole product: a sheet on a phone, a dialog on a wider
- * screen. The difference is entirely in CSS.
+ * The bottom sheet.
  *
- * It traps focus, restores it on close, closes on Escape and on a press
- * outside, and stops the page behind from scrolling. Anything that needs a
- * decision from the visitor goes through here.
+ * Everything modal in this product is one of these. On a phone a centred dialog
+ * is a shape from a desktop: it arrives from nowhere, its close button is at the
+ * top where the thumb is not, and it cannot be dismissed the way every other
+ * layer on the device is dismissed.
+ *
+ * So this comes up from the bottom, its actions are at the bottom, and **you can
+ * throw it away with your thumb**. That last part is what makes it feel like
+ * part of the phone rather than part of a web page, and it is the single
+ * fiddliest piece of motion in the codebase, so it is worth explaining.
+ *
+ * ── The drag ───────────────────────────────────────────────────────────────
+ *
+ * While the finger is down the panel follows it one to one. Dragging *up* is
+ * resisted rather than blocked, on a curve, so the sheet feels attached to
+ * something instead of hitting a wall: this is the rubber band every native list
+ * has at the top of its scroll.
+ *
+ * On release the decision is velocity first, distance second. A short, fast
+ * flick dismisses; a long, slow drag that stops halfway springs back. Deciding
+ * on distance alone is what makes a sheet feel sticky, because a confident flick
+ * that only travelled 80px gets snapped back in your face.
+ *
+ * While the panel is being dragged its transition is switched off, or every
+ * pointer move would be fighting a 280ms ease and the sheet would lag behind the
+ * thumb.
  */
 
-interface SheetProps {
+/** Past this, let go and it goes. A quarter of the panel. */
+const DISMISS_FRACTION = 0.25;
+/** Or past this, in pixels per millisecond, however far it got. */
+const DISMISS_VELOCITY = 0.55;
+
+export interface SheetProps {
   open: boolean;
   onClose: () => void;
-  title: ReactNode;
-  description?: ReactNode;
+  title: string;
+  /** Hides the title visually but keeps it for screen readers, for a sheet whose
+      content is its own heading. */
+  hideTitle?: boolean;
   children: ReactNode;
+  /** Pinned to the bottom, outside the scrolling area, where the thumb is. */
   footer?: ReactNode;
-  /** Blocks dismissal while something irreversible is in flight. */
-  busy?: boolean;
+  /** Refuses the drag and the backdrop tap. For a sheet in the middle of taking
+      a payment, where dismissing loses something real. */
+  sticky?: boolean;
 }
 
-export function Sheet({ open, onClose, title, description, children, footer, busy }: SheetProps) {
-  const panel = useRef<HTMLDivElement>(null);
-  const restoreTo = useRef<HTMLElement | null>(null);
+export function Sheet({ open, onClose, title, hideTitle, children, footer, sticky }: SheetProps) {
+  const panel = useRef<HTMLDivElement | null>(null);
+  const titleId = useId();
+  const reduced = usePrefersReducedMotion();
 
-  /*
-   * The callbacks are held in refs, and the effect below depends on `open`
-   * alone. This is not a tidiness point, it is the whole reason typing works.
-   *
-   * Every caller writes `onClose={() => setDraft(null)}`, which is a new
-   * function on every render. With `onClose` in the dependency list, one
-   * keystroke in a field re-rendered the parent, changed the identity of
-   * `onClose`, and made React tear the effect down and set it up again. The
-   * teardown calls `restoreTo.current.focus()` and the setup calls
-   * `panel.current.focus()`, so focus was pulled out of the input and onto the
-   * panel between every single letter, which on a phone closes the keyboard.
-   * You could type one character per tap.
-   *
-   * Reading them from refs keeps the handler current without making the effect
-   * depend on their identity.
-   */
-  const onCloseRef = useRef(onClose);
-  const busyRef = useRef(busy);
+  /* Drag state lives in refs, not state: a pointermove that triggered a React
+     render would be a render per frame of the drag. Only the transform is
+     written, straight to the node. */
+  const dragging = useRef(false);
+  const startY = useRef(0);
+  const lastY = useRef(0);
+  const lastAt = useRef(0);
+  const velocity = useRef(0);
+  const offset = useRef(0);
+
+  const [shown, setShown] = useState(false);
+
+  /* Kept out of the DOM entirely while closed, but only after the leaving
+     animation has run, so the sheet does not vanish mid-slide. */
   useEffect(() => {
-    onCloseRef.current = onClose;
-    busyRef.current = busy;
-  });
+    if (open) {
+      setShown(true);
+      return;
+    }
+    if (reduced) {
+      setShown(false);
+      return;
+    }
+    const timer = setTimeout(() => setShown(false), 280);
+    return () => clearTimeout(timer);
+  }, [open, reduced]);
 
+  /* Escape, and the scroll lock. The lock records the scroll position and puts
+     it back, because `overflow: hidden` on the body otherwise sends the page to
+     the top the moment a sheet opens over something halfway down. */
   useEffect(() => {
     if (!open) return;
 
-    restoreTo.current = document.activeElement as HTMLElement | null;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    /* Focus the panel itself rather than the first control: on a form-heavy
-       sheet, focusing the first input pops the keyboard open on a phone before
-       the visitor has read the question. */
-    panel.current?.focus();
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !busyRef.current) {
-        event.stopPropagation();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab" || !panel.current) return;
-
-      const focusables = panel.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusables.length === 0) return;
-      const first = focusables[0]!;
-      const last = focusables[focusables.length - 1]!;
-      const active = document.activeElement;
-
-      if (event.shiftKey && (active === first || active === panel.current)) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && active === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown, true);
-      document.body.style.overflow = overflow;
-      restoreTo.current?.focus?.();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !sticky) onClose();
     };
+    document.addEventListener("keydown", onKey);
+
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const previous = { position: body.style.position, top: body.style.top, width: body.style.width };
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      body.style.position = previous.position;
+      body.style.top = previous.top;
+      body.style.width = previous.width;
+      window.scrollTo(0, scrollY);
+    };
+  }, [open, onClose, sticky]);
+
+  /* Focus moves into the sheet on open and back out on close. Without this a
+     keyboard or screen reader lands behind the panel, on the page it covers. */
+  useEffect(() => {
+    if (!open || !panel.current) return;
+    const returnTo = document.activeElement as HTMLElement | null;
+    const focusable = panel.current.querySelector<HTMLElement>(
+      "button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex='-1'])"
+    );
+    (focusable ?? panel.current).focus({ preventScroll: true });
+    return () => returnTo?.focus?.({ preventScroll: true });
   }, [open]);
 
-  if (!open) return null;
+  const applyOffset = useCallback((value: number) => {
+    offset.current = value;
+    const node = panel.current;
+    if (!node) return;
+    node.style.transform = value === 0 ? "" : `translate3d(0, ${value}px, 0)`;
+  }, []);
 
-  return createPortal(
-    <div
-      className="scrim"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !busy) onClose();
-      }}
-    >
+  const endDrag = useCallback(
+    (release: boolean) => {
+      const node = panel.current;
+      dragging.current = false;
+      if (node) node.dataset.dragging = "";
+
+      const height = node?.offsetHeight ?? 1;
+      const farEnough = offset.current > height * DISMISS_FRACTION;
+      const fastEnough = velocity.current > DISMISS_VELOCITY;
+
+      if (release && (farEnough || fastEnough)) {
+        applyOffset(0);
+        onClose();
+        return;
+      }
+      applyOffset(0);
+    },
+    [applyOffset, onClose]
+  );
+
+  const onPointerDown = (event: React.PointerEvent) => {
+    if (sticky) return;
+    /* Only a touch or a pen drags. A mouse has a scroll wheel and a close
+       button, and mouse-dragging a sheet is not a gesture anybody performs. */
+    if (event.pointerType === "mouse") return;
+    dragging.current = true;
+    startY.current = event.clientY;
+    lastY.current = event.clientY;
+    lastAt.current = event.timeStamp;
+    velocity.current = 0;
+    if (panel.current) panel.current.dataset.dragging = "true";
+    (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+  };
+
+  const onPointerMove = (event: React.PointerEvent) => {
+    if (!dragging.current) return;
+    const dy = event.clientY - startY.current;
+
+    const elapsed = event.timeStamp - lastAt.current;
+    if (elapsed > 0) {
+      /* Smoothed, so one jittery frame near the end of a drag cannot read as a
+         flick. Weighted towards the most recent sample, which is the one that
+         describes what the thumb is doing right now. */
+      const instant = (event.clientY - lastY.current) / elapsed;
+      velocity.current = velocity.current * 0.3 + instant * 0.7;
+    }
+    lastY.current = event.clientY;
+    lastAt.current = event.timeStamp;
+
+    if (dy >= 0) {
+      applyOffset(dy);
+      return;
+    }
+    /* Upward: resisted on a curve rather than stopped dead. The sheet gives a
+       little and refuses to give more, the way a native list does. */
+    applyOffset(-Math.sqrt(-dy) * 3);
+  };
+
+  if (!shown) return null;
+
+  return (
+    <div className="sheet" data-open={open ? "true" : undefined} role="presentation">
+      <div
+        className="sheet__scrim"
+        onClick={sticky ? undefined : onClose}
+        aria-hidden="true"
+      />
       <div
         ref={panel}
-        className="sheet"
+        className="sheet__panel"
         role="dialog"
         aria-modal="true"
-        aria-label={typeof title === "string" ? title : undefined}
+        aria-labelledby={titleId}
         tabIndex={-1}
+        onPointerMove={onPointerMove}
+        onPointerUp={() => endDrag(true)}
+        onPointerCancel={() => endDrag(false)}
       >
-        <div className="sheet__grip" aria-hidden="true" />
-        <div className="sheet__head">
-          <div className="stack stack--tight">
-            <h2 className="display display--md">{title}</h2>
-            {description ? <p className="fine muted">{description}</p> : null}
-          </div>
-          <IconButton name="close" label="Close" onClick={onClose} disabled={busy} />
+        <div className="sheet__grip" onPointerDown={onPointerDown}>
+          {/* The handle. Not a control: it is the affordance that says the panel
+              moves, and the whole header area is the drag target. */}
+          <span className="sheet__handle" aria-hidden="true" />
         </div>
-        <div className="sheet__body">{children}</div>
+
+        <div className="sheet__head" onPointerDown={onPointerDown}>
+          <h2 id={titleId} className={hideTitle ? "sr-only" : "title"}>
+            {title}
+          </h2>
+          {sticky ? null : <IconButton name="close" label="Close" onClick={onClose} size="sm" className="push" />}
+        </div>
+
+        <div className="sheet__body" data-scroller="">
+          {children}
+        </div>
+
         {footer ? <div className="sheet__foot">{footer}</div> : null}
       </div>
-    </div>,
-    document.body
+    </div>
   );
 }
 
-interface ConfirmState {
+/* ── Confirming ─────────────────────────────────────────────────────────────*/
+
+interface ConfirmRequest {
   title: string;
-  body: ReactNode;
+  body?: string;
+  /** The word on the button that does the thing. Never "OK": a button should
+      say what it does, so somebody skimming can tell the difference between
+      "Cancel this booking" and the button that closes the sheet. */
   confirmLabel: string;
-  destructive: boolean;
-  resolve: (ok: boolean) => void;
+  /** The word that backs out. Defaults to "Keep it", which suits the cancel-a-
+      booking case this is mostly used for. */
+  cancelLabel?: string;
+  tone?: "primary" | "danger";
+  resolve: (answer: boolean) => void;
 }
 
 /**
- * Confirmation as a promise.
+ * A confirmation, as a promise.
  *
- *   if (!(await confirm({ title: "Cancel this booking?", ... }))) return;
+ *     const confirm = useConfirm();
+ *     if (!(await confirm({ title: "Cancel this table?", confirmLabel: "Cancel it" }))) return;
  *
- * Every destructive action in the product goes through this, so none of them
- * can happen on a single mis-tap.
+ * Returned as a hook plus an element the caller renders, rather than as a global
+ * provider, because a confirmation belongs to the screen that asked for it and
+ * should disappear with it.
  */
 export function useConfirm() {
-  const [state, setState] = useState<ConfirmState | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [request, setRequest] = useState<ConfirmRequest | null>(null);
 
   const confirm = useCallback(
-    (options: { title: string; body: ReactNode; confirmLabel?: string; destructive?: boolean }) =>
+    (options: Omit<ConfirmRequest, "resolve">) =>
       new Promise<boolean>((resolve) => {
-        setState({
-          title: options.title,
-          body: options.body,
-          confirmLabel: options.confirmLabel ?? "Confirm",
-          destructive: options.destructive ?? true,
-          resolve,
-        });
+        setRequest({ ...options, resolve });
       }),
     []
   );
 
-  const settle = (ok: boolean) => {
-    state?.resolve(ok);
-    setState(null);
-    setBusy(false);
-  };
+  const answer = useCallback(
+    (value: boolean) => {
+      setRequest((current) => {
+        current?.resolve(value);
+        return null;
+      });
+    },
+    []
+  );
 
-  const element = state ? (
-    <Sheet
-      open
-      busy={busy}
-      onClose={() => settle(false)}
-      title={state.title}
-      footer={
-        <>
-          <Button tone="ghost" onClick={() => settle(false)}>
-            Keep it
+  const element = request ? (
+    <Sheet open onClose={() => answer(false)} title={request.title}>
+      <div className="stack">
+        {request.body ? <p className="lead">{request.body}</p> : null}
+        <div className="bar bar--tight">
+          {/* The safe answer is on the left, where a thumb reaching across is
+              least likely to land. */}
+          <Button tone="quiet" block onClick={() => answer(false)}>
+            {request.cancelLabel ?? "Keep it"}
           </Button>
-          <Button
-            tone={state.destructive ? "danger" : "primary"}
-            busy={busy}
-            onClick={() => {
-              setBusy(true);
-              settle(true);
-            }}
-          >
-            {state.confirmLabel}
+          <Button tone={request.tone ?? "danger"} block onClick={() => answer(true)}>
+            {request.confirmLabel}
           </Button>
-        </>
-      }
-    >
-      <p className="muted">{state.body}</p>
+        </div>
+      </div>
     </Sheet>
   ) : null;
 
-  return { confirm, confirmElement: element };
+  return { confirm, element };
 }

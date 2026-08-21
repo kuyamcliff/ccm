@@ -1,5 +1,5 @@
 import { http } from "../http";
-import type { AdminScope, AuditEntry, DeskAnalytics, DeskBooking, DeskOrder, DeskPayment, DeskReceipt, DeskStats, DeskTable, DeskUser, DiningTable, EventEnquiry, EventType, FixtureKind, FloorFixture, GalleryPhoto, GiftCard, LegalPage, LoyaltyLedgerEntry, MenuItem, Offer, PromoCode, Review, ScopeInfo, SiteSettings, StaffAccess, TranslationReport, VerifiedBooking, VerifiedOrder, VerifyResult, WaitlistEntry } from "./types";
+import type { AdminScope, AuditEntry, DevError, DevHealth, DeskNotification, User, DeskAnalytics, DeskBooking, DeskOrder, DeskPayment, DeskReceipt, DeskStats, DeskTable, DeskUser, DiningTable, EventEnquiry, EventType, FixtureKind, FloorFixture, GalleryPhoto, GiftCard, LegalPage, LoyaltyLedgerEntry, MenuItem, Offer, PromoCode, Review, ScopeInfo, SiteSettings, StaffAccess, TranslationReport, VerifiedBooking, VerifiedOrder, VerifyResult, WaitlistEntry } from "./types";
 
 export const deskApi = {
   stats: () => http.get<DeskStats>("/api/admin/stats"),
@@ -11,7 +11,13 @@ export const deskApi = {
   tables: { list: () => http.get<{ tables: DeskTable[] }>("/api/admin/tables").then((r) => r.tables), create: (input: { label: string; capacity: number; zone: string; pos_x: number; pos_y: number }) => http.post<{ table: DiningTable }>("/api/admin/tables", input).then((r) => r.table), update: (id: number, input: Partial<{ label: string; capacity: number; zone: string; pos_x: number; pos_y: number; active: boolean }>) => http.patch<{ ok: true }>(`/api/admin/tables/${id}`, input), remove: (id: number) => http.del<{ ok: true }>(`/api/admin/tables/${id}`) },
   fixtures: { list: () => http.get<{ fixtures: FloorFixture[]; kinds: FixtureKind[] }>("/api/admin/fixtures"), create: (input: { kind: FixtureKind; label?: string; pos_x?: number; pos_y?: number; width?: number; height?: number }) => http.post<{ id: number }>("/api/admin/fixtures", input), update: (id: number, input: Partial<{ kind: FixtureKind; label: string; pos_x: number; pos_y: number; width: number; height: number }>) => http.patch<{ ok: true }>(`/api/admin/fixtures/${id}`, input), remove: (id: number) => http.del<{ ok: true }>(`/api/admin/fixtures/${id}`) },
   menu: { list: () => http.get<{ menu: MenuItem[] }>("/api/admin/menu").then((r) => r.menu), create: (input: Partial<MenuItem>) => http.post<{ item: MenuItem }>("/api/admin/menu", input).then((r) => r.item), update: (id: number, input: Partial<MenuItem>) => http.patch<{ ok: true }>(`/api/admin/menu/${id}`, input), remove: (id: number) => http.del<{ ok: true }>(`/api/admin/menu/${id}`) },
-  orders: { list: () => http.get<{ orders: DeskOrder[] }>("/api/takeaway").then((r) => r.orders), setStatus: (id: number, status: string) => http.patch<{ ok: true }>(`/api/takeaway/${id}/status`, { status }) },
+  orders: {
+    list: () => http.get<{ orders: DeskOrder[] }>("/api/takeaway").then((r) => r.orders),
+    setStatus: (id: number, status: string) => http.patch<{ ok: true }>(`/api/takeaway/${id}/status`, { status }),
+    /** Settles a cash order at the counter. Idempotent: `already` says whether
+        it was paid before this call. */
+    markPaid: (id: number) => http.post<{ ok: true; already: boolean }>(`/api/takeaway/${id}/mark-paid`),
+  },
   door: { check: (input: { token?: string; code?: string }) => http.post<VerifyResult>("/api/verify", input), admit: (id: number) => http.post<{ ok: true; booking: VerifiedBooking }>(`/api/verify/${id}/check-in`).then((r) => r.booking), undoAdmit: (id: number) => http.post<{ ok: true }>(`/api/verify/${id}/undo-check-in`), handOver: (id: number) => http.post<{ ok: true; order: VerifiedOrder }>(`/api/verify/order/${id}/collect`).then((r) => r.order), undoHandOver: (id: number) => http.post<{ ok: true }>(`/api/verify/order/${id}/undo-collect`) },
   users: { list: (filters: { q?: string; limit?: number; offset?: number } = {}) => http.get<{ users: DeskUser[]; totals: { total: number; staff: number; banned: number }; matching: number; more: boolean }>(`/api/admin/users${http.query(filters)}`), ban: (id: number) => http.patch<{ ok: true }>(`/api/admin/users/${id}/ban`), unban: (id: number) => http.patch<{ ok: true }>(`/api/admin/users/${id}/unban`), setRole: (id: number, role: "user" | "admin") => http.patch<{ ok: true }>(`/api/admin/users/${id}/role`, { role }), remove: (id: number) => http.del<{ ok: true }>(`/api/admin/users/${id}`), adjustPoints: (userId: number, amount: number, reason: string) => http.post<{ ok: true; points_balance: number }>("/api/loyalty/adjust", { user_id: userId, amount, reason }) },
   money: { payments: () => http.get<{ payments: DeskPayment[] }>("/api/admin/payments").then((r) => r.payments), setPaymentStatus: (id: number, status: "failed" | "completed") => http.patch<{ ok: true }>(`/api/admin/payments/${id}`, { status }), receipts: () => http.get<{ receipts: DeskReceipt[] }>("/api/admin/receipts").then((r) => r.receipts) },
@@ -24,5 +30,29 @@ export const deskApi = {
   giftCards: { list: () => http.get<{ cards: GiftCard[] }>("/api/gift-cards").then((r) => r.cards), issue: (valueFcfa: number) => http.post<{ code: string; value_fcfa: number }>("/api/gift-cards", { value_fcfa: valueFcfa }), toggle: (id: number) => http.patch<{ ok: true; is_active: boolean }>(`/api/gift-cards/${id}`), deactivate: (id: number) => http.del<{ ok: true }>(`/api/gift-cards/${id}`), ledger: (id: number) => http.get<{ entries: LoyaltyLedgerEntry[] }>(`/api/gift-cards/${id}/ledger`).then((r) => r.entries) },
   settings: { update: (updates: Partial<SiteSettings>) => http.patch<{ ok: true }>("/api/site-settings", updates), sendTestEmail: (to?: string) => http.post<{ ok: true; to: string }>("/api/recovery/admin/test-email", { to }) },
   legal: { list: () => http.get<{ pages: LegalPage[] }>("/api/legal").then((r) => r.pages), save: (slug: "terms" | "privacy", input: { title: string; title_fr: string; body: string; body_fr: string }) => http.put<{ ok: true; page: LegalPage }>(`/api/legal/${slug}`, input) },
+  /**
+   * The developer tier.
+   *
+   * Every one of these 403s for anybody who is not a developer, so the console
+   * hiding the links is convenience and this is not a second gate.
+   */
+  dev: {
+    health: () => http.get<DevHealth>("/api/dev/health"),
+    errors: (limit = 50) => http.get<{ errors: DevError[]; volatile: boolean }>(`/api/dev/errors?limit=${limit}`),
+    clearErrors: () => http.del<{ ok: true }>("/api/dev/errors"),
+    flags: () => http.get<{ raw: string; parsed: unknown; valid: boolean }>("/api/dev/flags"),
+    saveFlags: (raw: string) => http.put<{ ok: true }>("/api/dev/flags", { raw }),
+    database: () => http.get<{ tables: { table: string; rows: number }[]; database_size: string }>("/api/dev/database"),
+    /** The server only ever hands back a guest here: staff accounts are refused
+        with a 403, so the role in this response is always "user". */
+    impersonate: (userId: number) =>
+      http.post<{ ok: true; user: User }>("/api/dev/impersonate", { user_id: userId }),
+  },
+
+  /** What the reminder sweep has actually sent. */
+  notifications: () =>
+    http
+      .get<{ notifications: DeskNotification[]; delivery_enabled: boolean }>("/api/admin/notifications"),
+
   access: { list: () => http.get<{ scopes: ScopeInfo[]; staff: StaffAccess[] }>("/api/access"), setScope: (id: number, scope: AdminScope, granted: boolean) => http.patch<{ ok: true }>(`/api/access/${id}/scope`, { scope, granted }), setRole: (id: number, role: "admin" | "super_admin") => http.patch<{ ok: true }>(`/api/access/${id}/role`, { role }) },
 };

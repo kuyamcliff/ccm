@@ -1,145 +1,189 @@
 import { useMemo } from "react";
-import type { DiningTable, FixtureKind, FloorFixture } from "~/lib/api";
-import { Icon } from "~/ui/Icon";
-import type { IconName } from "~/ui/Icon";
+import type { DiningTable, FloorFixture } from "~/lib/api";
+import { usePress } from "~/ui/press";
 
 /**
- * The room, drawn to fit the screen it is on.
+ * The room, drawn.
  *
- * The old plan held a minimum width and scrolled sideways, which meant that on
- * the phone almost every guest books from, half the room was off the edge, and
- * a table nobody scrolled to was a table nobody considered. This version never
- * scrolls. It takes the width it is given and derives its height from the
- * shape of the room, so every table is on screen at once.
+ * Guests pick a table off the actual shape of the place rather than out of a
+ * dropdown of numbers, because "the one by the grill" is how people think about
+ * where they want to sit and "Table 7" is not.
  *
- * Two things make that work at 350px.
+ * ── The one hard rule ──────────────────────────────────────────────────────
  *
- * The room's proportions are clamped rather than reproduced exactly. A long
- * thin room drawn true to scale on a phone is ninety pixels tall, which is not
- * a plan, it is a stripe. Held between 0.85 and 1.6 the arrangement stays
- * honest, and the arrangement is all anybody reads a plan for: which corner,
- * near what, next to whom.
+ * **It fits the screen and never scrolls sideways.** A floor plan you have to
+ * pan around on a phone is worse than a list. The whole room is scaled into the
+ * viewBox, so the plan gets smaller on a small screen rather than getting cut
+ * off, and the labels stay legible because they are drawn at a fixed size
+ * outside the scaling.
  *
- * And the plan is not the only way to pick. It answers "where is it", and the
- * list underneath it answers "which one", with a full width row per table that
- * a thumb cannot miss. Anyone who cannot use a picture at all loses nothing.
+ * ── Why SVG and not divs ───────────────────────────────────────────────────
+ *
+ * The coordinates in the database are arbitrary units from the console's floor
+ * editor. SVG's viewBox does the scaling arithmetic for free and keeps the
+ * proportions of the room correct at any width, which absolutely positioned divs
+ * would need a resize observer and a lot of maths to match.
  */
 
-/** Breathing room around the outermost table, in the server's coordinates. */
-const PADDING = 60;
+/** Padding around the extremes of the room, in the room's own units. */
+const MARGIN = 14;
 
-/** How each fixture is drawn. Icon and word together, never colour alone. */
-const FIXTURES: Record<FixtureKind, { icon: IconName; word: string }> = {
-  grill: { icon: "flame", word: "Grill" },
-  tv: { icon: "chart", word: "Screen" },
-  bar: { icon: "wallet", word: "Bar" },
-  door: { icon: "logout", word: "Way in" },
-  toilets: { icon: "user", word: "Toilets" },
-  kitchen: { icon: "basket", word: "Kitchen" },
-  speaker: { icon: "sparkle", word: "Speaker" },
-  plant: { icon: "flame", word: "Plant" },
-};
+export type TableState = "free" | "taken" | "too-small" | "chosen";
 
-export type TableState = "free" | "picked" | "taken" | "small";
-
-/**
- * One rule for the state of a table, used by the plan and by the list beneath
- * it so the two can never disagree about what is free.
- *
- * "Blocked" used to be one look for two different reasons, occupied or simply
- * too small for this party, which left a guest unable to tell whether a greyed
- * out table might free up or was never an option.
- */
-export function tableState(table: DiningTable, selectedId: number | null, partySize: number): TableState {
-  if (table.id === selectedId) return "picked";
+export function tableState(table: DiningTable, party: number, chosenId: number | null): TableState {
+  if (table.id === chosenId) return "chosen";
   if (table.available === false) return "taken";
-  if (table.capacity < partySize) return "small";
+  if (table.capacity < party) return "too-small";
   return "free";
 }
 
-interface Props {
+export function FloorPlan({
+  tables,
+  fixtures,
+  party,
+  chosenId,
+  onChoose,
+  labels,
+}: {
   tables: DiningTable[];
-  fixtures?: FloorFixture[];
-  selectedId: number | null;
-  onSelect: (id: number | null) => void;
-  partySize: number;
-}
+  fixtures: FloorFixture[];
+  party: number;
+  chosenId: number | null;
+  onChoose: (table: DiningTable) => void;
+  labels: { free: string; taken: string; tooSmall: string; seats: (n: number) => string };
+}) {
+  /* The bounding box of everything in the room, so the plan is framed to its
+     contents rather than to whatever coordinate space the editor happened to
+     use. A room drawn in the top left corner of a 1000-unit canvas would
+     otherwise render as a tiny cluster with three quarters of the plan empty. */
+  const box = useMemo(() => {
+    const xs: number[] = [];
+    const ys: number[] = [];
 
-export function FloorPlan({ tables, fixtures = [], selectedId, onSelect, partySize }: Props) {
-  /* The extent covers the fixtures too, or a grill placed past the last table
-     would sit outside the picture and be clipped away. */
-  const bounds = useMemo(() => {
-    const xs = [...tables.map((t) => t.pos_x), ...fixtures.map((f) => f.pos_x)];
-    const ys = [...tables.map((t) => t.pos_y), ...fixtures.map((f) => f.pos_y)];
-    if (xs.length === 0) return { minX: 0, minY: 0, width: 640, height: 460, ratio: 1.4 };
+    for (const table of tables) {
+      xs.push(table.pos_x - 6, table.pos_x + 6);
+      ys.push(table.pos_y - 6, table.pos_y + 6);
+    }
+    for (const fixture of fixtures) {
+      xs.push(fixture.pos_x, fixture.pos_x + fixture.width);
+      ys.push(fixture.pos_y, fixture.pos_y + fixture.height);
+    }
+    if (xs.length === 0) return { x: 0, y: 0, w: 100, h: 100 };
 
-    const minX = Math.min(...xs) - PADDING;
-    const minY = Math.min(...ys) - PADDING;
-    const width = Math.max(...xs) - minX + PADDING;
-    const height = Math.max(...ys) - minY + PADDING;
-
-    return { minX, minY, width, height, ratio: Math.min(1.6, Math.max(0.85, width / height)) };
+    const minX = Math.min(...xs) - MARGIN;
+    const minY = Math.min(...ys) - MARGIN;
+    return {
+      x: minX,
+      y: minY,
+      w: Math.max(1, Math.max(...xs) + MARGIN - minX),
+      h: Math.max(1, Math.max(...ys) + MARGIN - minY),
+    };
   }, [tables, fixtures]);
 
-  const pct = (value: number, min: number, span: number) => `${((value - min) / span) * 100}%`;
+  return (
+    <div className="plan">
+      <svg
+        className="plan__svg"
+        viewBox={`${box.x} ${box.y} ${box.w} ${box.h}`}
+        role="group"
+        aria-label="Floor plan"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        {/* Fixtures first, so a table can never be drawn underneath the grill. */}
+        {fixtures.map((fixture) => (
+          <g key={`f-${fixture.id}`} className={`plan__fixture plan__fixture--${fixture.kind}`}>
+            <rect
+              x={fixture.pos_x}
+              y={fixture.pos_y}
+              width={fixture.width}
+              height={fixture.height}
+              rx={2}
+            />
+            {fixture.label ? (
+              <text
+                x={fixture.pos_x + fixture.width / 2}
+                y={fixture.pos_y + fixture.height / 2}
+                className="plan__fixturelabel"
+                textAnchor="middle"
+                dominantBaseline="central"
+              >
+                {fixture.label}
+              </text>
+            ) : null}
+          </g>
+        ))}
+
+        {tables.map((table) => (
+          <TableMark
+            key={table.id}
+            table={table}
+            state={tableState(table, party, chosenId)}
+            onChoose={() => onChoose(table)}
+            labels={labels}
+          />
+        ))}
+      </svg>
+
+      <ul className="plan__key fine">
+        <li>
+          <span className="plan__swatch" data-state="free" /> {labels.free}
+        </li>
+        <li>
+          <span className="plan__swatch" data-state="chosen" /> Yours
+        </li>
+        <li>
+          <span className="plan__swatch" data-state="taken" /> {labels.taken}
+        </li>
+      </ul>
+    </div>
+  );
+}
+
+function TableMark({
+  table,
+  state,
+  onChoose,
+  labels,
+}: {
+  table: DiningTable;
+  state: TableState;
+  onChoose: () => void;
+  labels: { free: string; taken: string; tooSmall: string; seats: (n: number) => string };
+}) {
+  const disabled = state === "taken" || state === "too-small";
+  const press = usePress({ disabled });
+
+  const why = state === "taken" ? labels.taken : state === "too-small" ? labels.tooSmall : labels.free;
 
   return (
-    <div className="plan-fit" style={{ aspectRatio: String(bounds.ratio) }}>
-      {/* Underneath the tables and never in the tab order. This is the room,
-          not something to choose. */}
-      {fixtures.map((fixture) => {
-        const look = FIXTURES[fixture.kind] ?? FIXTURES.plant;
-        return (
-          <div
-            key={`f${fixture.id}`}
-            className="plan__fixture"
-            data-kind={fixture.kind}
-            aria-hidden="true"
-            style={{
-              left: pct(fixture.pos_x, bounds.minX, bounds.width),
-              top: pct(fixture.pos_y, bounds.minY, bounds.height),
-              width: `${(fixture.width / bounds.width) * 100}%`,
-              height: `${(fixture.height / bounds.height) * 100}%`,
-            }}
-          >
-            <Icon name={look.icon} size={14} />
-            <span className="plan__fixture-word">{fixture.label || look.word}</span>
-          </div>
-        );
-      })}
-
-      {tables.map((table) => {
-        const state = tableState(table, selectedId, partySize);
-        const pickable = state === "free" || state === "picked";
-
-        return (
-          <button
-            key={table.id}
-            type="button"
-            className="plan__table"
-            data-state={state}
-            data-zone={table.zone}
-            disabled={!pickable}
-            aria-pressed={state === "picked"}
-            aria-label={`Table ${table.label}, seats ${table.capacity}, ${
-              state === "taken" ? "already taken" : state === "small" ? "too small for your party" : "free"
-            }`}
-            style={{
-              left: pct(table.pos_x, bounds.minX, bounds.width),
-              top: pct(table.pos_y, bounds.minY, bounds.height),
-              /* Bigger tables are drawn bigger so the plan reads as a room. The
-                 floor under which one may not shrink is set in CSS, in rems,
-                 where a touch target belongs. */
-              width: `${Math.min(17, 9 + table.capacity * 1.1)}%`,
-            }}
-            onClick={() => onSelect(state === "picked" ? null : table.id)}
-          >
-            {state === "taken" ? <Icon name="lock" size={11} className="plan__mark" /> : null}
-            <span className="plan__label">{table.label}</span>
-            <span className="plan__seats mono">{table.capacity}</span>
-          </button>
-        );
-      })}
-    </div>
+    <g
+      className="plan__table"
+      data-state={state}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled || undefined}
+      aria-pressed={state === "chosen"}
+      aria-label={`Table ${table.label}, ${labels.seats(table.capacity)}, ${why}`}
+      onClick={disabled ? undefined : onChoose}
+      onKeyDown={(event) => {
+        if (disabled) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onChoose();
+        }
+      }}
+      {...press.pressProps}
+    >
+      {/* A round table for four or fewer, a rectangle above that, which is what
+          the room actually looks like and makes the plan readable at a glance. */}
+      {table.capacity <= 4 ? (
+        <circle cx={table.pos_x} cy={table.pos_y} r={6} />
+      ) : (
+        <rect x={table.pos_x - 8} y={table.pos_y - 5} width={16} height={10} rx={2} />
+      )}
+      <text x={table.pos_x} y={table.pos_y} textAnchor="middle" dominantBaseline="central" className="plan__label">
+        {table.label}
+      </text>
+    </g>
   );
 }

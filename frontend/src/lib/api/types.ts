@@ -1,4 +1,9 @@
-export type Role = "user" | "admin" | "super_admin" | "owner";
+/**
+ * Ranked, low to high. `developer` sits above the owner because it exists to
+ * look at the machinery the owner's business runs on: health, errors, feature
+ * flags, the database. Mirrors `UserRole` in `backend/src/auth.ts`.
+ */
+export type Role = "user" | "admin" | "super_admin" | "owner" | "developer";
 export interface User { id: number; name: string; email: string; role: Role; }
 export type AdminScope = "door" | "bookings" | "takeaway" | "queue" | "floor" | "menu" | "offers" | "gallery" | "reviews" | "events" | "payments" | "promos" | "giftcards" | "messages" | "guests" | "insights" | "settings" | "legal";
 export type AdminAction = "view" | "create" | "edit" | "delete" | "cancel" | "refund" | "export" | "manage";
@@ -71,4 +76,50 @@ export interface TranslationReport {
   total: number;
   done: number;
   outstanding: TranslationEntry[];
+}
+
+/* ── The developer tier ─────────────────────────────────────────────────────*/
+
+export interface DevHealth {
+  ok: boolean;
+  environment: "production" | "development";
+  database: "up" | "down";
+  database_latency_ms: number | null;
+  uptime_seconds: number;
+  node: string;
+  memory: { rss_mb: number; heap_used_mb: number; heap_total_mb: number };
+  /** Which optional integrations have credentials in this environment. This is
+      almost always the answer to "why did nobody get a text". */
+  integrations: {
+    mtn_momo: boolean;
+    orange_money: boolean;
+    messaging: boolean;
+    reminders: boolean;
+  };
+  frontend_url: string;
+  errors_held: number;
+  checked_in_ms: number;
+}
+
+export interface DevError {
+  reference: string;
+  at: string;
+  method: string;
+  path: string;
+  status: number;
+  message: string;
+  stack: string | null;
+}
+
+/** One outgoing WhatsApp or SMS, as the console sees it. */
+export interface DeskNotification {
+  id: number;
+  channel: string;
+  recipient: string;
+  template: string;
+  body: string;
+  status: string;
+  error: string | null;
+  sent_at: string | null;
+  created_at?: string;
 }

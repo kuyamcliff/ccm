@@ -79,6 +79,24 @@ export const MOMO_CURRENCY = optional(
  * safe direction to fail in: a payment settling late is recoverable, a forged
  * "this is paid" is not.
  */
+/**
+ * Guards the reminder sweep at POST /api/cron/reminders.
+ *
+ * Empty means the route refuses every request, which is the safe direction to
+ * fail in: an unguarded endpoint that sends messages to guests is one anybody
+ * on the internet can use to text every customer this restaurant has.
+ */
+export const CRON_SECRET = optional("CRON_SECRET");
+
+/**
+ * The account promoted to `developer` at boot.
+ *
+ * Deliberately environment-only: the developer role can read the database and
+ * impersonate a guest, so a console that could grant it would make every other
+ * check in this codebase decoration. See lib/bootstrapDeveloper.ts.
+ */
+export const DEVELOPER_EMAIL = optional("DEVELOPER_EMAIL");
+
 export const MOMO_WEBHOOK_SECRET = optional("MOMO_WEBHOOK_SECRET");
 
 /* ── Orange Money ──────────────────────────────────────────────────────────

@@ -9,6 +9,8 @@ import { MediaError, storeOrValidateUrl } from "../lib/media.js";
 import { awardPoints } from "./loyalty.js";
 import { failPayment } from "./payments.js";
 import { messagingAvailable } from "../lib/notify.js";
+import { nextOpening } from "../lib/soldOut.js";
+import { clearExpiredSoldOut } from "../lib/menuSweep.js";
 import { FIXTURE_KINDS, FLOOR_CANVAS, clampFixture, isFixtureKind, readFixtures } from "../lib/fixtures.js";
 
 export const adminRouter = Router();
@@ -382,6 +384,10 @@ adminRouter.delete("/users/:id", async (req, res) => {
 // ── Menu ─────────────────────────────────────────────────
 
 adminRouter.get("/menu", async (_req, res) => {
+  /* So the console never shows a dish as sold out when the customer menu has
+     already put it back. */
+  await clearExpiredSoldOut();
+
   const items = await db.prepare("SELECT * FROM menu_items ORDER BY category, position, id").all();
   res.json({ menu: items });
 });
@@ -433,7 +439,14 @@ adminRouter.patch("/menu/:id", async (req, res) => {
   if (req.body?.price_label !== undefined) fields.price_label = req.body.price_label ? String(req.body.price_label).slice(0, 40) : null;
   if (req.body?.position !== undefined) fields.position = Number(req.body.position) || 0;
   if (req.body?.is_active !== undefined) fields.is_active = req.body.is_active ? 1 : 0;
-  if (req.body?.sold_out !== undefined) fields.sold_out = req.body.sold_out ? 1 : 0;
+  if (req.body?.sold_out !== undefined) {
+    const soldOut = req.body.sold_out ? 1 : 0;
+    fields.sold_out = soldOut;
+    /* Selling out is for tonight, not for good. Recording when it ends is what
+       lets the dish come back by itself, so nobody has to remember. Clearing it
+       by hand clears the expiry too. */
+    fields.sold_out_until = soldOut ? nextOpening() : null;
+  }
 
   if (req.body?.price_fcfa !== undefined) {
     const price = req.body.price_fcfa ? Number(req.body.price_fcfa) : null;

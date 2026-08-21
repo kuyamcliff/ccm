@@ -3,18 +3,51 @@ import type { ReactNode } from "react";
 import { api } from "~/lib/api";
 import type { AdminScope, LoginOutcome, User } from "~/lib/api";
 import { setUnauthorizedHandler } from "~/lib/http";
-import { useToast } from "~/state/toast";
+import { readBoot, clearBoot } from "~/lib/boot";
+import { resetCache } from "~/lib/store";
+import { useToast } from "./toast";
+
+/**
+ * Who is using the site.
+ *
+ * ── What changed in v5 ─────────────────────────────────────────────────────
+ *
+ * `ready` used to start false and stay false until `/api/auth/me` came back,
+ * and the whole app refused to render until then. On a cold connection that is
+ * a black screen for a second or more, for a page that in most cases was going
+ * to say "signed out" anyway.
+ *
+ * Now the answer usually arrives with the boot payload, which the browser
+ * already has in localStorage from the last visit. A returning customer is
+ * rendered as themselves on the first frame, and the fresh answer confirms it a
+ * moment later. Only a genuinely first-ever visit waits, and even then it waits
+ * on one request rather than three.
+ *
+ * The stale answer is never trusted for anything that matters. It decides what
+ * to *draw* and nothing else. Every route the console exposes is enforced on the
+ * server, so the worst case for a cached "you are staff" that is no longer true
+ * is a menu item that 403s when pressed.
+ *
+ * ── Roles ──────────────────────────────────────────────────────────────────
+ *
+ * user < admin < super_admin < owner < developer
+ *
+ * `developer` is new. It sits above owner because it exists to look at the thing
+ * the owner runs: health, errors, flags, the database. Hiding is not access
+ * control here either; `backend/src/routes/dev.ts` is what actually refuses.
+ */
 
 /**
  * Broadcasts a sign-in or sign-out to every other tab on this browser.
  *
- * The cookie is shared between tabs the instant it changes, but each tab's
- * React state is not: a tab left open on the account page, or on a page that
- * only fetched its data once, would otherwise keep showing that account until
- * something made it ask again. `storage` only fires in *other* tabs than the
- * one that wrote the key, which is exactly the tabs that need telling.
+ * The cookie is shared between tabs the instant it changes, but each tab's React
+ * state is not: a tab left open on the account page would keep showing that
+ * account until something made it ask again. `storage` fires only in *other*
+ * tabs than the one that wrote the key, which is exactly the tabs that need
+ * telling.
  */
 const SESSION_EVENT_KEY = "ccm.session.event";
+
 function announceSessionChange() {
   try {
     localStorage.setItem(SESSION_EVENT_KEY, String(Date.now()));
@@ -25,105 +58,99 @@ function announceSessionChange() {
 
 interface SessionValue {
   user: User | null;
-  /** False until the first "who am I" has come back, so guards do not flash. */
+  /** False only until the first real answer has come back. Usually true on the
+      first frame, because the boot payload carries it. */
   ready: boolean;
   isStaff: boolean;
-  /** Super admin or the owner — everything that keeps working the way it
-      always has for "the owner" in the console's older, two-tier sense. */
+  /** Super admin, owner or developer: everything the console's older two-tier
+      sense of "the owner" gated on. */
   isOwner: boolean;
-  /** The one account above everyone else. Gates the Access page itself. */
+  /** The one account above the rest of the staff. Gates the Access page. */
   isTopOwner: boolean;
-  /** Whether the signed-in admin can still reach one page. Always true for
-      staff above plain admin. Defaults true while still loading, the same
-      "hiding is not access control" the server already assumes — the route
-      behind it is what actually refuses a locked-out admin. */
+  /** The tier above that, which exists to look at the machinery. */
+  isDeveloper: boolean;
+  /**
+   * Whether the signed-in admin can still reach one page.
+   *
+   * Always true for anyone above plain admin, and true by default while the
+   * permission map is still loading. That is deliberate and matches what the
+   * server already assumes: hiding is not access control, and the route behind
+   * the link is what refuses a restricted admin.
+   */
   can: (scope: AdminScope) => boolean;
   signIn: (email: string, password: string) => Promise<LoginOutcome>;
   completeTwoFactor: (challenge: string, code: string) => Promise<User>;
   register: (name: string, email: string, password: string) => Promise<User>;
   signOut: () => Promise<void>;
-  /** Re-reads the session — after a name change, or a role change by an owner. */
+  /** Re-reads the session, after a name change or a role change by an owner. */
   refresh: () => Promise<void>;
+  /** Called by the boot fetch once the authoritative answer lands. */
+  settle: (user: User | null) => void;
 }
 
 const SessionContext = createContext<SessionValue | null>(null);
 
+const STAFF = new Set(["admin", "super_admin", "owner", "developer"]);
+const ABOVE_ADMIN = new Set(["super_admin", "owner", "developer"]);
+
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [ready, setReady] = useState(false);
+  /* Seeded straight from the cached boot payload, so a returning customer is
+     drawn as themselves on the very first frame. */
+  const cached = readBoot();
+  const [user, setUser] = useState<User | null>(cached?.user ?? null);
+  const [ready, setReady] = useState(cached !== null);
   const [scopes, setScopes] = useState<Partial<Record<AdminScope, boolean>> | null>(null);
   const toast = useToast();
 
-  /* Read from the 401 handler and the storage listener below, both of which
-     are registered once and must always see the current user, not the one
-     from whichever render happened to set them up. */
+  /* Read by the 401 handler and the storage listener, both registered once and
+     both of which must see the current user rather than the one from whichever
+     render happened to set them up. */
   const userRef = useRef(user);
   userRef.current = user;
 
-  /* A 401 on any request, from any page, means this tab's cookie no longer
-     works: it expired, "sign out everywhere" fired from another device, or
-     an admin banned the account. If this tab still thinks somebody is signed
-     in, that belief is now wrong, so drop it at once rather than leaving
-     whatever that account's data was on screen. A guest's normal 401s (the
-     first "who am I", a wrong password on the sign-in form) never reach this
-     branch, because userRef is still null when they happen. */
+  /*
+   * A 401 on any request, from any page.
+   *
+   * It means this tab's cookie no longer works: it expired, "sign out
+   * everywhere" fired from another device, or an admin banned the account. If
+   * this tab still believes somebody is signed in, that belief is now wrong, so
+   * drop it at once rather than leaving that account's data on screen.
+   *
+   * A guest's ordinary 401s (a first "who am I", a wrong password on the sign-in
+   * form) never reach this branch, because `userRef` is still null when they
+   * happen.
+   */
   useEffect(() => {
     setUnauthorizedHandler(() => {
-      if (userRef.current !== null) {
-        setUser(null);
-        /* Says what happened and what to do about it. "You have been signed
-           out" reads as something the site chose to do to them; a session
-           that ran out is a fact with an obvious next step, and the guard
-           that redirects carries the page they were on so signing in again
-           returns them to it rather than to the home page. */
-        toast.say("Your session has expired. Sign in again to pick up where you were.");
-      }
+      if (userRef.current === null) return;
+      setUser(null);
+      clearBoot();
+      resetCache();
+      /* Says what happened and what to do about it. "You have been signed out"
+         reads as something the site chose to do to them; a session that ran out
+         is a fact with an obvious next step, and the guard that redirects
+         carries the page they were on. */
+      toast.say("Your session has expired. Sign in again to pick up where you were.");
     });
     return () => setUnauthorizedHandler(null);
   }, [toast]);
 
-  /* Signing out in one tab clears the cookie for every tab, but only this
-     one re-renders. Without this, a tab left open on the account page, or on
-     anything that only fetched its data once, keeps showing that account
-     until something makes it ask again. */
   useEffect(() => {
     function onStorage(event: StorageEvent) {
       if (event.key !== SESSION_EVENT_KEY) return;
       api.me
         .current()
         .then((value) => setUser(value ?? null))
-        .catch(() => setUser(null));
+        .catch(() => setUser(null))
+        .finally(() => setReady(true));
     }
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    api.me
-      .current()
-      .then((value) => {
-        /* `?? null` rather than the value as typed. A 200 whose body is not the
-           shape we expect resolves to undefined, and undefined is not null —
-           so every `user !== null` check downstream would pass and then read a
-           property off nothing, taking the whole page down with it. */
-        if (!cancelled) setUser(value ?? null);
-      })
-      .catch(() => {
-        // A 401 here is the normal state of a visitor who has not signed in.
-        if (!cancelled) setUser(null);
-      })
-      .finally(() => {
-        if (!cancelled) setReady(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   /* Only a plain admin can ever be restricted, so this is the only role worth
-     the extra round trip — everyone above it is unrestricted by definition,
-     and a diner never touches /desk at all. */
+     the extra round trip. Everyone above it is unrestricted by definition, and a
+     diner never touches /desk at all. */
   useEffect(() => {
     if (user?.role !== "admin") {
       setScopes(null);
@@ -143,74 +170,101 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, [user?.id, user?.role]);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    const outcome = await api.me.signIn(email, password);
-    if ("user" in outcome) {
-      setUser(outcome.user);
-      announceSessionChange();
-    }
-    return outcome;
+  const settle = useCallback((value: User | null) => {
+    setUser(value);
+    setReady(true);
   }, []);
 
-  const completeTwoFactor = useCallback(async (challenge: string, code: string) => {
-    const value = await api.me.answerTwoFactor(challenge, code);
-    setUser(value);
+  /**
+   * Everything that changes who is holding the phone.
+   *
+   * The cache and the boot payload both go, because both are keyed to a person
+   * and neither is safe to hand to the next one. Signing in clears them too: the
+   * pages cached while signed out are a visitor's pages.
+   */
+  const changeHands = useCallback((next: User | null) => {
+    setUser(next);
+    setReady(true);
+    clearBoot();
+    resetCache();
     announceSessionChange();
-    return value;
   }, []);
 
-  const register = useCallback(async (name: string, email: string, password: string) => {
-    const value = await api.me.register(name, email, password);
-    setUser(value);
-    announceSessionChange();
-    return value;
-  }, []);
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      const outcome = await api.me.signIn(email, password);
+      /* A 2FA challenge is not a sign-in yet: nothing has changed hands until
+         the code is accepted. */
+      if ("user" in outcome) changeHands(outcome.user);
+      return outcome;
+    },
+    [changeHands]
+  );
+
+  const completeTwoFactor = useCallback(
+    async (challenge: string, code: string) => {
+      const value = await api.me.answerTwoFactor(challenge, code);
+      changeHands(value);
+      return value;
+    },
+    [changeHands]
+  );
+
+  const register = useCallback(
+    async (name: string, email: string, password: string) => {
+      const value = await api.me.register(name, email, password);
+      changeHands(value);
+      return value;
+    },
+    [changeHands]
+  );
 
   const signOut = useCallback(async () => {
     try {
       await api.me.signOut();
     } finally {
-      // Even if the call fails, this browser is done with the session, and
-      // every other tab it has open needs to hear that too.
-      setUser(null);
-      announceSessionChange();
+      /* Even if the call fails, this browser is done with the session, and every
+         other tab it has open needs to hear that too. */
+      changeHands(null);
     }
-  }, []);
+  }, [changeHands]);
 
   const refresh = useCallback(async () => {
     try {
-      setUser(await api.me.current());
+      setUser((await api.me.current()) ?? null);
     } catch {
       setUser(null);
+    } finally {
+      setReady(true);
     }
   }, []);
 
   const can = useCallback(
     (scope: AdminScope) => {
       if (user?.role !== "admin") return true;
-      // Still loading, or the fetch failed: default to allowed, same as a
-      // never-restricted account, and let the route itself be the real check.
       return scopes?.[scope] ?? true;
     },
     [user?.role, scopes]
   );
 
-  const value = useMemo<SessionValue>(
-    () => ({
+  const value = useMemo<SessionValue>(() => {
+    const role = user?.role;
+    return {
       user,
       ready,
-      isStaff: user?.role === "admin" || user?.role === "super_admin" || user?.role === "owner",
-      isOwner: user?.role === "super_admin" || user?.role === "owner",
-      isTopOwner: user?.role === "owner",
+      isStaff: role !== undefined && STAFF.has(role),
+      isOwner: role !== undefined && ABOVE_ADMIN.has(role),
+      isTopOwner: role === "owner" || role === "developer",
+      isDeveloper: role === "developer",
       can,
       signIn,
       completeTwoFactor,
       register,
       signOut,
       refresh,
-    }),
-    [user, ready, can, signIn, completeTwoFactor, register, signOut, refresh]
-  );
+      settle,
+    };
+  }, [user, ready, can, signIn, completeTwoFactor, register, signOut, refresh, settle]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

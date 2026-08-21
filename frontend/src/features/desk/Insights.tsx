@@ -1,128 +1,128 @@
 import { api } from "~/lib/api";
-import { dayLabel, money } from "~/lib/format";
-import { useResource } from "~/lib/useResource";
-import { Icon } from "~/ui/Icon";
-import { DeskPage, Loaded, Stat } from "./parts";
+import { useQuery } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { money } from "~/lib/format";
+import { Stars } from "~/ui/Bits";
+import { DeskPage, Loaded, Nothing, Section, StatTile, Stats, TableWrap } from "./parts";
 import { BarChart, TrendChart } from "./charts";
+
+/**
+ * The last thirty days against the thirty before.
+ *
+ * Every number here is a comparison, because a bare number tells the owner
+ * nothing they did not already feel. "412 covers" is a fact; "412 covers, up
+ * from 380" is a decision about whether to order more goat.
+ *
+ * The no-show rate is the one worth staring at: it is the number the reminder
+ * sequence exists to move, and the only way to tell whether it is working.
+ */
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-/** Direction of travel against the previous window of the same length. */
-function Delta({ now, before, label }: { now: number; before: number; label: string }) {
-  if (before === 0) return null;
-  const change = Math.round(((now - before) / before) * 100);
-  const up = change >= 0;
-  return (
-    <span className={`delta${up ? " delta--up" : " delta--down"}`}>
-      <Icon name={up ? "arrow-right" : "arrow-right"} size={13} />
-      {up ? "+" : ""}
-      {change}% {label}
-    </span>
-  );
+/** "up 8%", "down 3%", or "about the same". Never a bare signed number. */
+function change(now: number, before: number): { word: string; tone: "good" | "bad" | "neutral" } {
+  if (before === 0) return now > 0 ? { word: "new", tone: "good" } : { word: "nothing yet", tone: "neutral" };
+  const percent = Math.round(((now - before) / before) * 100);
+  if (Math.abs(percent) < 3) return { word: "about the same", tone: "neutral" };
+  return percent > 0
+    ? { word: `up ${percent}%`, tone: "good" }
+    : { word: `down ${Math.abs(percent)}%`, tone: "bad" };
 }
 
-/**
- * The numbers behind the last thirty days.
- *
- * Every chart here shows one series against one axis. Where two measures would
- * be tempting to overlay, they are two charts instead: sticking revenue and
- * booking counts on the same picture with two scales makes a shape that means
- * nothing.
- */
 export function Insights() {
-  const analytics = useResource(() => api.desk.analytics(), []);
+  const insights = useQuery(K.desk.analytics, () => api.desk.analytics(), { staleMs: 5 * 60 * 1000 });
 
   return (
-    <DeskPage title="Insights" lead="The last thirty days, against the thirty before them.">
-      <Loaded resource={analytics} skeletonHeight="12rem">
-        {(data) => (
-          <>
-            <div className="stat-grid">
-              <Stat
-                label="Bookings"
-                value={data.window30.bookings}
-                icon="calendar"
-                hint={`${data.window30.covers} covers`}
-              />
-              <Stat label="Turned up" value={data.window30.arrived} icon="check-circle" hint={`${data.window30.cancelled} cancelled`} />
-              <Stat
-                label="Taken"
-                value={data.revenueByDay.reduce((sum, day) => sum + day.revenue, 0)}
-                money
-                icon="wallet"
-              />
-              <Stat
-                label="Rating"
-                value={data.reviewSummary.avg_rating ? data.reviewSummary.avg_rating.toFixed(1) : "No reviews"}
-                icon="star"
-                hint={`${data.reviewSummary.total} reviews`}
-              />
-            </div>
+    <DeskPage title="Insights" hint="The last thirty days, against the thirty before.">
+      <Loaded query={insights}>
+        {(data) => {
+          const revenue = data.revenueByDay.reduce((sum, day) => sum + day.revenue, 0);
+          const noShows = data.window30.bookings - data.window30.arrived - data.window30.cancelled;
+          const noShowRate = data.window30.bookings > 0 ? Math.round((noShows / data.window30.bookings) * 100) : 0;
 
-            {/* Nothing to compare against on a new site, and three repetitions
-                of "no earlier figure" reads as a fault rather than a fact. */}
-            {data.previous.bookings > 0 || data.previous.covers > 0 || data.previous.revenue > 0 ? (
-              <div className="row row--wrap" style={{ gap: "var(--s-4)" }}>
-                <Delta now={data.window30.bookings} before={data.previous.bookings} label="bookings" />
-                <Delta now={data.window30.covers} before={data.previous.covers} label="covers" />
-                <Delta
-                  now={data.revenueByDay.reduce((sum, day) => sum + day.revenue, 0)}
-                  before={data.previous.revenue}
-                  label="taken"
+          const bookingsChange = change(data.window30.bookings, data.previous.bookings);
+          const coversChange = change(data.window30.covers, data.previous.covers);
+          const revenueChange = change(revenue, data.previous.revenue);
+
+          return (
+            <>
+              <Stats>
+                <StatTile label="Bookings" value={data.window30.bookings} note={bookingsChange.word} />
+                <StatTile label="Covers" value={data.window30.covers} note={coversChange.word} />
+                <StatTile label="Taken" value={`${money(revenue)} FCFA`} note={revenueChange.word} />
+                <StatTile
+                  label="No shows"
+                  value={`${noShowRate}%`}
+                  note={noShows === 0 ? "None at all" : `${noShows} tables held for nobody`}
                 />
-              </div>
-            ) : (
-              <p className="fine faint">No earlier month to compare against yet.</p>
-            )}
+              </Stats>
 
-            <div className="chart-grid">
-              <section className="card">
+              <Section title="Money, day by day">
                 <TrendChart
-                  title="Taken per day, FCFA"
-                  unit="FCFA"
-                  format={money}
-                  points={data.revenueByDay.map((day) => ({ label: dayLabel(day.day), value: day.revenue }))}
+                  points={data.revenueByDay.map((day) => ({ label: day.day, value: day.revenue }))}
+                  label="Money taken per day over the last thirty days"
+                  format={(value) => `${money(value)} FCFA`}
                 />
-              </section>
+              </Section>
 
-              <section className="card">
+              <Section title="When people come" hint="Bookings by hour, across the whole window.">
                 <BarChart
-                  title="Bookings by hour"
-                  unit="bookings"
                   points={data.peakHours.map((hour) => ({ label: hour.hour, value: hour.count }))}
+                  label="Bookings by hour of day"
                 />
-              </section>
+              </Section>
 
-              <section className="card">
+              <Section title="Which days are busy">
                 <BarChart
-                  title="Busiest days of the week"
-                  unit="bookings"
                   points={data.busiestDays.map((day) => ({
                     label: (WEEKDAYS[day.weekday] ?? "").slice(0, 3),
                     value: day.count,
                   }))}
+                  label="Bookings by day of the week"
                 />
-              </section>
+              </Section>
 
-              <section className="card">
+              <Section title="New accounts">
                 <TrendChart
-                  title="New accounts per day"
-                  unit="accounts"
-                  points={data.newUsersByDay.map((day) => ({ label: dayLabel(day.day), value: day.count }))}
+                  points={data.newUsersByDay.map((day) => ({ label: day.day, value: day.count }))}
+                  label="New accounts per day"
                 />
-              </section>
+              </Section>
 
-              <section className="card chart-grid__wide">
-                <BarChart
-                  horizontal
-                  title="Most ordered dishes, by quantity"
-                  unit="portions"
-                  points={data.topMenuItems.map((item) => ({ label: item.name, value: item.qty }))}
-                />
-              </section>
-            </div>
-          </>
-        )}
+              <Section title="What actually sells" hint="By quantity, not by how often it is looked at.">
+                {data.topMenuItems.length === 0 ? (
+                  <Nothing icon="list">Nothing ordered yet in this window.</Nothing>
+                ) : (
+                  <TableWrap label="Best selling dishes">
+                    <thead>
+                      <tr>
+                        <th>Dish</th>
+                        <th>Sold</th>
+                        <th>Brought in</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.topMenuItems.map((item) => (
+                        <tr key={item.name}>
+                          <td>{item.name}</td>
+                          <td className="nowrap">{item.qty}</td>
+                          <td className="nowrap strong">{money(item.revenue)} FCFA</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </TableWrap>
+                )}
+              </Section>
+
+              <Section title="Reviews">
+                <div className="bar bar--tight">
+                  <Stars value={data.reviewSummary.avg_rating ?? 0} size={17} />
+                  <span className="fine faint">from {data.reviewSummary.total}</span>
+                </div>
+              </Section>
+            </>
+          );
+        }}
       </Loaded>
     </DeskPage>
   );

@@ -1,60 +1,133 @@
-import { Link } from "react-router-dom";
 import { api } from "~/lib/api";
-import { dayLabel, timeLabel, todayISO } from "~/lib/format";
-import { usePoll, useResource } from "~/lib/useResource";
-import { Money } from "~/ui/Bits";
-import { Notice } from "~/ui/Feedback";
-import { useVenue } from "~/state/venue";
-import { DeskPage, Loaded, Nothing, Stat, State, TableWrap } from "./parts";
+import { useQuery, usePoll } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { money, timeLabel } from "~/lib/format";
+import { Icon } from "~/ui/Icon";
+import { LinkButton } from "~/ui/Button";
+import { DeskPage, Loaded, Nothing, StatTile, Stats, State } from "./parts";
+import { useSession } from "~/state/session";
 
+/**
+ * Tonight, at a glance.
+ *
+ * The screen somebody leaves open on a tablet by the till, so it refreshes
+ * itself every minute and never puts a skeleton over numbers that are already
+ * on screen.
+ *
+ * What is on it is what somebody standing at the counter needs to know without
+ * asking: how many tables are booked, what is on the grill, and whether anything
+ * is waiting for money. Everything else is one tap away in the rail.
+ */
 export function Overview() {
-  const stats = useResource(() => api.desk.stats(), []);
-  const today = useResource(() => api.desk.bookings.list({ date: todayISO() }), []);
-  const orders = useResource(() => api.desk.orders.list(), []);
-  const messages = useResource(() => api.deskSupport.threads({ status: "open" }), []);
-  const { siteConfig } = useVenue();
+  const { user, can } = useSession();
 
-  usePoll(() => { stats.reload(); today.reload(); orders.reload(); messages.reload(); }, 60_000);
+  const stats = useQuery(K.desk.stats, () => api.desk.stats(), { staleMs: 30_000 });
+  const bookings = useQuery(K.desk.bookings, () => api.desk.bookings.list(), {
+    enabled: can("bookings"),
+    staleMs: 30_000,
+  });
+  const orders = useQuery(K.desk.orders, () => api.desk.orders.list(), {
+    enabled: can("takeaway"),
+    staleMs: 20_000,
+  });
 
-  const live = (today.data ?? []).filter((booking) => booking.status !== "cancelled");
-  const covers = live.reduce((sum, booking) => sum + booking.party_size, 0);
-  const waiting = (orders.data ?? []).filter((order) => order.status === "pending" || order.status === "confirmed");
-  const unpaid = stats.data?.pendingPayments ?? 0;
-  const openThreads = messages.data?.threads?.length ?? 0;
-  const pausedServices = [siteConfig.features.ordering && siteConfig.services.ordering.mode === "paused", siteConfig.features.booking && siteConfig.services.booking.mode === "paused", siteConfig.features.waitlist && siteConfig.services.waitlist.mode === "paused"].filter(Boolean).length;
+  usePoll(() => {
+    stats.reload();
+    bookings.reload();
+    orders.reload();
+  }, 60_000);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const tonight = (bookings.data ?? [])
+    .filter((booking) => booking.date === today && booking.status !== "cancelled")
+    .sort((a, b) => a.time.localeCompare(b.time));
+
+  const cooking = (orders.data ?? []).filter((order) => order.status === "pending" || order.status === "confirmed");
+  const ready = (orders.data ?? []).filter((order) => order.status === "ready");
+
+  const firstName = user?.name.trim().split(/\s+/)[0] ?? "";
 
   return (
-    <DeskPage title="Tonight" lead="The things most likely to need your attention are at the top. Everything refreshes automatically.">
-      <div className="stat-grid">
-        <Stat label="Booked today" value={live.length} icon="calendar" hint={`${covers} covers`} />
-        <Stat label="Orders to make" value={waiting.length} icon="bag" />
-        <Stat label="Deposits unpaid" value={unpaid} icon="wallet" hint="Tables held but not paid for" />
-        <Stat label="Taken all time" value={stats.data?.totalRevenue ?? 0} money icon="chart" />
-      </div>
+    <DeskPage title={`Evening${firstName ? `, ${firstName}` : ""}`} hint="Refreshes itself every minute.">
+      <Loaded query={stats}>
+        {(data) => (
+          <Stats>
+            <StatTile label="Tables today" value={data.todayReservations} />
+            <StatTile label="On the grill" value={cooking.length} note={ready.length > 0 ? `${ready.length} ready` : undefined} />
+            <StatTile label="Waiting on money" value={data.pendingPayments} />
+            <StatTile label="Taken, all time" value={`${money(data.totalRevenue)} FCFA`} />
+          </Stats>
+        )}
+      </Loaded>
 
-      {(unpaid > 0 || openThreads > 0 || pausedServices > 0 || siteConfig.business.mode !== "open") ? (
-        <section className="desk-section stack">
-          <div className="row row--between"><h2 className="card__title">Needs attention</h2><span className="fine faint">Live status</span></div>
-          {unpaid > 0 ? <Link to="/desk/money" className="card card--action"><strong>{unpaid} payment{unpaid === 1 ? "" : "s"} waiting</strong><span className="fine muted" style={{ display: "block", marginTop: "0.25rem" }}>Tables are being held while customers finish paying.</span></Link> : null}
-          {openThreads > 0 ? <Link to="/desk/inbox" className="card card--action"><strong>{openThreads} open support conversation{openThreads === 1 ? "" : "s"}</strong><span className="fine muted" style={{ display: "block", marginTop: "0.25rem" }}>Guests are waiting for a response.</span></Link> : null}
-          {pausedServices > 0 ? <Link to="/desk/site-control" className="card card--action"><strong>{pausedServices} online service{pausedServices === 1 ? " is" : "s are"} paused</strong><span className="fine muted" style={{ display: "block", marginTop: "0.25rem" }}>Review takeaway, bookings or waitlist availability.</span></Link> : null}
-          {siteConfig.business.mode !== "open" ? <Link to="/desk/site-control" className="card card--action"><strong>Website says: {siteConfig.business.mode === "busy" ? "Busy right now" : "Closed"}</strong><span className="fine muted" style={{ display: "block", marginTop: "0.25rem" }}>Check the customer-facing message before opening the doors.</span></Link> : null}
+      {can("bookings") ? (
+        <section className="dk-section">
+          <div className="bar bar--between">
+            <h2 className="head">Tonight's tables</h2>
+            <LinkButton to="/desk/bookings" tone="quiet" size="sm" iconEnd="arrow-right">
+              All bookings
+            </LinkButton>
+          </div>
+
+          {tonight.length === 0 ? (
+            <Nothing icon="calendar">Nothing booked for today yet.</Nothing>
+          ) : (
+            <div className="rows">
+              {tonight.slice(0, 8).map((booking) => (
+                <div key={booking.id} className="row">
+                  <span className="dk-time">{timeLabel(booking.time)}</span>
+                  <span className="grow stack stack--tight">
+                    <span className="small">{booking.user_name}</span>
+                    <span className="fine faint">
+                      {booking.party_size} covers
+                      {booking.table_label ? ` · table ${booking.table_label}` : ""}
+                    </span>
+                  </span>
+                  {booking.checked_in_at ? (
+                    <State tone="good">In</State>
+                  ) : booking.status === "pending_payment" ? (
+                    <State tone="warn">Unpaid</State>
+                  ) : (
+                    <State>Booked</State>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </section>
-      ) : <Notice tone="good" title="Nothing urgent">Bookings, orders, payments and support are all clear right now.</Notice>}
+      ) : null}
 
-      <section className="desk-section">
-        <div className="row row--between"><h2 className="card__title">Today's tables</h2><Link to="/desk/bookings" className="btn btn--quiet btn--sm">All bookings</Link></div>
-        <Loaded resource={today}>{(rows) => {
-          const liveToday = rows.filter((booking) => booking.status !== "cancelled");
-          if (liveToday.length === 0) return <Nothing>Nothing booked for today yet.</Nothing>;
-          return <TableWrap><thead><tr><th>Time</th><th>Guest</th><th>People</th><th>Table</th><th>Status</th><th>Code</th></tr></thead><tbody>{[...liveToday].sort((a, b) => a.time.localeCompare(b.time)).map((booking) => <tr key={booking.id}><td className="mono">{timeLabel(booking.time)}</td><td>{booking.user_name}<span className="fine faint"> {booking.phone}</span></td><td className="table__num">{booking.party_size}</td><td>{booking.table_label ?? "Any"}</td><td><State value={booking.checked_in_at ? "seated" : booking.status} /></td><td className="mono fine">{booking.ccm_code}</td></tr>)}</tbody></TableWrap>;
-        }}</Loaded>
-      </section>
+      {can("takeaway") ? (
+        <section className="dk-section">
+          <div className="bar bar--between">
+            <h2 className="head">The board</h2>
+            <LinkButton to="/desk/orders" tone="quiet" size="sm" iconEnd="arrow-right">
+              All orders
+            </LinkButton>
+          </div>
 
-      <section className="desk-section">
-        <div className="row row--between"><h2 className="card__title">Takeaway orders</h2><Link to="/desk/orders" className="btn btn--quiet btn--sm">All orders</Link></div>
-        <Loaded resource={orders}>{() => waiting.length === 0 ? <Nothing>Nothing waiting to be made.</Nothing> : <TableWrap><thead><tr><th>Pickup</th><th>Order</th><th>Name</th><th>Paid</th><th className="table__num">Total</th></tr></thead><tbody>{waiting.map((order) => <tr key={order.id}><td className="mono">{timeLabel(order.pickup_time)}</td><td className="mono fine">{order.order_no}</td><td>{order.name}<span className="fine faint"> {dayLabel(order.created_at.slice(0, 10))}</span></td><td><State value={order.payment_status ?? "unpaid"} /></td><td className="table__num"><Money value={order.total_fcfa} /></td></tr>)}</tbody></TableWrap>}</Loaded>
-      </section>
+          {cooking.length === 0 && ready.length === 0 ? (
+            <Nothing icon="bag">Nothing on the board.</Nothing>
+          ) : (
+            <div className="rows">
+              {[...ready, ...cooking].slice(0, 8).map((order) => (
+                <div key={order.id} className="row">
+                  <Icon name="bag" size={16} className="row__lead" />
+                  <span className="grow stack stack--tight">
+                    <span className="small">{order.name}</span>
+                    <span className="fine faint">
+                      {order.order_no} · for {order.pickup_time}
+                    </span>
+                  </span>
+                  <State tone={order.status === "ready" ? "good" : "warn"}>
+                    {order.status === "ready" ? "Ready" : "Cooking"}
+                  </State>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
     </DeskPage>
   );
 }

@@ -1,140 +1,149 @@
-import { Link } from "react-router-dom";
 import { api } from "~/lib/api";
-import type { Booking, TakeawayOrder } from "~/lib/api";
-import { dayLabel, parseLines, timeLabel, todayISO } from "~/lib/format";
-import { useResource } from "~/lib/useResource";
-import { Badge, Money } from "~/ui/Bits";
-import { LinkButton } from "~/ui/Button";
+import type { Booking } from "~/lib/api";
+import { useQuery } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { dayLabel, timeLabel, parseLines } from "~/lib/format";
 import { Icon } from "~/ui/Icon";
+import { LinkButton, PressableLink } from "~/ui/Button";
+import { Badge, Code, Money } from "~/ui/Bits";
 import { Skeleton } from "~/ui/Feedback";
+import { useCopy } from "~/state/locale";
+import { useVenue } from "~/state/venue";
 
 /**
- * What a signed-in customer has on right now, at the top of the home page.
+ * What replaces the hero once somebody has signed in.
  *
- * A visitor who is already a customer does not need the sales pitch again;
- * they need the one thing they came back to check. So this answers "when am I
- * coming in" and "is my food ready" before anything else on the page, and says
- * nothing at all when there is nothing to say.
+ * A returning customer does not need to be sold the restaurant again. What they
+ * want is the two facts they came back for: when their table is, and where their
+ * order has got to. Both, if they have both, and a way in if they have neither.
  *
- * Only mounted for a signed-in visitor, so a stranger never pays for these
- * two requests.
+ * Rows on the page, not cards. The pass and the receipt are the only things in
+ * this product that get a raised surface, and neither of them is here: this is a
+ * summary that links to them.
  */
 
-/** Live means: still going to happen, or still being cooked. */
+function greeting(c: ReturnType<typeof useCopy>["c"]): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return c.yours.greetingMorning;
+  if (hour < 17) return c.yours.greetingAfternoon;
+  return c.yours.greeting;
+}
+
+/** The first booking that has not happened yet and has not been cancelled. */
 function nextBooking(bookings: Booking[]): Booking | null {
-  const today = todayISO();
+  const now = new Date();
   return (
-    [...bookings]
-      .filter((b) => (b.status === "confirmed" || b.status === "pending_payment") && b.date >= today)
-      .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))[0] ?? null
+    bookings
+      .filter((booking) => booking.status === "confirmed" || booking.status === "pending_payment")
+      .filter((booking) => new Date(`${booking.date}T${booking.time}`) >= now)
+      .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))[0] ?? null
   );
 }
 
-function liveOrder(orders: TakeawayOrder[]): TakeawayOrder | null {
-  return orders.find((o) => o.status === "pending" || o.status === "confirmed" || o.status === "ready") ?? null;
-}
-
-const ORDER_SAYS: Record<string, { label: string; tone: "warn" | "hot" | "good" }> = {
-  pending: { label: "Sent to the kitchen", tone: "warn" },
-  confirmed: { label: "Being cooked", tone: "hot" },
-  ready: { label: "Ready to collect", tone: "good" },
-};
+/** An order that is still going to become food. Anything collected or cancelled
+    belongs in the history on My visits, not on the front page. */
+const LIVE_ORDER_STATUSES = new Set(["awaiting_payment", "pending", "confirmed", "ready"]);
 
 export function YourStuff({ name }: { name: string }) {
-  const bookings = useResource(() => api.booking.mine(), []);
-  const orders = useResource(() => api.orders.mine(), []);
+  const { c, fill } = useCopy();
+  const { siteConfig } = useVenue();
+
+  const bookings = useQuery(K.myBookings, () => api.booking.mine(), { staleMs: 60_000 });
+  const orders = useQuery(K.myOrders, () => api.orders.mine(), { staleMs: 30_000 });
+
+  const table = nextBooking(bookings.data ?? []);
+  const order = (orders.data ?? []).find((entry) => LIVE_ORDER_STATUSES.has(entry.status)) ?? null;
 
   const loading = bookings.loading || orders.loading;
-  const booking = nextBooking(bookings.data ?? []);
-  const order = liveOrder(orders.data ?? []);
-
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const firstName = name.split(/\s+/)[0] ?? name;
+  const firstName = name.trim().split(/\s+/)[0] ?? name;
 
   return (
-    <section className="mine-strip">
-      <div className="page">
-        <div className="row row--between row--wrap" style={{ marginBottom: "var(--s-4)" }}>
-          <h1 className="display display--lg">
-            {greeting}, {firstName}
-          </h1>
-          {/* A link, not a button. Wrapped onto its own line on a phone, a
-              button's side padding reads as a stray indent. */}
-          <Link to="/mine" className="quote__more">
-            Everything of mine <Icon name="arrow-right" size={15} />
-          </Link>
-        </div>
+    <section className="yours page section">
+      <h1 className="display display--xl yours__hello">
+        {greeting(c)}, {firstName}.
+      </h1>
 
-        {loading ? (
-          <div className="mine-strip__grid">
-            <Skeleton height="7rem" radius="var(--r-lg)" />
-            <Skeleton height="7rem" radius="var(--r-lg)" />
-          </div>
-        ) : !booking && !order ? (
-          /* Nothing on. Say so plainly and offer the two things they can do. */
-          <div className="stack">
-            <p className="muted">You have no table booked and nothing waiting at the counter.</p>
-            <div className="actions">
-              <LinkButton to="/book" tone="primary" icon="calendar">
-                Book a table
-              </LinkButton>
-              <LinkButton to="/order" tone="ghost" icon="bag">
-                Order takeaway
-              </LinkButton>
+      {loading ? (
+        <div className="rows">
+          <div className="row row--tall">
+            <Skeleton height="2.25rem" width="2.25rem" radius="var(--r-sm)" />
+            <div className="grow stack stack--tight">
+              <Skeleton height="0.85rem" width="45%" />
+              <Skeleton height="0.75rem" width="30%" />
             </div>
           </div>
-        ) : (
-          <div className="mine-strip__grid">
-            {booking ? (
-              <Link to="/mine" className="card card--action stack stack--tight">
-                <div className="row row--between">
-                  <span className="label">Your next table</span>
-                  {booking.status === "pending_payment" ? (
-                    <Badge tone="warn">Deposit due</Badge>
-                  ) : (
-                    <Badge tone="good">Confirmed</Badge>
-                  )}
-                </div>
-                <p className="mine-strip__headline">
-                  {dayLabel(booking.date)} at {timeLabel(booking.time)}
-                </p>
-                <p className="fine muted">
-                  {booking.party_size} {booking.party_size === 1 ? "person" : "people"}
-                  {booking.table_label ? `, table ${booking.table_label}` : ""}
-                </p>
-                {booking.ccm_code && booking.status === "confirmed" ? (
-                  <p className="mono mine-strip__code">{booking.ccm_code}</p>
-                ) : (
-                  <p className="fine hot">
-                    <Icon name="alert" size={14} /> Pay the deposit to hold it
-                  </p>
-                )}
-              </Link>
-            ) : null}
+        </div>
+      ) : (
+        <div className="rows">
+          {/* ── The next table ─────────────────────────────────────────────*/}
+          {table ? (
+            <PressableLink to="/mine" className="row row--tall">
+              <span className="yours__icon" aria-hidden="true">
+                <Icon name="calendar" size={18} />
+              </span>
+              <span className="grow stack stack--tight">
+                <span className="label">{c.yours.nextTable}</span>
+                <span className="title">
+                  {dayLabel(table.date)}, {timeLabel(table.time)}
+                </span>
+                <span className="fine muted">
+                  {table.table_label ? `Table ${table.table_label} · ` : ""}
+                  {table.party_size === 1 ? c.book.partyOne : fill(c.book.partyMany, { n: table.party_size })}
+                </span>
+              </span>
+              <span className="bar bar--tight">
+                {table.status === "pending_payment" ? (
+                  <Badge tone="warn">{c.mine.bookingStatus.pending_payment}</Badge>
+                ) : table.ccm_code ? (
+                  <Code value={table.ccm_code} size="sm" />
+                ) : null}
+                <Icon name="chevron-right" size={16} className="faint" />
+              </span>
+            </PressableLink>
+          ) : siteConfig.features.booking ? (
+            <PressableLink to="/book" className="row row--tall">
+              <span className="yours__icon yours__icon--quiet" aria-hidden="true">
+                <Icon name="calendar" size={18} />
+              </span>
+              <span className="grow stack stack--tight">
+                <span className="head">{c.yours.noTable}</span>
+                <span className="fine muted">{c.yours.noTableBody}</span>
+              </span>
+              <Icon name="chevron-right" size={16} className="faint" />
+            </PressableLink>
+          ) : null}
 
-            {order ? (
-              <Link to="/mine" className="card card--action stack stack--tight">
-                <div className="row row--between">
-                  <span className="label">Your order</span>
-                  <Badge tone={ORDER_SAYS[order.status]?.tone ?? "neutral"}>
-                    {ORDER_SAYS[order.status]?.label ?? order.status}
-                  </Badge>
-                </div>
-                <p className="mine-strip__headline">Collect at {timeLabel(order.pickup_time)}</p>
-                <p className="fine muted">
+          {/* ── The live order ─────────────────────────────────────────────*/}
+          {order ? (
+            <PressableLink to="/mine" className="row row--tall">
+              <span className="yours__icon" aria-hidden="true">
+                <Icon name="bag" size={18} />
+              </span>
+              <span className="grow stack stack--tight">
+                <span className="label">{c.yours.liveOrder}</span>
+                <span className="title">{c.mine.orderStatus[order.status]}</span>
+                <span className="fine muted clip">
                   {parseLines(order.items_json)
                     .map((line) => `${line.qty} ${line.name}`)
                     .join(", ")}
-                </p>
-                <p className="row row--between">
-                  <span className="mono mine-strip__code">{order.order_no}</span>
-                  <Money value={order.total_fcfa} />
-                </p>
-              </Link>
-            ) : null}
-          </div>
-        )}
+                </span>
+              </span>
+              <span className="bar bar--tight">
+                <Money value={order.total_fcfa} size="fine" />
+                <Icon name="chevron-right" size={16} className="faint" />
+              </span>
+            </PressableLink>
+          ) : null}
+        </div>
+      )}
+
+      <div className="bar bar--wrap yours__actions">
+        <LinkButton to="/menu" tone="primary" size="sm" icon="list">
+          {c.home.seeMenu}
+        </LinkButton>
+        <LinkButton to="/mine" tone="ghost" size="sm">
+          {c.yours.seeAllVisits}
+        </LinkButton>
       </div>
     </section>
   );

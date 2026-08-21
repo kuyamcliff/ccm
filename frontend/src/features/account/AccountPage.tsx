@@ -1,698 +1,712 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "~/lib/api";
-import { dayLabel, money, stampLabel, timeLabel } from "~/lib/format";
-import { useAction, useResource } from "~/lib/useResource";
-import { Button, LinkButton } from "~/ui/Button";
-import { TextField } from "~/ui/Field";
-import { Avatar, Badge, Money } from "~/ui/Bits";
-import { EmptyState, ErrorState, Notice, Skeleton, SkeletonCards } from "~/ui/Feedback";
-import { Sheet, useConfirm } from "~/ui/Sheet";
-import { PasswordField } from "~/ui/PasswordField";
-import { checkPassword } from "~/lib/passwordStrength";
-import { PasskeyError, addPasskey, passkeysSupported } from "~/lib/passkey";
+import { useMutation, useQuery, invalidate } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { checkPassword, passwordScore } from "~/lib/passwordStrength";
+import { addPasskey, passkeysSupported } from "~/lib/passkey";
+import { money, stampLabel, timeAgo } from "~/lib/format";
 import { Icon, type IconName } from "~/ui/Icon";
+import { Action, Button, IconButton } from "~/ui/Button";
+import { TextField, PasswordField, Segmented } from "~/ui/Field";
+import { Sheet, useConfirm } from "~/ui/Sheet";
+import { Badge, Meter, Money } from "~/ui/Bits";
+import { EmptyState, Notice, SkeletonRows } from "~/ui/Feedback";
 import { useSession } from "~/state/session";
 import { useToast } from "~/state/toast";
+import { useCopy } from "~/state/locale";
+import { useVenue } from "~/state/venue";
+
+const SCORE_WORDS = ["Too weak", "Weak", "Getting there", "Good", "Strong"];
+
+type Tab = "profile" | "security" | "rewards";
 
 /**
- * The account: who you are, how it is protected, and what it has earned.
+ * The account.
  *
- * Anything that ends access — signing out everywhere, closing the account —
- * is kept at the bottom and asks for the password, well away from the fields
- * people come here to edit.
+ * Three tabs, because these are three different jobs: who you are, how you get
+ * in, and what you have earned. Rolling them into one scroll makes the security
+ * settings, which are the ones somebody comes here deliberately to change, the
+ * hardest to find.
+ *
+ * Everything destructive asks first, and asks in words that say what will
+ * actually happen rather than "are you sure".
  */
-
-const DEVICE_ICON: Record<"mobile" | "tablet" | "desktop" | "unknown", IconName> = {
-  mobile: "smartphone",
-  tablet: "tablet",
-  desktop: "monitor",
-  unknown: "globe",
-};
-
-function Profile() {
-  const { user, refresh } = useSession();
-  const toast = useToast();
-
-  const [name, setName] = useState(user?.name ?? "");
-  const [email, setEmail] = useState(user?.email ?? "");
-  const [emailPassword, setEmailPassword] = useState("");
-  const [current, setCurrent] = useState("");
-  const [next, setNext] = useState("");
-
-  const saveName = useAction(api.me.changeName);
-  const saveEmail = useAction(api.me.changeEmail);
-  const confirmEmail = useAction(api.me.confirmEmailChange);
-  const savePassword = useAction(api.me.changePassword);
-
-  /* Set once a code has been sent to the new address. Holding the address
-     here too — rather than reading it back off `user` — means the code entry
-     step still shows what it is confirming even though the account itself
-     has not changed yet. */
-  const [awaitingCode, setAwaitingCode] = useState<{ email: string } | null>(null);
-  const [emailCode, setEmailCode] = useState("");
+export function AccountPage() {
+  const { c } = useCopy();
+  const [tab, setTab] = useState<Tab>("profile");
 
   return (
-    <div className="stack stack--loose">
-      <section className="card stack">
-        <h2 className="card__title">Your details</h2>
-        <form
-          className="stack"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            if (!(await saveName.run(name.trim()))) {
-              toast.failed(saveName.readError());
-              return;
-            }
-            await refresh();
-            toast.done("Name updated.");
-          }}
-        >
-          <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required />
-          <div className="row">
-            <Button type="submit" size="sm" busy={saveName.busy} disabled={name.trim() === user?.name}>
-              Save name
-            </Button>
-          </div>
-        </form>
-      </section>
+    <div className="page section stack">
+      <header className="stack stack--tight">
+        <h1 className="display display--xl">{c.account.title}</h1>
+      </header>
 
-      <section className="card stack">
-        <h2 className="card__title">Email</h2>
-        {awaitingCode ? (
-          <>
-            <p className="fine muted">
-              We sent a code to <strong>{awaitingCode.email}</strong>. Enter it below to finish.
-            </p>
-            <form
-              className="stack"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                const result = await confirmEmail.run(emailCode.trim());
-                if (!result) {
-                  toast.failed(confirmEmail.readError());
-                  return;
-                }
-                setAwaitingCode(null);
-                setEmailCode("");
-                setEmailPassword("");
-                await refresh();
-                toast.done("Email changed.");
-              }}
-            >
-              <TextField
-                label="Code from the email"
-                value={emailCode}
-                onChange={(e) => setEmailCode(e.target.value)}
-                inputMode="numeric"
-                maxLength={6}
-                autoComplete="one-time-code"
-                required
-                autoFocus
-              />
-              <div className="row">
-                <Button type="submit" size="sm" busy={confirmEmail.busy} disabled={emailCode.trim().length !== 6}>
-                  Confirm
-                </Button>
-                <Button type="button" size="sm" tone="quiet" onClick={() => { setAwaitingCode(null); setEmailCode(""); }}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </>
-        ) : (
-          <>
-            <p className="fine muted">Changing it needs your password, because this address can reset the account.</p>
-            <form
-              className="stack"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                const result = await saveEmail.run(email.trim(), emailPassword);
-                if (!result) {
-                  toast.failed(saveEmail.readError());
-                  return;
-                }
-                if (result.pending) {
-                  setAwaitingCode({ email: email.trim() });
-                  toast.say(result.message ?? "Check your inbox for a code.");
-                  return;
-                }
-                setEmailPassword("");
-                await refresh();
-                toast.done("Email updated.");
-              }}
-            >
-              <TextField
-                label="Email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                required
-              />
-              <TextField
-                label="Current password"
-                type="password"
-                value={emailPassword}
-                onChange={(e) => setEmailPassword(e.target.value)}
-                autoComplete="current-password"
-                required
-              />
-              <div className="row">
-                <Button type="submit" size="sm" busy={saveEmail.busy} disabled={!emailPassword || email.trim() === user?.email}>
-                  Change email
-                </Button>
-              </div>
-            </form>
-          </>
-        )}
-      </section>
+      <Segmented
+        value={tab}
+        onChange={setTab}
+        label={c.account.title}
+        options={[
+          { value: "profile", label: c.account.profile },
+          { value: "security", label: c.account.security },
+          { value: "rewards", label: c.account.rewards },
+        ]}
+      />
 
-      <section className="card stack">
-        <h2 className="card__title">Password</h2>
-        <form
-          className="stack"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const weak = checkPassword(next, { name: user?.name, email: user?.email });
-            if (weak) {
-              toast.failed(weak);
-              return;
-            }
-            if (!(await savePassword.run(current, next))) {
-              toast.failed(savePassword.readError());
-              return;
-            }
-            setCurrent("");
-            setNext("");
-            toast.done("Password changed.");
-          }}
-        >
-          <TextField
-            label="Current password"
-            type="password"
-            value={current}
-            onChange={(e) => setCurrent(e.target.value)}
-            autoComplete="current-password"
-            required
-          />
-          <PasswordField
-            label="New password"
-            value={next}
-            onChange={setNext}
-            identity={{ name: user?.name, email: user?.email }}
-            required
-          />
-          <div className="row">
-            <Button
-              type="submit"
-              size="sm"
-              busy={savePassword.busy}
-              disabled={!current || checkPassword(next, { name: user?.name, email: user?.email }) !== null}
-            >
-              Change password
-            </Button>
-          </div>
-        </form>
-      </section>
+      {tab === "profile" ? <Profile /> : tab === "security" ? <Security /> : <Rewards />}
     </div>
   );
 }
 
-function Security() {
+/* ── A labelled group of rows ───────────────────────────────────────────────*/
+
+function Group({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <section className="stack stack--snug">
+      <div className="stack stack--tight">
+        <h2 className="label">{title}</h2>
+        {hint ? <p className="fine faint">{hint}</p> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/* ── Profile ────────────────────────────────────────────────────────────────*/
+
+function Profile() {
+  const { c } = useCopy();
+  const { user, refresh, signOut } = useSession();
   const toast = useToast();
   const navigate = useNavigate();
-  const { signOut } = useSession();
-  const { confirm, confirmElement } = useConfirm();
+  const { confirm, element } = useConfirm();
 
-  const status = useResource(() => api.me.twoFactorStatus(), []);
-  const passkeys = useResource(() => api.me.passkeys(), []);
-  const sessions = useResource(() => api.me.sessions(), []);
-
-  const [setup, setSetup] = useState<{ secret: string; qrDataUrl: string } | null>(null);
-  const [code, setCode] = useState("");
+  const [name, setName] = useState(user?.name ?? "");
+  const [email, setEmail] = useState(user?.email ?? "");
   const [password, setPassword] = useState("");
+  const [emailCode, setEmailCode] = useState("");
+  const [awaitingCode, setAwaitingCode] = useState(false);
   const [closing, setClosing] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const [closePassword, setClosePassword] = useState("");
 
-  const [addingKey, setAddingKey] = useState(false);
-  const [keyProblem, setKeyProblem] = useState<string | null>(null);
-  const canUsePasskeys = passkeysSupported();
+  const saveName = useMutation(async () => {
+    await api.me.changeName(name.trim());
+    await refresh();
+    toast.done("Name saved.");
+  });
 
-  const begin = useAction(api.me.beginTwoFactor);
-  const confirmCode = useAction(api.me.confirmTwoFactor);
-  const disable = useAction(api.me.disableTwoFactor);
-  const close = useAction(api.me.closeAccount);
+  const changeEmail = useMutation(async () => {
+    const result = await api.me.changeEmail(email.trim(), password);
+    setPassword("");
+    if (result.pending) {
+      setAwaitingCode(true);
+      toast.say(c.account.emailCodeSent);
+      return;
+    }
+    await refresh();
+    toast.done("Email saved.");
+  });
+
+  const confirmEmail = useMutation(async () => {
+    await api.me.confirmEmailChange(emailCode.trim());
+    setEmailCode("");
+    setAwaitingCode(false);
+    await refresh();
+    toast.done("Email saved.");
+  });
+
+  const close = useMutation(async () => {
+    await api.me.closeAccount(closePassword);
+    await signOut();
+    navigate("/", { replace: true });
+  });
 
   return (
     <div className="stack stack--loose">
-      {confirmElement}
+      <Group title={c.account.name}>
+        <form
+          className="stack stack--snug"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            await saveName.run();
+            const error = saveName.readError();
+            if (error) toast.failed(error, "save");
+          }}
+        >
+          <TextField label={c.account.name} value={name} onChange={(event) => setName(event.target.value)} required />
+          <Action
+            type="submit"
+            size="sm"
+            tone="primary"
+            pending={saveName.pending}
+            pendingLabel={c.pending.saving}
+            disabled={name.trim() === user?.name || name.trim().length < 2}
+          >
+            {c.common.save}
+          </Action>
+        </form>
+      </Group>
 
-      <section className="card stack">
-        <div className="row row--between">
-          <h2 className="card__title">Two step sign in</h2>
-          {status.loading ? null : (
-            <Badge tone={status.data?.enabled ? "good" : "neutral"}>{status.data?.enabled ? "On" : "Off"}</Badge>
-          )}
-        </div>
-        <p className="fine muted">
-          With this on, your password alone is not enough to get in. You also type a code from an authenticator app on
-          your phone.
-        </p>
-
-        {status.data?.enabled ? (
+      <Group title={c.account.email} hint="Changing this sends a code to the new address to prove it is yours.">
+        {awaitingCode ? (
           <form
-            className="stack"
+            className="stack stack--snug"
             onSubmit={async (event) => {
               event.preventDefault();
-              if (!(await disable.run(password))) {
-                toast.failed(disable.readError());
-                return;
-              }
-              setPassword("");
-              status.reload();
-              toast.done("Two step sign in switched off.");
+              await confirmEmail.run();
+              const error = confirmEmail.readError();
+              if (error) toast.failed(error, "save");
             }}
           >
+            <Notice tone="info">{c.account.emailCodeSent}</Notice>
             <TextField
-              label="Your password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-            <div className="row">
-              <Button type="submit" tone="danger" busy={disable.busy} disabled={!password}>
-                Switch it off
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <div className="row">
-            <Button
-              icon="shield"
-              busy={begin.busy}
-              onClick={async () => {
-                const result = await begin.run();
-                if (!result) {
-                  toast.failed(begin.readError());
-                  return;
-                }
-                setSetup({ secret: result.secret, qrDataUrl: result.qrDataUrl });
-              }}
-            >
-              Set it up
-            </Button>
-          </div>
-        )}
-      </section>
-
-      <section className="card stack">
-        <div className="row row--between">
-          <h2 className="card__title">Passkeys</h2>
-          {canUsePasskeys ? (
-            <Button
-              size="sm"
-              icon="key"
-              busy={addingKey}
-              onClick={async () => {
-                setAddingKey(true);
-                setKeyProblem(null);
-                try {
-                  const name = await addPasskey();
-                  passkeys.reload();
-                  toast.done(`${name} can now sign you in.`);
-                } catch (err) {
-                  /* Cancelling the fingerprint prompt is a decision, not an
-                     error, and it should not paint the screen red. */
-                  if (err instanceof PasskeyError && err.cancelled) return;
-                  setKeyProblem(err instanceof Error ? err.message : "That did not work.");
-                } finally {
-                  setAddingKey(false);
-                }
-              }}
-            >
-              Add
-            </Button>
-          ) : null}
-        </div>
-
-        <p className="fine muted">
-          Sign in with your fingerprint, your face or your screen lock instead of a password. The key stays on this
-          device.
-        </p>
-
-        {keyProblem ? <Notice tone="bad">{keyProblem}</Notice> : null}
-        {!canUsePasskeys ? <p className="fine faint">This browser does not support passkeys.</p> : null}
-
-        {passkeys.loading ? (
-          <Skeleton height="3rem" />
-        ) : (passkeys.data ?? []).length === 0 ? (
-          <p className="fine muted">No passkeys on this account yet.</p>
-        ) : (
-          <ul className="stack stack--tight">
-            {(passkeys.data ?? []).map((key) => (
-              <li key={key.id} className="row row--between">
-                <span className="fine">
-                  <Icon name="key" size={15} /> {key.display_name}
-                  <span className="faint"> added {stampLabel(key.created_at)}</span>
-                </span>
-                <Button
-                  size="sm"
-                  tone="danger"
-                  onClick={async () => {
-                    const ok = await confirm({
-                      title: "Remove this passkey?",
-                      body: "You will not be able to sign in with it again.",
-                      confirmLabel: "Remove",
-                    });
-                    if (!ok) return;
-                    try {
-                      await api.me.removePasskey(key.id);
-                      passkeys.reload();
-                      toast.done("Passkey removed.");
-                    } catch (err) {
-                      toast.failed(err);
-                    }
-                  }}
-                >
-                  Remove
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="card stack">
-        <h2 className="card__title">Need a hand</h2>
-        <p className="fine muted">Message the restaurant about a booking, an order, or anything else.</p>
-        <div className="row">
-          <LinkButton to="/help" icon="message">
-            Message us
-          </LinkButton>
-        </div>
-      </section>
-
-      <section className="card stack">
-        <h2 className="card__title">Signed in on</h2>
-        <p className="fine muted">Every device with access right now. Not one you recognise? Sign it out.</p>
-
-        {sessions.loading ? (
-          <Skeleton height="3rem" />
-        ) : sessions.error ? (
-          <ErrorState error={sessions.error} onRetry={sessions.reload} />
-        ) : (
-          <ul className="stack stack--tight session-list">
-            {(sessions.data ?? []).map((session) => (
-              <li key={session.id} className="session-row">
-                <span className="session-row__icon">
-                  <Icon name={DEVICE_ICON[session.device_type]} size={18} />
-                </span>
-                <span className="session-row__body">
-                  <span className="session-row__name">
-                    {session.device_name}
-                    {session.current ? <span className="badge badge--good session-row__badge">This device</span> : null}
-                  </span>
-                  <span className="fine faint">
-                    {session.location ?? "Unknown location"} · Active {stampLabel(session.last_seen_at)}
-                  </span>
-                </span>
-                {!session.current ? (
-                  <Button
-                    size="sm"
-                    tone="quiet"
-                    onClick={async () => {
-                      try {
-                        await api.me.revokeSession(session.id);
-                        sessions.reload();
-                        toast.done("That device is signed out.");
-                      } catch (err) {
-                        toast.failed(err);
-                      }
-                    }}
-                  >
-                    Sign out
-                  </Button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <div className="row">
-          <Button
-            size="sm"
-            tone="ghost"
-            icon="logout"
-            onClick={async () => {
-              const ok = await confirm({
-                title: "Sign out everywhere?",
-                body: "Every device will need to sign in again, including this one.",
-                confirmLabel: "Sign out everywhere",
-              });
-              if (!ok) return;
-              try {
-                await api.me.signOutEverywhere();
-                await signOut();
-                navigate("/signin", { replace: true });
-              } catch (err) {
-                toast.failed(err);
-              }
-            }}
-          >
-            Sign out everywhere
-          </Button>
-        </div>
-      </section>
-
-      <section className="card stack card--hot">
-        <h2 className="card__title">Close this account</h2>
-        <p className="fine muted">
-          Your bookings and orders stay in the restaurant's records, which we are required to keep. Everything that
-          identifies you goes.
-        </p>
-        <div className="row">
-          <Button tone="danger" onClick={() => setClosing(true)}>
-            Close my account
-          </Button>
-        </div>
-      </section>
-
-      <Sheet
-        open={Boolean(setup)}
-        onClose={() => setSetup(null)}
-        title="Scan this"
-        description="Open your authenticator app, scan the square, then type the code it shows."
-        footer={
-          <>
-            <Button tone="ghost" onClick={() => setSetup(null)}>
-              Cancel
-            </Button>
-            <Button
-              tone="primary"
-              busy={confirmCode.busy}
-              onClick={async () => {
-                if (!(await confirmCode.run(code.trim()))) {
-                  setProblem("That code was not accepted. Try the next one it shows.");
-                  return;
-                }
-                setSetup(null);
-                setCode("");
-                setProblem(null);
-                status.reload();
-                toast.done("Two step sign in is on.");
-              }}
-            >
-              Turn it on
-            </Button>
-          </>
-        }
-      >
-        {setup ? (
-          <>
-            <img className="qr" src={setup.qrDataUrl} alt="" width={200} height={200} />
-            <div className="fine faint">
-              Cannot scan? Type this key instead:
-              <code className="secret">{setup.secret}</code>
-            </div>
-            <TextField
-              label="Code from the app"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
+              label={c.account.emailCode}
+              value={emailCode}
+              onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, ""))}
               inputMode="numeric"
               maxLength={6}
-              autoComplete="one-time-code"
+              required
             />
-            {problem ? <Notice tone="bad">{problem}</Notice> : null}
-          </>
-        ) : null}
-      </Sheet>
+            <Action
+              type="submit"
+              size="sm"
+              tone="primary"
+              pending={confirmEmail.pending}
+              pendingLabel={c.pending.checking}
+              disabled={emailCode.length < 6}
+            >
+              {c.auth.verify}
+            </Action>
+          </form>
+        ) : (
+          <form
+            className="stack stack--snug"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              await changeEmail.run();
+              const error = changeEmail.readError();
+              if (error) toast.failed(error, "save");
+            }}
+          >
+            <TextField
+              label={c.account.email}
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              inputMode="email"
+              required
+            />
+            <PasswordField
+              label={c.account.currentPassword}
+              hint="To prove it is you."
+              value={password}
+              onChange={setPassword}
+            />
+            <Action
+              type="submit"
+              size="sm"
+              tone="primary"
+              pending={changeEmail.pending}
+              pendingLabel={c.pending.saving}
+              disabled={email.trim() === user?.email || !password}
+            >
+              {c.account.changeEmail}
+            </Action>
+          </form>
+        )}
+      </Group>
+
+      <Group title="Signing out">
+        <Button
+          tone="ghost"
+          size="sm"
+          icon="logout"
+          block
+          onClick={async () => {
+            await signOut();
+            navigate("/", { replace: true });
+          }}
+        >
+          {c.account.signOut}
+        </Button>
+      </Group>
+
+      <Group title={c.account.closeAccount} hint={c.account.closeBody}>
+        <Button tone="quiet" size="sm" icon="trash" onClick={() => setClosing(true)}>
+          {c.account.closeAccount}
+        </Button>
+      </Group>
 
       <Sheet
         open={closing}
         onClose={() => setClosing(false)}
-        title="Close this account"
-        description="This cannot be undone."
+        title={c.account.closeConfirm}
         footer={
-          <>
-            <Button tone="ghost" onClick={() => setClosing(false)}>
-              Keep it
-            </Button>
-            <Button
-              tone="danger"
-              busy={close.busy}
-              disabled={!password}
-              onClick={async () => {
-                if (!(await close.run(password))) {
-                  toast.failed(close.readError());
-                  return;
-                }
-                await signOut();
-                navigate("/", { replace: true });
-                toast.say("Your account is closed.");
-              }}
-            >
-              Close it
-            </Button>
-          </>
+          <Action
+            tone="danger"
+            block
+            pending={close.pending}
+            pendingLabel={c.pending.deleting}
+            disabled={!closePassword}
+            onClick={async () => {
+              const sure = await confirm({
+                title: c.account.closeConfirm,
+                body: c.account.closeBody,
+                confirmLabel: "Close it",
+                cancelLabel: "Keep it",
+              });
+              if (!sure) return;
+              await close.run();
+              const error = close.readError();
+              if (error) toast.failed(error, "delete");
+            }}
+          >
+            {c.account.closeAccount}
+          </Action>
         }
       >
-        <TextField
-          label="Your password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="current-password"
-        />
+        <div className="stack">
+          <p className="lead">{c.account.closeBody}</p>
+          <PasswordField label={c.account.currentPassword} value={closePassword} onChange={setClosePassword} />
+        </div>
       </Sheet>
+
+      {element}
     </div>
   );
 }
 
-function Rewards() {
-  const loyalty = useResource(() => api.me.loyalty(), []);
-  const receipts = useResource(() => api.me.receipts(), []);
+/* ── Security ───────────────────────────────────────────────────────────────*/
+
+function Security() {
+  const { c } = useCopy();
+  const toast = useToast();
+  const { confirm, element } = useConfirm();
+
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [twoFactorSetup, setTwoFactorSetup] = useState<{ uri: string; qrDataUrl: string } | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [disablePassword, setDisablePassword] = useState("");
+  const [disabling, setDisabling] = useState(false);
+
+  const twoFactor = useQuery(K.myTwoFactor, () => api.me.twoFactorStatus(), { staleMs: 60_000 });
+  const passkeys = useQuery(K.myPasskeys, () => api.me.passkeys(), { staleMs: 60_000 });
+  const sessions = useQuery(K.mySessions, () => api.me.sessions(), { staleMs: 30_000 });
+
+  const strength = useMemo(() => {
+    if (!next) return null;
+    const complaint = checkPassword(next);
+    return { score: passwordScore(next), label: SCORE_WORDS[passwordScore(next)] ?? "", problems: complaint ? [complaint] : [] };
+  }, [next]);
+
+  const changePassword = useMutation(async () => {
+    const complaint = checkPassword(next);
+    if (complaint) throw new Error(complaint);
+    await api.me.changePassword(current, next);
+    setCurrent("");
+    setNext("");
+    invalidate(K.mySessions);
+    toast.done(c.account.passwordChanged);
+  });
+
+  const beginTwoFactor = useMutation(async () => {
+    const setup = await api.me.beginTwoFactor();
+    setTwoFactorSetup({ uri: setup.uri, qrDataUrl: setup.qrDataUrl });
+  });
+
+  const enableTwoFactor = useMutation(async () => {
+    await api.me.confirmTwoFactor(twoFactorCode.trim());
+    setTwoFactorSetup(null);
+    setTwoFactorCode("");
+    invalidate(K.myTwoFactor);
+    twoFactor.reload();
+    toast.done("Two-step sign in is on.");
+  });
+
+  const disableTwoFactor = useMutation(async () => {
+    await api.me.disableTwoFactor(disablePassword);
+    setDisablePassword("");
+    setDisabling(false);
+    invalidate(K.myTwoFactor);
+    twoFactor.reload();
+    toast.done("Two-step sign in is off.");
+  });
+
+  const enrolPasskey = useMutation(async () => {
+    await addPasskey();
+    invalidate(K.myPasskeys);
+    passkeys.reload();
+    toast.done("Passkey added.");
+  });
+
+  const dropPasskey = useMutation(async (id: number) => {
+    await api.me.removePasskey(id);
+    invalidate(K.myPasskeys);
+    passkeys.reload();
+  });
+
+  const endSession = useMutation(async (id: string) => {
+    await api.me.revokeSession(id);
+    invalidate(K.mySessions);
+    sessions.reload();
+  });
+
+  const signOutOthers = useMutation(async () => {
+    await api.me.signOutEverywhere();
+    invalidate(K.mySessions);
+    sessions.reload();
+    toast.done("Signed out everywhere else.");
+  });
 
   return (
     <div className="stack stack--loose">
-      <section className="card stack">
-        <h2 className="card__title">Points</h2>
-        {loyalty.loading ? (
-          <Skeleton height="4rem" />
-        ) : loyalty.error ? (
-          <ErrorState error={loyalty.error} onRetry={loyalty.reload} />
-        ) : (
-          <>
-            <p className="points mono">{loyalty.data?.points_balance ?? 0}</p>
-            {/* The balance in money, because a point is a number nobody can
-                value on sight, and the rules underneath so the figure is not a
-                claim the guest has to take on trust. */}
-            <p className="fine muted">
-              {loyalty.data && loyalty.data.value_fcfa > 0 ? (
-                <>
-                  Worth <Money value={loyalty.data.value_fcfa} /> off a bill.{" "}
-                </>
-              ) : null}
-              One point for every {money(loyalty.data?.rules.fcfa_per_point ?? 100)} FCFA you spend.
-              {loyalty.data && !loyalty.data.spendable
-                ? ` They can be used once you have ${loyalty.data.rules.min_redeem_points}.`
-                : " They come off when you book a table or pay for an order."}
-            </p>
-            {(loyalty.data?.ledger ?? []).length > 0 ? (
-              <ul className="stack stack--tight" style={{ marginTop: "var(--s-3)" }}>
-                {(loyalty.data?.ledger ?? []).slice(0, 8).map((entry, index) => (
-                  <li key={index} className="row row--between fine">
-                    <span className="muted">{entry.reason}</span>
-                    <span className="mono">{entry.amount > 0 ? `+${entry.amount}` : entry.amount}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </>
-        )}
-      </section>
+      {/* ── Password ───────────────────────────────────────────────────────*/}
+      <Group title={c.account.password} hint="Changing it signs out every other device.">
+        <form
+          className="stack stack--snug"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            await changePassword.run();
+            const error = changePassword.readError();
+            if (error) toast.failed(error, "save");
+          }}
+        >
+          <PasswordField label={c.account.currentPassword} value={current} onChange={setCurrent} />
+          <PasswordField
+            label={c.account.newPassword}
+            value={next}
+            onChange={setNext}
+            autoComplete="new-password"
+            strength={strength}
+          />
+          <Action
+            type="submit"
+            size="sm"
+            tone="primary"
+            pending={changePassword.pending}
+            pendingLabel={c.pending.saving}
+            disabled={!current || !next}
+          >
+            {c.common.save}
+          </Action>
+        </form>
+      </Group>
 
-      <section className="stack">
-        <h2 className="card__title">Receipts</h2>
-        {receipts.loading ? (
-          <SkeletonCards count={2} height="4rem" />
-        ) : (receipts.data ?? []).length === 0 ? (
-          <EmptyState icon="receipt" title="No receipts yet">
-            Once you pay a deposit or an order, the receipt shows up here.
-          </EmptyState>
+      {/* ── Two step ───────────────────────────────────────────────────────*/}
+      <Group title={c.account.twoStep} hint={c.account.twoStepBody}>
+        <div className="rows">
+          <div className="row">
+            <Icon name="shield" size={17} className="row__lead" />
+            <span className="grow">{c.account.twoStep}</span>
+            <Badge tone={twoFactor.data?.enabled ? "good" : "neutral"}>
+              {twoFactor.data?.enabled ? c.account.twoStepOn : c.account.twoStepOff}
+            </Badge>
+          </div>
+        </div>
+
+        {twoFactor.data?.enabled ? (
+          disabling ? (
+            <form
+              className="stack stack--snug"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                await disableTwoFactor.run();
+                const error = disableTwoFactor.readError();
+                if (error) toast.failed(error, "save");
+              }}
+            >
+              <PasswordField label={c.account.currentPassword} value={disablePassword} onChange={setDisablePassword} />
+              <div className="bar bar--tight">
+                <Button tone="quiet" size="sm" block onClick={() => setDisabling(false)}>
+                  {c.common.cancel}
+                </Button>
+                <Action
+                  type="submit"
+                  size="sm"
+                  tone="danger"
+                  block
+                  pending={disableTwoFactor.pending}
+                  pendingLabel={c.pending.saving}
+                  disabled={!disablePassword}
+                >
+                  Turn it off
+                </Action>
+              </div>
+            </form>
+          ) : (
+            <Button tone="quiet" size="sm" onClick={() => setDisabling(true)}>
+              Turn it off
+            </Button>
+          )
         ) : (
-          <ul className="stack stack--tight">
-            {(receipts.data ?? []).map((receipt) => (
-              <li key={receipt.id} className="card card--tight row row--between row--wrap">
-                <span>
-                  <strong>{dayLabel(receipt.date)}</strong> at {timeLabel(receipt.time)}
-                  <span className="fine faint"> {receipt.ccm_code}</span>
-                </span>
-                {receipt.amount_fcfa ? <Money value={receipt.amount_fcfa} /> : <span className="fine faint">Unpaid</span>}
-              </li>
-            ))}
-          </ul>
+          <Action
+            size="sm"
+            tone="ghost"
+            icon="shield"
+            pending={beginTwoFactor.pending}
+            pendingLabel={c.pending.checking}
+            onClick={async () => {
+              await beginTwoFactor.run();
+              const error = beginTwoFactor.readError();
+              if (error) toast.failed(error, "save");
+            }}
+          >
+            Turn it on
+          </Action>
         )}
-      </section>
+      </Group>
+
+      {/* ── Passkeys ───────────────────────────────────────────────────────*/}
+      <Group title={c.account.passkeys} hint={c.account.passkeysBody}>
+        {passkeys.loading ? (
+          <SkeletonRows count={1} />
+        ) : (passkeys.data?.length ?? 0) === 0 ? (
+          <p className="fine faint">None yet.</p>
+        ) : (
+          <div className="rows">
+            {passkeys.data?.map((key) => (
+              <div key={key.id} className="row">
+                <Icon name="key" size={17} className="row__lead" />
+                <span className="grow stack stack--tight">
+                  <span className="small">{key.display_name}</span>
+                  <span className="fine faint">
+                    {key.last_used_at ? `Last used ${timeAgo(key.last_used_at)}` : `Added ${stampLabel(key.created_at)}`}
+                  </span>
+                </span>
+                <IconButton
+                  name="trash"
+                  label={`Remove ${key.display_name}`}
+                  size="sm"
+                  pending={dropPasskey.pending}
+                  onClick={async () => {
+                    const sure = await confirm({
+                      title: "Remove this passkey?",
+                      body: "You will not be able to sign in with it afterwards.",
+                      confirmLabel: "Remove it",
+                    });
+                    if (!sure) return;
+                    await dropPasskey.run(key.id);
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {passkeysSupported() ? (
+          <Action
+            size="sm"
+            tone="ghost"
+            icon="key"
+            pending={enrolPasskey.pending}
+            pendingLabel={c.pending.saving}
+            onClick={async () => {
+              await enrolPasskey.run();
+              const error = enrolPasskey.readError();
+              if (error) toast.failed(error, "save");
+            }}
+          >
+            {c.account.addPasskey}
+          </Action>
+        ) : (
+          <p className="fine faint">This device does not support passkeys.</p>
+        )}
+      </Group>
+
+      {/* ── Devices ────────────────────────────────────────────────────────*/}
+      <Group title={c.account.devices}>
+        {sessions.loading ? (
+          <SkeletonRows count={2} />
+        ) : (
+          <div className="rows">
+            {sessions.data?.map((entry) => (
+              <div key={entry.id} className="row">
+                <Icon name={deviceIcon(entry.device_type)} size={17} className="row__lead" />
+                <span className="grow stack stack--tight">
+                  <span className="small">{entry.device_name}</span>
+                  <span className="fine faint">
+                    {entry.location ? `${entry.location} · ` : ""}
+                    {timeAgo(entry.last_seen_at)}
+                  </span>
+                </span>
+                {entry.current ? (
+                  <Badge tone="good">{c.account.thisDevice}</Badge>
+                ) : (
+                  <IconButton
+                    name="logout"
+                    label={`Sign out ${entry.device_name}`}
+                    size="sm"
+                    pending={endSession.pending}
+                    onClick={() => void endSession.run(entry.id)}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <Action
+          size="sm"
+          tone="quiet"
+          icon="logout"
+          pending={signOutOthers.pending}
+          pendingLabel={c.pending.signingOut}
+          onClick={async () => {
+            const sure = await confirm({
+              title: c.account.signOutOthers,
+              body: "Every other phone and computer will have to sign in again. This one stays signed in.",
+              confirmLabel: "Sign them out",
+              tone: "primary",
+            });
+            if (!sure) return;
+            await signOutOthers.run();
+          }}
+        >
+          {c.account.signOutOthers}
+        </Action>
+      </Group>
+
+      {/* ── Turning two step on ────────────────────────────────────────────*/}
+      <Sheet
+        open={twoFactorSetup !== null}
+        onClose={() => setTwoFactorSetup(null)}
+        title={c.account.twoStep}
+        footer={
+          <Action
+            tone="primary"
+            block
+            pending={enableTwoFactor.pending}
+            pendingLabel={c.pending.checking}
+            disabled={twoFactorCode.length < 6}
+            onClick={async () => {
+              await enableTwoFactor.run();
+              const error = enableTwoFactor.readError();
+              if (error) toast.failed(error, "save");
+            }}
+          >
+            {c.auth.verify}
+          </Action>
+        }
+      >
+        <div className="stack">
+          <p className="lead">
+            Scan this with your authenticator app, then type the six-digit code it gives you.
+          </p>
+          {twoFactorSetup ? (
+            <img src={twoFactorSetup.qrDataUrl} alt="" width={180} height={180} className="qr" />
+          ) : null}
+          <TextField
+            label={c.auth.code}
+            value={twoFactorCode}
+            onChange={(event) => setTwoFactorCode(event.target.value.replace(/\D/g, ""))}
+            inputMode="numeric"
+            maxLength={6}
+          />
+        </div>
+      </Sheet>
+
+      {element}
     </div>
   );
 }
 
-export function AccountPage() {
-  const { user, signOut } = useSession();
-  const navigate = useNavigate();
-  const [tab, setTab] = useState<"profile" | "security" | "rewards">("profile");
+function deviceIcon(type: string): IconName {
+  if (type === "tablet") return "tablet";
+  if (type === "desktop") return "monitor";
+  return "smartphone";
+}
+
+/* ── Rewards ────────────────────────────────────────────────────────────────*/
+
+function Rewards() {
+  const { c, fill } = useCopy();
+  const { siteConfig } = useVenue();
+  const loyalty = useQuery(K.myLoyalty, () => api.me.loyalty(), { staleMs: 60_000 });
+
+  if (!siteConfig.features.loyalty) {
+    return <EmptyState icon="sparkle" title="Points are switched off at the moment." />;
+  }
+
+  if (loyalty.loading) return <SkeletonRows count={3} />;
+
+  const data = loyalty.data;
+  if (!data) return <EmptyState icon="sparkle" title={c.common.nothingYet} />;
+
+  const shortBy = Math.max(0, data.rules.min_redeem_points - data.points_balance);
 
   return (
-    <div className="page section account">
-      <div className="account-head">
-        <Avatar name={user?.name ?? ""} large />
-        <div>
-          <h1 className="display display--lg">{user?.name}</h1>
-          <p className="fine faint">{user?.email}</p>
+    <div className="stack stack--loose">
+      <div className="carry points">
+        <p className="label">{c.account.pointsBalance}</p>
+        <p className="display display--hero points__number">{data.points_balance}</p>
+        <p className="lead">{fill(c.account.pointsWorth, { value: money(data.value_fcfa) })}</p>
+
+        {shortBy > 0 ? (
+          <>
+            <Meter value={data.points_balance} max={data.rules.min_redeem_points} label={c.account.pointsBalance} />
+            <p className="fine muted">{fill(c.account.pointsNeed, { n: shortBy })}</p>
+          </>
+        ) : (
+          <Badge tone="good">Ready to spend</Badge>
+        )}
+      </div>
+
+      <p className="fine faint">
+        {fill(c.account.pointsBody, { per: money(data.rules.fcfa_per_point) })} Points cover at most{" "}
+        {data.rules.max_redeem_percent}% of a bill, so the rest always arrives as money.
+      </p>
+
+      <Group title={c.account.pointsHistory}>
+        {data.ledger.length === 0 ? (
+          <p className="fine faint">{c.common.nothingYet}</p>
+        ) : (
+          <div className="rows">
+            {data.ledger.map((entry, index) => (
+              <div key={`${entry.created_at}-${index}`} className="row">
+                <Icon name={entry.amount > 0 ? "plus" : "minus"} size={15} className="row__lead" />
+                <span className="grow stack stack--tight">
+                  <span className="small">{entry.reason}</span>
+                  <span className="fine faint">{stampLabel(entry.created_at)}</span>
+                </span>
+                <span className={entry.amount > 0 ? "small strong" : "small muted"}>
+                  {entry.amount > 0 ? "+" : ""}
+                  {entry.amount}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Group>
+
+      <Group title={c.mine.receipt}>
+        <Receipts />
+      </Group>
+    </div>
+  );
+}
+
+function Receipts() {
+  const { c } = useCopy();
+  const { data, loading } = useQuery(K.myReceipts, () => api.me.receipts(), { staleMs: 60_000 });
+
+  if (loading) return <SkeletonRows count={2} />;
+  if (!data || data.length === 0) return <p className="fine faint">{c.common.nothingYet}</p>;
+
+  return (
+    <div className="rows">
+      {data.map((receipt) => (
+        <div key={receipt.id} className="row">
+          <Icon name="receipt" size={17} className="row__lead" />
+          <span className="grow stack stack--tight">
+            <span className="small">
+              {receipt.date}, {receipt.time}
+            </span>
+            <span className="fine faint">{receipt.ccm_code ?? receipt.pay_method ?? ""}</span>
+          </span>
+          {receipt.amount_fcfa ? <Money value={receipt.amount_fcfa} size="fine" /> : null}
         </div>
-        <Button
-          className="push"
-          tone="ghost"
-          icon="logout"
-          onClick={async () => {
-            await signOut();
-            navigate("/");
-          }}
-        >
-          Sign out
-        </Button>
-      </div>
-
-      <div className="tabs" role="tablist" aria-label="Account sections">
-        <button type="button" role="tab" className="tab" aria-selected={tab === "profile"} onClick={() => setTab("profile")}>
-          Details
-        </button>
-        <button
-          type="button"
-          role="tab"
-          className="tab"
-          aria-selected={tab === "security"}
-          onClick={() => setTab("security")}
-        >
-          Security
-        </button>
-        <button
-          type="button"
-          role="tab"
-          className="tab"
-          aria-selected={tab === "rewards"}
-          onClick={() => setTab("rewards")}
-        >
-          Points and receipts
-        </button>
-      </div>
-
-      <div style={{ marginTop: "var(--s-5)", maxWidth: "40rem" }}>
-        {tab === "profile" ? <Profile /> : tab === "security" ? <Security /> : <Rewards />}
-      </div>
+      ))}
     </div>
   );
 }
