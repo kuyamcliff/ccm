@@ -1,98 +1,139 @@
-import { useState } from "react";
-import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { ApiError } from "~/lib/http";
-import { useAction } from "~/lib/useResource";
-import { Button } from "~/ui/Button";
-import { TextField } from "~/ui/Field";
+import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useMutation } from "~/lib/store";
+import { say } from "~/lib/say";
+import { checkPassword, passwordScore } from "~/lib/passwordStrength";
+import { Action } from "~/ui/Button";
+import { TextField, PasswordField } from "~/ui/Field";
 import { Notice } from "~/ui/Feedback";
-import { PasswordField } from "~/ui/PasswordField";
-import { checkPassword } from "~/lib/passwordStrength";
 import { useSession } from "~/state/session";
+import { useCopy } from "~/state/locale";
 
+/** What the meter says at each score. Words, not a colour: somebody who cannot
+    tell the red bar from the green one still reads "Weak". */
+const SCORE_WORDS = ["Too weak", "Weak", "Getting there", "Good", "Strong"];
+
+/**
+ * Creating an account.
+ *
+ * The password rules are checked here as you type, against a byte-for-byte copy
+ * of the server's own rules (`lib/passwordStrength.ts`, kept in step by
+ * `npm run check:rules` in the backend). That matters more than it looks: the
+ * registration endpoint is rate limited to five per hour per address, so a
+ * password rejected by the server is not just an annoyance, it is one of five
+ * chances gone.
+ */
 export function JoinPage() {
-  const { user, register } = useSession();
+  const { c } = useCopy();
+  const { register } = useSession();
   const navigate = useNavigate();
-  const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from ?? "/mine";
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
 
-  const create = useAction(async () => {
+  /* The identity is passed in so the rules can refuse a password built out of
+     the person's own name or email, exactly as the server does. */
+  const identity = useMemo(() => ({ name: name.trim(), email: email.trim() }), [name, email]);
+
+  const strength = useMemo(() => {
+    if (!password) return null;
+    const complaint = checkPassword(password, identity);
+    return {
+      score: passwordScore(password, identity),
+      label: SCORE_WORDS[passwordScore(password, identity)] ?? "",
+      problems: complaint ? [complaint] : [],
+    };
+  }, [password, identity]);
+
+  const join = useMutation(async () => {
+    setProblem(null);
+    const complaint = checkPassword(password, identity);
+    if (complaint) {
+      setProblem(complaint);
+      return;
+    }
     await register(name.trim(), email.trim(), password);
-    navigate(from, { replace: true });
+    navigate("/mine", { replace: true });
   });
 
-  if (user) return <Navigate to={from} replace />;
-
-  /* The name and email above are what a password must not be built out of, so
-     they travel with it into the same check the server runs. */
-  const identity = { name: name.trim(), email: email.trim() };
+  const ready = name.trim().length > 1 && email.trim().includes("@") && password.length > 0;
 
   return (
-    <div className="page auth">
-      <div className="auth__card card stack">
-        <h1 className="display display--lg">Create an account</h1>
-        <p className="muted">Book faster, and change or cancel a table yourself.</p>
+    <div className="page section auth">
+      <header className="stack stack--tight">
+        <h1 className="display display--xl">{c.auth.joinTitle}</h1>
+        <p className="lead">{c.auth.joinLead}</p>
+      </header>
 
-        <form
-          className="stack"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            setProblem(null);
-            const weak = checkPassword(password, identity);
-            if (weak) {
-              setProblem(weak);
-              return;
-            }
-            await create.run();
-            const failure = create.readError();
-            if (failure) {
-              setProblem(failure instanceof ApiError ? failure.message : "That did not work.");
-            }
-          }}
+      <form
+        className="stack"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          await join.run();
+          const error = join.readError();
+          if (error) setProblem(say(error, "join"));
+        }}
+      >
+        {problem ? <Notice tone="bad">{problem}</Notice> : null}
+
+        <TextField
+          label={c.auth.name}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          autoComplete="name"
+          required
+        />
+
+        <TextField
+          label={c.auth.email}
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          autoComplete="email"
+          inputMode="email"
+          required
+        />
+
+        <PasswordField
+          label={c.auth.password}
+          value={password}
+          onChange={setPassword}
+          autoComplete="new-password"
+          strength={strength}
+          required
+        />
+
+        <Action
+          type="submit"
+          tone="primary"
+          block
+          pending={join.pending}
+          pendingLabel={c.pending.creating}
+          disabled={!ready}
         >
-          <TextField
-            label="Your name"
-            hint="What we will call out when your table is ready."
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            autoComplete="name"
-            required
-          />
-          <TextField
-            label="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-            inputMode="email"
-            required
-          />
-          <PasswordField
-            value={password}
-            onChange={setPassword}
-            identity={identity}
-            required
-          />
+          {c.auth.join}
+        </Action>
+      </form>
 
-          {problem ? <Notice tone="bad">{problem}</Notice> : null}
+      <p className="fine center muted">
+        {c.auth.haveAccount}{" "}
+        <Link to="/signin" className="link" viewTransition>
+          {c.auth.signIn}
+        </Link>
+      </p>
 
-          <Button type="submit" tone="primary" block busy={create.busy}>
-            Create account
-          </Button>
-
-          <p className="fine faint">
-            By creating an account you accept our <Link to="/terms">terms</Link> and{" "}
-            <Link to="/privacy">privacy policy</Link>.
-          </p>
-        </form>
-      </div>
-
-      <p className="auth__switch">
-        Already have one? <Link to="/signin">Sign in</Link>
+      <p className="fine faint center">
+        By creating an account you agree to our{" "}
+        <Link to="/terms" className="link" viewTransition>
+          {c.nav.terms}
+        </Link>{" "}
+        and{" "}
+        <Link to="/privacy" className="link" viewTransition>
+          {c.nav.privacy}
+        </Link>
+        .
       </p>
     </div>
   );

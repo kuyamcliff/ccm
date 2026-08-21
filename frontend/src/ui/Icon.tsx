@@ -74,7 +74,20 @@ export type IconName =
   | "wifi-off"
   | "smartphone"
   | "tablet"
-  | "monitor";
+  | "monitor"
+  /* Added for v5: cash at the counter, the reminder sweep, and the developer
+     tier. Same 24 grid and 1.75 stroke as everything above. */
+  | "cash"
+  | "bell"
+  | "terminal"
+  | "database"
+  | "activity"
+  | "flag"
+  | "bug"
+  | "pause"
+  | "play"
+  | "drag"
+  | "sliders";
 
 /* Paths are stroked, not filled, unless noted. Coordinates are exact so the
    whole set stays optically aligned at 20px. */
@@ -145,10 +158,26 @@ const PATHS: Record<IconName, string> = {
   tablet: "M5.5 3h13A1.5 1.5 0 0 1 20 4.5v15a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5v-15A1.5 1.5 0 0 1 5.5 3ZM11 18.5h2",
   monitor: "M3.5 4h17a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-17a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1ZM8 21h8M12 17v4",
   "wifi-off": "M3 3l18 18M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 3.5-2.3M19 13a10 10 0 0 0-3-2.2M2 9a15 15 0 0 1 5-3.1M22 9a15 15 0 0 0-9.5-3.4M12 20h.01",
+
+  /* v5 additions. Cash is a note with a coin on it rather than a currency
+     glyph, because FCFA has no symbol a phone renders reliably. */
+  cash: "M2.5 6.5h19a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-19a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1ZM12 14.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM5.5 10v.01M18.5 14v.01",
+  bell: "M18 9a6 6 0 0 0-12 0c0 5-2 6.5-2 6.5h16S18 14 18 9ZM13.7 19a2 2 0 0 1-3.4 0",
+  terminal: "M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1ZM8 9l3 3-3 3M13.5 15.5h3",
+  database: "M12 7.5c4.4 0 8-1.2 8-2.75S16.4 2 12 2 4 3.2 4 4.75 7.6 7.5 12 7.5ZM4 4.75v14.5C4 20.8 7.6 22 12 22s8-1.2 8-2.75V4.75M4 12c0 1.55 3.6 2.75 8 2.75s8-1.2 8-2.75",
+  activity: "M2.5 12h4l2.5-7 5 14 2.5-7h5",
+  flag: "M5 21V4M5 5h11.5l-2 3.5 2 3.5H5",
+  bug: "M8 6a4 4 0 0 1 8 0M6.5 10h11v4a5.5 5.5 0 0 1-11 0v-4ZM6.5 12H3M21 12h-3.5M6.8 7.5 4.5 5.8M17.2 7.5l2.3-1.7M6.8 16.5l-2.3 1.7M17.2 16.5l2.3 1.7",
+  pause: "M9 4.5v15M15 4.5v15",
+  play: "M7 4.6v14.8l13-7.4-13-7.4Z",
+  /* Two rows of grip dots, the handle every phone list uses for reordering. */
+  drag: "M9 6.5v.01M15 6.5v.01M9 12v.01M15 12v.01M9 17.5v.01M15 17.5v.01",
+  sliders: "M4 7h9M17 7h3M4 17h3M11 17h9M15 4.5v5M7 14.5v5",
 };
 
-/** Icons that read better filled than stroked. */
-const FILLED = new Set<IconName>(["star", "flame"]);
+/** Icons that read better filled than stroked. A stroked play triangle reads as
+    an outline arrow at 16px, which is a different instruction entirely. */
+const FILLED = new Set<IconName>(["star", "flame", "play"]);
 
 interface IconProps {
   name: IconName;

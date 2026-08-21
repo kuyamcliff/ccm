@@ -112,9 +112,12 @@ describe("parseSiteConfig", () => {
     assert.equal(config.payments.orange, true);
   });
 
-  it("never invents a payment method beyond the two wallets", () => {
+  it("never invents a payment method beyond the ones this product offers", () => {
+    /* `card: true` in the blob must not become a card payment option. This is
+       the product's hardest constraint and CI fails the build on card terms in
+       the source, so the parser is held to the same line. */
     const config = parseSiteConfig(JSON.stringify({ payments: { mtn: true, orange: true, card: true } }));
-    assert.deepEqual(Object.keys(config.payments).sort(), ["mtn", "orange"]);
+    assert.deepEqual(Object.keys(config.payments).sort(), ["cash", "mtn", "orange"]);
   });
 });
 
@@ -246,11 +249,16 @@ describe("resolveFeatures", () => {
     assert.equal(Object.keys(now).length, Object.keys(config.features).length, "every feature must be accounted for");
   });
 
-  it("never invents a payment method beyond the two wallets", () => {
-    // Guards the product's hardest constraint against a config blob that tries
-    // to introduce one.
+  it("never invents a payment method beyond the ones this product offers", () => {
+    /* Guards the product's hardest constraint against a config blob that tries
+       to introduce one.
+
+       The list is three now rather than two: `cash` is settle-at-the-counter for
+       a takeaway order, which is money the restaurant takes by hand rather than
+       a payment method the site processes. It is still an allowlist, and a card
+       still cannot get in through here. */
     const config = parseSiteConfig(JSON.stringify({ payments: { mtn: true, orange: true, unknown_wallet: true, third_option: true } }));
-    assert.deepEqual(Object.keys(config.payments).sort(), ["mtn", "orange"]);
+    assert.deepEqual(Object.keys(config.payments).sort(), ["cash", "mtn", "orange"]);
   });
 });
 

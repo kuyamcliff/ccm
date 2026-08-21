@@ -1,9 +1,10 @@
 /*
- * The chrome: the top bar, the bottom tab bar, and the footer.
+ * The chrome: the bar at the top, the bar at the bottom, and the footer.
  *
- * On a phone the top bar carries identity and the basket, and navigation lives
- * at the bottom where the thumb already is. From 60rem the tab bar goes away
- * and the top bar grows a real navigation, because a mouse has no thumb zone.
+ * One navigation at a time. A phone gets the bottom tab bar and no top nav; from
+ * 60rem the tab bar goes and the top nav appears. Showing both spends a fifth of
+ * a small screen on navigation, and the top half of it is out of thumb reach
+ * anyway.
  */
 
 .shell {
@@ -14,32 +15,47 @@
 
 .shell__main {
   flex: 1;
-  /* Room for the tab bar, plus the home indicator on an iPhone. Without this
-     the last thing on every page sits underneath the navigation. */
+  /* Clears the tab bar. Read from the token so the two cannot drift apart and
+     leave the last row of a page permanently under the nav. */
   padding-bottom: calc(var(--tabbar-h) + var(--safe-b));
 }
 
-/* A sticky basket bar takes a second strip of the screen, so the page has to
-   give back the height or the last menu row is permanently under it. */
-body:has(.basket-bar) .shell__main {
-  padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + 6.5rem);
-}
-
-.shell__main:focus {
-  outline: none;
-}
-
 @media (min-width: 60rem) {
-  .shell__main,
-  body:has(.basket-bar) .shell__main {
+  .shell__main {
     padding-bottom: 0;
   }
 }
 
-/* ── Top bar ──────────────────────────────────────────────────────────────
-   Transparent while the page is at the top, so the hero photograph runs right
-   up under the status bar. It only takes on a background once something has
-   scrolled behind it, which is the moment it starts to need one. */
+/* ══ Brand ═════════════════════════════════════════════════════════════════*/
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  flex: none;
+}
+
+.brand__mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+}
+
+.brand__name {
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: var(--w-shout);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+/* One word in red, and it is the one that says what the place sells. */
+.brand__name > span {
+  color: var(--red);
+}
+
+/* ══ Top bar ═══════════════════════════════════════════════════════════════*/
 
 .topbar {
   position: sticky;
@@ -47,81 +63,28 @@ body:has(.basket-bar) .shell__main {
   z-index: var(--z-nav);
   display: flex;
   align-items: center;
-  gap: var(--s-4);
+  gap: var(--s-3);
   height: calc(var(--topbar-h) + var(--safe-t));
   padding: var(--safe-t) var(--gutter) 0;
+  /*
+   * Transparent until the page moves.
+   *
+   * The home page opens on a full-bleed photograph and a solid bar across the
+   * top of it cuts the picture in half. Once anything has scrolled there is
+   * content behind the bar and it needs a ground to sit on.
+   */
   background: transparent;
-  border-bottom: 1px solid transparent;
   transition:
-    background-color var(--dur-3) var(--ease),
-    border-color var(--dur-3) var(--ease);
+    background-color var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out);
+  border-bottom: 1px solid transparent;
 }
 
 .topbar[data-scrolled="true"] {
-  background: rgba(10, 10, 10, 0.82);
-  backdrop-filter: blur(16px) saturate(150%);
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  background: rgba(7, 7, 7, 0.82);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
   border-bottom-color: var(--line);
-}
-
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-2);
-  margin-right: auto;
-  min-width: 0;
-  transition: opacity var(--dur-1) var(--ease);
-}
-
-.brand:active {
-  opacity: 0.7;
-}
-
-.brand__mark {
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--r-sm);
-  background: transparent;
-  flex: none;
-}
-
-.brand__name {
-  font-family: var(--font-display);
-  font-size: 1.0625rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1;
-  color: var(--white);
-  white-space: nowrap;
-  /* `.brand`'s min-width: 0 lets this shrink below its text's own width; without
-     these, the nowrap text does not wrap or resize, it just paints straight
-     through whatever sits beside it — the language switcher, on a mid-width
-     phone. Ellipsis is the fallback for the gap between "hide the wordmark"
-     below 22rem and "there is room for it" above that. */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-
-/* The second word takes the red. It is the one place red appears without
-   meaning "press here", and it is the name of the restaurant. */
-.brand__name span {
-  color: var(--red);
-}
-
-/*
- * On the narrowest phones the wordmark stands down to the mark alone.
- *
- * At 320px the name, the basket and the way in came to more than the width of
- * the screen, and the overflow did not simply clip: it widened the document,
- * which moved the containing block every fixed bar on the site is positioned
- * against, and pushed the basket bar and the booking footer off the bottom of
- * the screen. The mark alone still says whose site this is.
- */
-@media (max-width: 22rem) {
-  .brand__name {
-    display: none;
-  }
 }
 
 .topnav {
@@ -133,112 +96,174 @@ body:has(.basket-bar) .shell__main {
     display: flex;
     align-items: center;
     gap: var(--s-5);
+    margin-left: var(--s-6);
   }
+}
 
-  .topnav__link {
-    position: relative;
-    padding: var(--s-2) 0;
-    font-size: var(--t-small);
-    font-weight: 500;
-    color: var(--text-2);
-    transition: color var(--dur-2) var(--ease);
-  }
+.topnav__link {
+  font-size: var(--t-fine);
+  font-weight: var(--w-mid);
+  color: var(--text-2);
+  padding-block: var(--s-2);
+  position: relative;
+  transition: color var(--dur-1) var(--ease-out);
+}
 
-  .topnav__link:hover {
-    color: var(--white);
-  }
+.topnav__link:hover {
+  color: var(--text);
+}
 
-  .topnav__link::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 2px;
-    border-radius: var(--r-full);
-    background: var(--red);
-    transform: scaleX(0);
-    transition: transform var(--dur-3) var(--ease);
-  }
+.topnav__link.active {
+  color: var(--text);
+  font-weight: var(--w-strong);
+}
 
-  .topnav__link.active {
-    color: var(--white);
-    font-weight: 600;
-  }
-
-  .topnav__link.active::after {
-    transform: scaleX(1);
-  }
+/* The marker under the current page. Scales from the middle rather than
+   animating width, so it composites. */
+.topnav__link.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: var(--r-full);
+  background: var(--red);
 }
 
 .topbar__actions {
   display: flex;
   align-items: center;
   gap: var(--s-1);
+  margin-left: auto;
 }
 
-.topbar__call {
+/* Both of these are a second way to reach something the tab bar already covers
+   on a phone, so they only appear once there is room for them. */
+.topbar__desk,
+.topbar__signin {
   display: none;
 }
 
-.topbar__desk span {
-  display: none;
-}
-
-@media (min-width: 60rem) {
-  .topbar__actions {
-    gap: var(--s-2);
-  }
-
-  .topbar__call {
+@media (min-width: 30rem) {
+  .topbar__desk,
+  .topbar__signin {
     display: inline-flex;
   }
-
-  .topbar__desk span {
-    display: inline;
-  }
 }
 
-/* The basket count, pinned to whatever it is counting. */
+.lang {
+  gap: var(--s-1);
+  padding-inline: var(--s-2);
+  font-size: var(--t-micro);
+  font-weight: var(--w-shout);
+  letter-spacing: 0.06em;
+}
+
+/* The count on the basket. */
 .tally {
   position: relative;
+  overflow: visible;
 }
 
 .tally__count {
   position: absolute;
-  top: 0.15rem;
-  right: 0.15rem;
+  top: -0.1rem;
+  right: -0.1rem;
+  min-width: 1rem;
+  height: 1rem;
+  padding-inline: 3px;
   display: grid;
   place-items: center;
-  min-width: 1.15rem;
-  height: 1.15rem;
-  padding-inline: 0.25rem;
   border-radius: var(--r-full);
   background: var(--red);
   color: var(--on-red);
   font-size: var(--t-micro);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
+  font-weight: var(--w-shout);
   line-height: 1;
-  border: 2px solid var(--bg);
-  animation: pop var(--dur-3) var(--ease-soft) both;
 }
 
-/* The count jumps when it changes. It is the only confirmation a customer gets
-   that the tap landed, so it has to be catchable out of the corner of an eye. */
-@keyframes pop {
-  from {
-    transform: scale(0.4);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
+.tally__count--tab {
+  top: -0.3rem;
+  right: -0.55rem;
 }
 
-/* ── Tab bar ──────────────────────────────────────────────────────────────
-   Five destinations, fixed to the bottom, blurred over whatever is behind. */
+/* ══ Status strip ══════════════════════════════════════════════════════════*/
+
+.notices {
+  display: flex;
+  flex-direction: column;
+}
+
+.notices__row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--gutter);
+  font-size: var(--t-fine);
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+
+.notices__row--good {
+  color: var(--text-2);
+}
+
+.notices__row--good svg {
+  color: var(--good);
+}
+
+.notices__row--info {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.notices__row--warn {
+  color: var(--warn);
+  background: var(--warn-wash);
+  border-bottom-color: rgba(237, 164, 42, 0.2);
+}
+
+.notices__link {
+  font-weight: var(--w-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  white-space: nowrap;
+  flex: none;
+}
+
+/* The connection bar. Fixed rather than sticky: when the network goes it should
+   be visible immediately, not after a scroll to the top. */
+.netbar {
+  position: fixed;
+  top: var(--safe-t);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+  padding: var(--s-2) var(--s-4);
+  border-radius: var(--r-full);
+  font-size: var(--t-fine);
+  font-weight: var(--w-mid);
+  box-shadow: var(--shadow-2);
+  animation: rise var(--dur-3) var(--ease-out);
+}
+
+.netbar[data-state="gone"] {
+  background: var(--ink-800);
+  color: var(--text);
+  border: 1px solid var(--line-2);
+}
+
+.netbar[data-state="back"] {
+  background: var(--good);
+  color: var(--black);
+}
+
+/* ══ Tab bar ═══════════════════════════════════════════════════════════════*/
 
 .tabbar {
   position: fixed;
@@ -249,9 +274,9 @@ body:has(.basket-bar) .shell__main {
   display: flex;
   height: calc(var(--tabbar-h) + var(--safe-b));
   padding-bottom: var(--safe-b);
-  background: rgba(8, 8, 8, 0.88);
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  background: rgba(7, 7, 7, 0.9);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
   border-top: 1px solid var(--line);
 }
 
@@ -262,107 +287,108 @@ body:has(.basket-bar) .shell__main {
 }
 
 .tabbar__item {
-  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.3rem;
-  padding-top: var(--s-1);
-  font-size: var(--t-micro);
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  gap: 3px;
+  min-width: 0;
   color: var(--text-3);
-  transition: color var(--dur-2) var(--ease);
+  font-size: var(--t-micro);
+  font-weight: var(--w-strong);
+  letter-spacing: 0.01em;
+  transition: color var(--dur-1) var(--ease-out);
 }
 
 .tabbar__item.active {
-  color: var(--white);
-}
-
-/* The active mark is a short red bar at the top of the tab, the same shape as
-   the marker beside a section heading. One idea, used twice. */
-.tabbar__item::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 1.5rem;
-  height: 3px;
-  border-radius: 0 0 var(--r-full) var(--r-full);
-  background: var(--red);
-  transform: translateX(-50%) scaleX(0);
-  transition: transform var(--dur-3) var(--ease);
-}
-
-.tabbar__item.active::before {
-  transform: translateX(-50%) scaleX(1);
+  color: var(--text);
 }
 
 .tabbar__icon {
   position: relative;
   display: grid;
   place-items: center;
-  transition: transform var(--dur-2) var(--ease-soft);
+  transition: transform var(--dur-2) var(--ease-spring);
 }
 
+/* The icon lifts a little on the current tab. Small enough that nobody notices
+   it happening and everybody can see which tab they are on. */
 .tabbar__item.active .tabbar__icon {
-  transform: translateY(-1px) scale(1.06);
+  color: var(--red);
+  transform: translateY(-1px);
 }
 
 .tabbar__item:active .tabbar__icon {
-  transform: scale(0.88);
+  transform: scale(0.9);
 }
 
-/* ── Footer ───────────────────────────────────────────────────────────────
-   Full width, parted from the page by a hairline rather than by a panel. */
+.tabbar__label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ══ Footer ════════════════════════════════════════════════════════════════
+ *
+ * Short, on purpose.
+ *
+ * The version before this had three headed columns of up to six links each,
+ * which on a phone is roughly a screen's height of text that duplicates the tab
+ * bar two taps away. What is left is only what is genuinely nowhere else: where
+ * the place is, when it opens, how to reach it, and the two legal pages.
+ */
 
 .footer {
   border-top: 1px solid var(--line);
-  padding-block: var(--s-7) var(--s-6);
   background: var(--bg-sunk);
+  margin-top: var(--s-7);
 }
 
-.footer__grid {
-  display: grid;
-  gap: var(--s-6);
-  grid-template-columns: 1fr;
-}
-
-@media (min-width: 40rem) {
-  .footer__grid {
-    grid-template-columns: 1.4fr 1fr 1fr;
-    gap: var(--s-5);
-  }
-}
-
-.footer__heading {
-  font-size: var(--t-micro);
-  font-weight: 600;
-  letter-spacing: var(--track-label);
-  text-transform: uppercase;
-  color: var(--text-3);
-  margin-bottom: var(--s-3);
-}
-
-.footer__links {
+.footer__inner {
   display: flex;
   flex-direction: column;
-  gap: var(--s-1);
+  gap: var(--s-4);
+  padding-block: var(--s-6);
 }
 
-.footer__links a {
-  display: inline-flex;
+.footer__lead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+/* One row that wraps, never a grid of columns. Separated by a dot rather than a
+   heading, because four short links do not need a category. */
+.footer__links {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  min-height: 2.25rem;
-  font-size: var(--t-small);
+  gap: var(--s-2) var(--s-4);
+  font-size: var(--t-fine);
   color: var(--text-2);
-  transition: color var(--dur-2) var(--ease);
 }
 
-.footer__links a:hover {
-  color: var(--white);
+.footer__links > a {
+  position: relative;
+  transition: color var(--dur-1) var(--ease-out);
+}
+
+.footer__links > a:hover {
+  color: var(--text);
+}
+
+.footer__links > a + a::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--s-4) / -2);
+  top: 50%;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: var(--text-4);
+  transform: translate(-50%, -50%);
 }
 
 .footer__bottom {
@@ -370,18 +396,57 @@ body:has(.basket-bar) .shell__main {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--s-3);
-  margin-top: var(--s-6);
+  gap: var(--s-2);
   padding-top: var(--s-4);
   border-top: 1px solid var(--line);
-  font-size: var(--t-fine);
-  color: var(--text-3);
-}
-
-.footer__bottom a {
-  transition: color var(--dur-2) var(--ease);
 }
 
 .footer__bottom a:hover {
-  color: var(--white);
+  color: var(--text);
+}
+
+@media (min-width: 48rem) {
+  .footer__inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: var(--s-5) var(--s-7);
+  }
+
+  .footer__links {
+    justify-content: flex-end;
+  }
+
+  .footer__bottom {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ══ The holding page ══════════════════════════════════════════════════════*/
+
+.notyet {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-4);
+  text-align: center;
+}
+
+.notyet .lead {
+  margin-inline: auto;
+}
+
+.broke {
+  min-height: 70dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-4);
+}
+
+.broke .lead {
+  margin-inline: auto;
 }

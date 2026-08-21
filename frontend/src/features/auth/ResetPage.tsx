@@ -1,167 +1,196 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "~/lib/api";
-import { ApiError } from "~/lib/http";
-import { useAction, useResource } from "~/lib/useResource";
-import { Button } from "~/ui/Button";
-import { TextField } from "~/ui/Field";
-import { Notice, Skeleton } from "~/ui/Feedback";
-import { PasswordField } from "~/ui/PasswordField";
-import { checkPassword } from "~/lib/passwordStrength";
+import { useMutation, useQuery } from "~/lib/store";
+import { say } from "~/lib/say";
+import { checkPassword, passwordScore } from "~/lib/passwordStrength";
+import { Action } from "~/ui/Button";
+import { TextField, PasswordField } from "~/ui/Field";
+import { Notice } from "~/ui/Feedback";
 import { useToast } from "~/state/toast";
+import { useCopy } from "~/state/locale";
+
+const SCORE_WORDS = ["Too weak", "Weak", "Getting there", "Good", "Strong"];
 
 /**
  * Resetting a forgotten password.
  *
- * Only offered when the server can actually send email. If it cannot, saying
- * "check your inbox" would be a lie, so the page says plainly that a person
- * has to do it and points at the ways to reach one.
+ * Two steps on one screen: ask for a code, then use it. The step is local state
+ * rather than a route, because there is nothing here worth a back gesture and a
+ * code that has already been sent should not be lost to one.
+ *
+ * The "we have sent a code" message is shown whether or not the address exists.
+ * That is the server's behaviour and it is deliberate: telling somebody an email
+ * is not registered is telling anybody who asks which of your customers have
+ * accounts.
  */
 export function ResetPage() {
-  const availability = useResource(() => api.me.resetAvailability(), []);
+  const { c } = useCopy();
   const toast = useToast();
   const navigate = useNavigate();
 
-  const [stage, setStage] = useState<"ask" | "redeem">("ask");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
+  const [sent, setSent] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const [sentMessage, setSentMessage] = useState("");
 
-  const request = useAction(api.me.requestReset);
-  const redeem = useAction(api.me.redeemReset);
+  /* Whether self-service reset is even available: it needs email to be
+     configured on the server, and when it is not the honest answer is to say so
+     and point at the phone rather than to send somebody into a form that cannot
+     work. */
+  const availability = useQuery("auth.reset.availability", () => api.me.resetAvailability(), {
+    staleMs: 10 * 60 * 1000,
+  });
 
-  if (availability.loading) {
+  const identity = useMemo(() => ({ email: email.trim() }), [email]);
+
+  const strength = useMemo(() => {
+    if (!password) return null;
+    const complaint = checkPassword(password, identity);
+    return {
+      score: passwordScore(password, identity),
+      label: SCORE_WORDS[passwordScore(password, identity)] ?? "",
+      problems: complaint ? [complaint] : [],
+    };
+  }, [password, identity]);
+
+  const request = useMutation(async () => {
+    setProblem(null);
+    await api.me.requestReset(email.trim());
+    setSent(true);
+  });
+
+  const redeem = useMutation(async () => {
+    setProblem(null);
+    const complaint = checkPassword(password, identity);
+    if (complaint) {
+      setProblem(complaint);
+      return;
+    }
+    await api.me.redeemReset(email.trim(), code.trim(), password);
+    toast.done(c.auth.passwordSet);
+    navigate("/signin", { replace: true });
+  });
+
+  if (availability.data && availability.data.self_service === false) {
     return (
-      <div className="page auth">
-        <div className="auth__card stack">
-          <Skeleton height="2.5rem" />
-          <Skeleton height="12rem" radius="var(--r-lg)" />
-        </div>
+      <div className="page section auth">
+        <header className="stack stack--tight">
+          <h1 className="display display--xl">{c.auth.resetTitle}</h1>
+        </header>
+        <Notice tone="info" title="Give us a call">
+          We cannot send reset codes at the moment. Ring the restaurant and we will sort your account out.
+        </Notice>
+        <Link to="/signin" className="link fine center" viewTransition>
+          {c.common.back}
+        </Link>
       </div>
     );
   }
-
-  if (!availability.data?.self_service) {
-    return (
-      <div className="page auth">
-        <div className="auth__card card stack">
-          <h1 className="display display--lg">Password help</h1>
-          <p className="muted">
-            We cannot send reset emails at the moment, so this one goes through a person. Message us with the email
-            address on your account and we will sort it out.
-          </p>
-          <Link to="/help" className="btn btn--primary btn--block">
-            Message us
-          </Link>
-          <p className="auth__switch">
-            <Link to="/signin">Back to sign in</Link>
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  const codeLength = availability.data.code_length;
-  const minutes = availability.data.expires_in_minutes;
 
   return (
-    <div className="page auth">
-      <div className="auth__card card stack">
-        {stage === "ask" ? (
-          <>
-            <h1 className="display display--lg">Forgotten password</h1>
-            <p className="muted">
-              Type the email on your account. If it is one of ours, a {codeLength} digit code goes out to it.
-            </p>
+    <div className="page section auth">
+      <header className="stack stack--tight">
+        <h1 className="display display--xl">{c.auth.resetTitle}</h1>
+        <p className="lead">{sent ? c.auth.codeSent : c.auth.resetLead}</p>
+      </header>
 
-            <form
-              className="stack"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                setProblem(null);
-                const result = await request.run(email.trim());
-                if (!result) {
-                  const failure = request.readError();
-                  setProblem(failure instanceof ApiError ? failure.message : "That did not send.");
-                  return;
-                }
-                setSentMessage(result.message);
-                setStage("redeem");
-              }}
-            >
-              <TextField
-                label="Email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                inputMode="email"
-                required
-              />
-              {problem ? <Notice tone="bad">{problem}</Notice> : null}
-              <Button type="submit" tone="primary" block busy={request.busy}>
-                Send me a code
-              </Button>
-            </form>
-          </>
-        ) : (
-          <>
-            <h1 className="display display--lg">Check your email</h1>
-            <p className="muted">{sentMessage || `The code lasts ${minutes} minutes.`}</p>
+      {sent ? (
+        <form
+          className="stack"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            await redeem.run();
+            const error = redeem.readError();
+            if (error) setProblem(say(error, "reset"));
+          }}
+        >
+          {problem ? <Notice tone="bad">{problem}</Notice> : null}
 
-            <form
-              className="stack"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                setProblem(null);
-                const weak = checkPassword(password, { email: email.trim() });
-                if (weak) {
-                  setProblem(weak);
-                  return;
-                }
-                const result = await redeem.run(email.trim(), code.trim(), password);
-                if (!result) {
-                  const failure = redeem.readError();
-                  setProblem(failure instanceof ApiError ? failure.message : "That code was not accepted.");
-                  return;
-                }
-                toast.done("Password changed. Sign in with the new one.");
-                navigate("/signin", { replace: true });
-              }}
-            >
-              <TextField
-                label="Code from the email"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                inputMode="numeric"
-                maxLength={codeLength}
-                autoComplete="one-time-code"
-                required
-                autoFocus
-              />
-              <PasswordField
-                label="New password"
-                value={password}
-                onChange={setPassword}
-                identity={{ email: email.trim() }}
-                required
-              />
-              {problem ? <Notice tone="bad">{problem}</Notice> : null}
-              <Button type="submit" tone="primary" block busy={redeem.busy}>
-                Set the new password
-              </Button>
-              <button type="button" className="btn btn--quiet btn--block" onClick={() => setStage("ask")}>
-                Send it again
-              </button>
-            </form>
-          </>
-        )}
-      </div>
+          <TextField
+            label={c.auth.code}
+            value={code}
+            onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            required
+            autoFocus
+          />
 
-      <p className="auth__switch">
-        <Link to="/signin">Back to sign in</Link>
+          <PasswordField
+            label={c.auth.newPassword}
+            value={password}
+            onChange={setPassword}
+            autoComplete="new-password"
+            strength={strength}
+            required
+          />
+
+          <Action
+            type="submit"
+            tone="primary"
+            block
+            pending={redeem.pending}
+            pendingLabel={c.pending.resetting}
+            disabled={code.length < 6 || !password}
+          >
+            {c.auth.setPassword}
+          </Action>
+
+          <button
+            type="button"
+            className="link fine center"
+            onClick={() => {
+              setSent(false);
+              setCode("");
+              setProblem(null);
+            }}
+          >
+            {c.common.back}
+          </button>
+        </form>
+      ) : (
+        <form
+          className="stack"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            await request.run();
+            const error = request.readError();
+            if (error) setProblem(say(error, "reset"));
+          }}
+        >
+          {problem ? <Notice tone="bad">{problem}</Notice> : null}
+
+          <TextField
+            label={c.auth.email}
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            autoComplete="email"
+            inputMode="email"
+            required
+            autoFocus
+          />
+
+          <Action
+            type="submit"
+            tone="primary"
+            block
+            pending={request.pending}
+            pendingLabel={c.pending.sending}
+            disabled={!email.trim().includes("@")}
+          >
+            {c.auth.sendCode}
+          </Action>
+        </form>
+      )}
+
+      <p className="fine center muted">
+        <Link to="/signin" className="link" viewTransition>
+          {c.auth.signIn}
+        </Link>
       </p>
     </div>
   );

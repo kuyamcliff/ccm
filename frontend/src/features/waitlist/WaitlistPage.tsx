@@ -1,145 +1,146 @@
 import { useState } from "react";
 import { api } from "~/lib/api";
-import { ApiError } from "~/lib/http";
-import { normalisePhone, pluralise } from "~/lib/format";
-import { useAction, usePoll, useResource } from "~/lib/useResource";
-import { Button, LinkButton } from "~/ui/Button";
-import { Counter, PhoneField, TextField } from "~/ui/Field";
+import { useMutation, useQuery, usePoll } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { normalisePhone } from "~/lib/format";
+import { Action, LinkButton } from "~/ui/Button";
+import { TextField, PhoneField, Counter, Field } from "~/ui/Field";
+import { Notice } from "~/ui/Feedback";
 import { Icon } from "~/ui/Icon";
-import { Notice, Skeleton } from "~/ui/Feedback";
+import { Pulse } from "~/ui/Bits";
 import { useSession } from "~/state/session";
+import { useToast } from "~/state/toast";
+import { useCopy } from "~/state/locale";
 
 /**
- * The queue, for people who are already standing outside.
+ * The queue, on a full night.
  *
- * Written for someone holding a phone in a car park: how long, and put my name
- * down. The wait figure refreshes on its own because it is the one number that
- * changes while they are looking at it.
+ * Somebody standing outside a busy restaurant will give you about twenty seconds
+ * and three fields. Name, number, how many, done. No account needed: the whole
+ * point is that they are already here.
+ *
+ * Once they are on the list the screen turns into a status board, and it polls,
+ * because the answer they want is "how much longer" and it changes.
  */
 export function WaitlistPage() {
+  const { c, fill } = useCopy();
   const { user } = useSession();
-  const queue = useResource(() => api.site.waitlist(), []);
-  usePoll(queue.reload, 30_000);
+  const toast = useToast();
 
   const [name, setName] = useState(user?.name ?? "");
   const [phone, setPhone] = useState("");
   const [party, setParty] = useState(2);
-  const [note, setNote] = useState("");
-  const [problem, setProblem] = useState<string | null>(null);
-  const [joined, setJoined] = useState<{ position: number; est_wait_minutes: number } | null>(null);
+  const [joined, setJoined] = useState<{ position: number; wait: number } | null>(null);
 
-  const join = useAction(api.site.joinWaitlist);
+  const queue = useQuery(K.waitlist, () => api.site.waitlist(), { staleMs: 20_000 });
+  usePoll(() => queue.reload(), joined ? 30_000 : null);
 
+  const join = useMutation(async () => {
+    const result = await api.site.joinWaitlist({
+      name: name.trim(),
+      phone: normalisePhone(phone),
+      party_size: party,
+    });
+    setJoined({ position: result.position, wait: result.est_wait_minutes });
+    toast.done(c.queue.joined);
+    queue.reload();
+  });
+
+  /* ── Already on the list ──────────────────────────────────────────────────*/
   if (joined) {
     return (
-      <div className="page section stack stack--loose" style={{ maxWidth: "32rem" }}>
-        <div className="section-head">
-          <hr className="heat-rule" />
-          <h1 className="display display--xl">You are on the list</h1>
+      <div className="page section stack queue">
+        <header className="stack stack--tight">
+          <h1 className="display display--xl">{c.queue.joined}</h1>
+        </header>
+
+        {/* One of the three raised surfaces in the product. This is a thing you
+            hold up and show somebody at the door. */}
+        <div className="carry queue__pass">
+          <p className="label">{c.queue.title}</p>
+          <p className="display display--hero queue__number">{joined.position}</p>
+          <p className="lead">{fill(c.queue.position, { n: joined.position })}</p>
+          {joined.wait > 0 ? <p className="fine muted">{fill(c.queue.wait, { n: joined.wait })}</p> : null}
         </div>
-        <div className="card stack queue-card">
-          <div>
-            <span className="label">Your place</span>
-            <p className="queue-card__num mono">{joined.position}</p>
+
+        <Notice tone="info">
+          Keep this page open, or keep your phone to hand. We will text you the moment a table clears.
+        </Notice>
+
+        <div className="rows">
+          <div className="row">
+            <Icon name="users" size={17} className="row__lead" />
+            <span className="grow fine">{fill(c.queue.waiting, { n: queue.data?.waiting ?? 0 })}</span>
+            <Pulse on label="Live" />
           </div>
-          <p className="muted">
-            Roughly {pluralise(joined.est_wait_minutes, "minute")}. We will call {phone} when your table is ready, so
-            keep your phone with you and stay nearby.
-          </p>
         </div>
-        <LinkButton to="/menu" tone="ghost">
-          Look at the menu while you wait
-        </LinkButton>
+
+        <div className="bar bar--wrap">
+          <LinkButton to="/menu" tone="primary" size="sm" icon="list">
+            {c.home.seeMenu}
+          </LinkButton>
+        </div>
       </div>
     );
   }
 
+  /* ── Joining ──────────────────────────────────────────────────────────────*/
+  const ready = name.trim().length > 1 && normalisePhone(phone).length === 9;
+
   return (
-    <div className="page section">
-      <div className="section-head">
-        <hr className="heat-rule" />
-        <h1 className="display display--xl">Join the queue</h1>
-        <p className="lead">
-          For when the place is full and you are already here. If you are planning ahead, book a table instead.
-        </p>
-      </div>
+    <div className="page section stack queue">
+      <header className="stack stack--tight">
+        <h1 className="display display--xl">{c.queue.title}</h1>
+        <p className="lead">{c.queue.lead}</p>
+      </header>
 
-      <div className="queue-layout">
-        <div className="card stack queue-now">
-          {queue.loading ? (
-            <Skeleton height="5rem" />
-          ) : (
-            <>
-              <div>
-                <span className="label">Waiting now</span>
-                <p className="queue-card__num mono">{queue.data?.waiting ?? 0}</p>
-              </div>
-              <p className="muted">
-                <Icon name="clock" size={16} /> About {pluralise(queue.data?.est_wait_minutes ?? 0, "minute")} from now.
-              </p>
-              <p className="fine faint">This updates by itself.</p>
-            </>
-          )}
-        </div>
+      {queue.data && queue.data.waiting > 0 ? (
+        <Notice tone="info">
+          {fill(c.queue.waiting, { n: queue.data.waiting })}
+          {queue.data.est_wait_minutes > 0 ? `. ${fill(c.queue.wait, { n: queue.data.est_wait_minutes })}` : ""}
+        </Notice>
+      ) : null}
 
-        <form
-          className="card stack"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            setProblem(null);
-            const digits = normalisePhone(phone);
-            if (name.trim().length < 2) {
-              setProblem("Enter the name we should call out.");
-              return;
-            }
-            if (digits.length < 8) {
-              setProblem("Enter a phone number we can call.");
-              return;
-            }
-            const result = await join.run({
-              name: name.trim(),
-              phone: digits,
-              party_size: party,
-              note: note.trim() || undefined,
-            });
-            if (!result) {
-              const failure = join.readError();
-              setProblem(failure instanceof ApiError ? failure.message : "That did not go through.");
-              return;
-            }
-            setJoined(result);
-          }}
+      <form
+        className="stack"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          await join.run();
+          const error = join.readError();
+          if (error) toast.failed(error, "join-queue");
+        }}
+      >
+        <TextField
+          label={c.queue.name}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          autoComplete="name"
+          required
+        />
+
+        <PhoneField
+          label={c.queue.phone}
+          hint="We will text this number when your table is ready."
+          value={phone}
+          onChange={setPhone}
+          required
+        />
+
+        <Field label={c.queue.party}>
+          {() => <Counter value={party} onChange={setParty} min={1} max={20} label={c.queue.party} />}
+        </Field>
+
+        <Action
+          type="submit"
+          tone="primary"
+          block
+          pending={join.pending}
+          pendingLabel={c.pending.joining}
+          disabled={!ready}
         >
-          <TextField
-            label="Name"
-            hint="What we will call out."
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            autoComplete="name"
-            required
-          />
-          <PhoneField label="Phone number" value={phone} onChange={setPhone} required />
-
-          <div className="field">
-            <span className="field__label">How many of you</span>
-            <Counter value={party} min={1} max={20} onChange={setParty} label="party size" />
-          </div>
-
-          <TextField
-            label="Anything to note"
-            placeholder="Optional. Outside table, high chair."
-            value={note}
-            maxLength={200}
-            onChange={(e) => setNote(e.target.value)}
-          />
-
-          {problem ? <Notice tone="bad">{problem}</Notice> : null}
-
-          <Button type="submit" tone="primary" size="lg" block busy={join.busy}>
-            Put my name down
-          </Button>
-        </form>
-      </div>
+          {c.queue.join}
+        </Action>
+      </form>
     </div>
   );
 }

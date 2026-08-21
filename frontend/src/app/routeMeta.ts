@@ -92,6 +92,51 @@ const ROUTES: Record<string, Meta> = {
 /** Pages behind a sign-in, and anything else search should never index. */
 const PRIVATE_PREFIXES = ["/desk", "/mine", "/account", "/reset"];
 
+/**
+ * What each console screen calls itself in the browser tab.
+ *
+ * Keyed by the path segment after `/desk`, so a route added without an entry
+ * here falls back to plain "Desk" rather than to something misleading.
+ */
+const DESK_SCREENS: Record<string, string> = {
+  "": "Overview",
+  door: "Door",
+  bookings: "Bookings",
+  orders: "Orders",
+  queue: "Queue",
+  floor: "Floor",
+  menu: "Menu",
+  offers: "Offers",
+  gallery: "Photos",
+  reviews: "Reviews",
+  events: "Events",
+  money: "Payments",
+  promos: "Promo codes",
+  cards: "Gift cards",
+  inbox: "Messages",
+  guests: "Guests",
+  reminders: "Reminders",
+  insights: "Insights",
+  settings: "Details",
+  "site-control": "Site control",
+  translations: "Translations",
+  legal: "Terms and privacy",
+  log: "Audit log",
+  access: "Staff access",
+  dev: "System",
+  "dev/errors": "Errors",
+  "dev/flags": "Flags",
+  "dev/data": "Database",
+  "dev/impersonate": "Impersonate",
+};
+
+function deskTitle(path: string): string | null {
+  if (path !== "/desk" && !path.startsWith("/desk/")) return null;
+  const screen = path.slice("/desk".length).replace(/^\//, "");
+  const name = DESK_SCREENS[screen];
+  return name ? `${name} | Desk` : "Desk";
+}
+
 export interface ResolvedMeta extends Meta {
   /** The address this page should be indexed under, or null when it should
    *  not be indexed at all. */
@@ -104,7 +149,16 @@ export function metaForPath(pathname: string): ResolvedMeta {
 
   if (PRIVATE_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))) {
     return {
-      title: `Your account | ${SUFFIX}`,
+      /*
+       * The console names the screen it is on.
+       *
+       * Everything private used to share one title, which meant a member of
+       * staff with the bookings, the kitchen board and the floor plan open in
+       * three tabs saw "Your account" on all three and had to click each one to
+       * find out which was which. Still noindex, still no description: this is
+       * for the person reading the tab strip, not for a search engine.
+       */
+      title: deskTitle(path) ?? `Your account | ${SUFFIX}`,
       description: "",
       canonical: null,
       noindex: true,

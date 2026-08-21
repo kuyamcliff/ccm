@@ -1,228 +1,228 @@
 import { useState } from "react";
 import { api } from "~/lib/api";
-import { stampLabel } from "~/lib/format";
-import { IMAGE_ACCEPT, ImageError, readImageFile } from "~/lib/imageFile";
-import { useResource } from "~/lib/useResource";
-import { Button } from "~/ui/Button";
-import { Badge } from "~/ui/Bits";
-import { TextField } from "~/ui/Field";
-import { Photo } from "~/ui/Photo";
-import { Notice } from "~/ui/Feedback";
+import { useMutation, useQuery, invalidate } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { timeAgo } from "~/lib/format";
+import { readImageFile } from "~/lib/imageFile";
+import { Action, Button, IconButton } from "~/ui/Button";
+import { TextField, Segmented } from "~/ui/Field";
 import { Sheet, useConfirm } from "~/ui/Sheet";
+import { Img } from "~/ui/Img";
+import { DeskPage, Loaded, Nothing, State } from "./parts";
 import { useToast } from "~/state/toast";
-import { DeskPage, Loaded, Nothing, Toolbar } from "./parts";
 
 /**
- * Photos waiting to go up, and the ones already up.
+ * What shows in the site's gallery.
  *
- * Anything a customer sends starts hidden, so this screen leads with what is
- * waiting rather than making somebody hunt for it. Featuring a photo makes it
- * take four cells in the public grid.
+ * Guests can send photographs in and they land here rather than on the site,
+ * which is the only sane default for anything a stranger can upload to a
+ * restaurant's front page. Waiting is the first tab for that reason: it is the
+ * one that needs somebody, and an unreviewed queue is a queue that stops
+ * getting used.
  */
+
+type Tab = "waiting" | "showing" | "all";
+
 export function GalleryAdmin() {
-  const photos = useResource(() => api.desk.gallery.all(), []);
   const toast = useToast();
-  const { confirm, confirmElement } = useConfirm();
-
+  const { confirm, element } = useConfirm();
+  const [tab, setTab] = useState<Tab>("waiting");
   const [adding, setAdding] = useState(false);
-  const [image, setImage] = useState<string | null>(null);
-  const [caption, setCaption] = useState("");
-  const [problem, setProblem] = useState<string | null>(null);
 
-  async function update(id: number, changes: { is_approved?: boolean; is_featured?: boolean }, said: string) {
-    try {
-      await api.desk.gallery.update(id, changes);
-      photos.reload();
-      toast.done(said);
-    } catch (err) {
-      toast.failed(err);
-    }
+  const photos = useQuery(K.desk.gallery, () => api.desk.gallery.all(), { staleMs: 30_000 });
+
+  function refresh() {
+    invalidate("desk.gallery*");
+    invalidate(K.gallery);
+    photos.reload();
   }
 
-  const waiting = (photos.data ?? []).filter((photo) => photo.is_approved !== 1);
-  const live = (photos.data ?? []).filter((photo) => photo.is_approved === 1);
+  const setApproved = useMutation(async (input: { id: number; approved: boolean }) => {
+    await api.desk.gallery.update(input.id, { is_approved: input.approved });
+    refresh();
+  });
+
+  const setFeatured = useMutation(async (input: { id: number; featured: boolean }) => {
+    await api.desk.gallery.update(input.id, { is_featured: input.featured });
+    refresh();
+  });
+
+  const remove = useMutation(async (id: number) => {
+    await api.desk.gallery.remove(id);
+    refresh();
+    toast.done("Deleted.");
+  });
+
+  const all = photos.data ?? [];
+  const waiting = all.filter((photo) => photo.is_approved === 0);
+  const shown = tab === "waiting" ? waiting : tab === "showing" ? all.filter((p) => p.is_approved === 1) : all;
 
   return (
     <DeskPage
       title="Photos"
+      hint="Approve what customers send in, and add your own."
       actions={
-        <Button tone="primary" icon="upload" onClick={() => setAdding(true)}>
+        <Button size="sm" tone="primary" icon="camera" onClick={() => setAdding(true)}>
           Add a photo
         </Button>
       }
     >
-      {confirmElement}
+      <Segmented
+        value={tab}
+        onChange={setTab}
+        label="Which photos"
+        options={[
+          { value: "waiting", label: waiting.length > 0 ? `Waiting (${waiting.length})` : "Waiting" },
+          { value: "showing", label: "Showing" },
+          { value: "all", label: "All" },
+        ]}
+      />
 
-      <Loaded resource={photos} skeletonHeight="10rem">
-        {() => (
-          <>
-            <section className="desk-section">
-              <h2 className="card__title">
-                Waiting for you {waiting.length > 0 ? <Badge tone="warn">{waiting.length}</Badge> : null}
-              </h2>
-              {waiting.length === 0 ? (
-                <Nothing>Nothing waiting.</Nothing>
-              ) : (
-                <div className="photo-grid">
-                  {waiting.map((photo) => (
-                    <figure key={photo.id} className="photo-card">
-                      <Photo src={photo.image_url} alt={photo.caption} />
-                      <figcaption>
-                        <p className="fine">{photo.caption || "No caption"}</p>
-                        <p className="fine faint">
-                          {photo.submitter_name || "Anonymous"}, {stampLabel(photo.created_at)}
-                        </p>
-                        <div className="row row--wrap">
-                          <Button size="sm" tone="primary" onClick={() => update(photo.id, { is_approved: true }, "Photo published.")}>
-                            Publish
-                          </Button>
-                          <Button
-                            size="sm"
-                            tone="danger"
-                            onClick={async () => {
-                              const ok = await confirm({
-                                title: "Delete this photo?",
-                                body: "It goes for good.",
-                                confirmLabel: "Delete",
-                              });
-                              if (!ok) return;
-                              try {
-                                await api.desk.gallery.remove(photo.id);
-                                photos.reload();
-                                toast.done("Deleted.");
-                              } catch (err) {
-                                toast.failed(err);
-                              }
-                            }}
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      </figcaption>
-                    </figure>
-                  ))}
-                </div>
-              )}
-            </section>
+      <Loaded query={photos}>
+        {() =>
+          shown.length === 0 ? (
+            <Nothing icon="image">
+              {tab === "waiting" ? "Nothing waiting. All caught up." : "No photos here."}
+            </Nothing>
+          ) : (
+            <div className="dk-photos">
+              {shown.map((photo) => (
+                <figure key={photo.id} className="dk-photo">
+                  <Img src={photo.image_url} alt={photo.caption || ""} ratio={1} radius="var(--r-sm)" />
 
-            <section className="desk-section">
-              <Toolbar>
-                <h2 className="card__title">On the site</h2>
-                <p className="fine faint push">{live.length} photos</p>
-              </Toolbar>
+                  <figcaption className="stack stack--tight">
+                    <span className="fine clip">{photo.caption || <span className="faint">No caption</span>}</span>
+                    <span className="micro faint">
+                      {photo.submitter_name || "Us"} · {timeAgo(photo.created_at)}
+                    </span>
+                    <span className="bar bar--tight">
+                      {photo.is_approved === 1 ? <State tone="good">Showing</State> : <State tone="warn">Waiting</State>}
+                      {photo.is_featured === 1 ? <State tone="hot">Featured</State> : null}
+                    </span>
+                  </figcaption>
 
-              {live.length === 0 ? (
-                <Nothing>Nothing published yet.</Nothing>
-              ) : (
-                <div className="photo-grid">
-                  {live.map((photo) => (
-                    <figure key={photo.id} className="photo-card">
-                      <Photo src={photo.image_url} alt={photo.caption} />
-                      <figcaption>
-                        <p className="fine">{photo.caption || "No caption"}</p>
-                        <div className="row row--wrap">
-                          <Button
-                            size="sm"
-                            tone={photo.is_featured ? "primary" : "ghost"}
-                            icon="star"
-                            onClick={() =>
-                              update(
-                                photo.id,
-                                { is_featured: photo.is_featured !== 1 },
-                                photo.is_featured ? "No longer featured." : "Featured."
-                              )
-                            }
-                          >
-                            {photo.is_featured ? "Featured" : "Feature"}
-                          </Button>
-                          <Button size="sm" tone="quiet" onClick={() => update(photo.id, { is_approved: false }, "Hidden.")}>
-                            Hide
-                          </Button>
-                          <Button
-                            size="sm"
-                            tone="danger"
-                            onClick={async () => {
-                              const ok = await confirm({
-                                title: "Delete this photo?",
-                                body: "It goes for good.",
-                                confirmLabel: "Delete",
-                              });
-                              if (!ok) return;
-                              try {
-                                await api.desk.gallery.remove(photo.id);
-                                photos.reload();
-                                toast.done("Deleted.");
-                              } catch (err) {
-                                toast.failed(err);
-                              }
-                            }}
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      </figcaption>
-                    </figure>
-                  ))}
-                </div>
-              )}
-            </section>
-          </>
-        )}
+                  <div className="bar bar--tight">
+                    <Action
+                      size="sm"
+                      tone={photo.is_approved === 1 ? "quiet" : "primary"}
+                      block
+                      pending={setApproved.pending}
+                      pendingLabel="Saving"
+                      onClick={() => void setApproved.run({ id: photo.id, approved: photo.is_approved === 0 })}
+                    >
+                      {photo.is_approved === 1 ? "Take down" : "Approve"}
+                    </Action>
+                    <IconButton
+                      name="sparkle"
+                      label={photo.is_featured === 1 ? "Unfeature" : "Feature"}
+                      size="sm"
+                      pending={setFeatured.pending}
+                      onClick={() => void setFeatured.run({ id: photo.id, featured: photo.is_featured === 0 })}
+                    />
+                    <IconButton
+                      name="trash"
+                      label="Delete"
+                      size="sm"
+                      pending={remove.pending}
+                      onClick={async () => {
+                        const sure = await confirm({
+                          title: "Delete this photo?",
+                          body: "It goes for good.",
+                          confirmLabel: "Delete it",
+                        });
+                        if (!sure) return;
+                        await remove.run(photo.id);
+                      }}
+                    />
+                  </div>
+                </figure>
+              ))}
+            </div>
+          )
+        }
       </Loaded>
 
-      <Sheet
+      <AddPhoto
         open={adding}
         onClose={() => setAdding(false)}
-        title="Add a photo"
-        description="Yours go up straight away."
-        footer={
-          <>
-            <Button tone="ghost" onClick={() => setAdding(false)}>
-              Cancel
-            </Button>
-            <Button
-              tone="primary"
-              disabled={!image}
-              onClick={async () => {
-                if (!image) return;
-                try {
-                  await api.desk.gallery.upload(image, caption.trim());
-                  setAdding(false);
-                  setImage(null);
-                  setCaption("");
-                  photos.reload();
-                  toast.done("Photo added.");
-                } catch (err) {
-                  toast.failed(err);
-                }
-              }}
-            >
-              Add it
-            </Button>
-          </>
-        }
-      >
+        onAdded={() => {
+          setAdding(false);
+          refresh();
+          toast.done("Added.");
+        }}
+      />
+
+      {element}
+    </DeskPage>
+  );
+}
+
+function AddPhoto({ open, onClose, onAdded }: { open: boolean; onClose: () => void; onAdded: () => void }) {
+  const toast = useToast();
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [caption, setCaption] = useState("");
+
+  const upload = useMutation(async () => {
+    if (!dataUrl) return;
+    await api.desk.gallery.upload(dataUrl, caption.trim());
+    setDataUrl(null);
+    setCaption("");
+    onAdded();
+  });
+
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="Add a photo"
+      footer={
+        <Action
+          tone="primary"
+          block
+          pending={upload.pending}
+          pendingLabel="Uploading"
+          disabled={!dataUrl}
+          onClick={async () => {
+            await upload.run();
+            const error = upload.readError();
+            if (error) toast.failed(error, "upload");
+          }}
+        >
+          Add it
+        </Action>
+      }
+    >
+      <div className="stack">
         <label className="dropzone">
-          {image ? <img src={image} alt="" /> : <span className="dropzone__hint">Choose a photo, up to 6 MB</span>}
           <input
             type="file"
-            accept={IMAGE_ACCEPT}
+            accept="image/jpeg,image/png,image/webp,image/avif"
             className="sr-only"
             onChange={async (event) => {
               const file = event.target.files?.[0];
               if (!file) return;
               try {
-                setImage(await readImageFile(file));
-                setProblem(null);
-              } catch (err) {
-                setProblem(err instanceof ImageError ? err.message : "That photo could not be used.");
+                setDataUrl(await readImageFile(file));
+              } catch (error) {
+                toast.failed(error, "upload");
               }
             }}
           />
+          {dataUrl ? (
+            <Img src={dataUrl} alt="" ratio={4 / 3} />
+          ) : (
+            <span className="dropzone__prompt fine muted">Choose a photo, under 6 MB</span>
+          )}
         </label>
-        <TextField label="Caption" value={caption} maxLength={200} onChange={(e) => setCaption(e.target.value)} />
-        {problem ? <Notice tone="bad">{problem}</Notice> : null}
-      </Sheet>
-    </DeskPage>
+
+        <TextField
+          label="Caption"
+          hint="Optional."
+          value={caption}
+          onChange={(event) => setCaption(event.target.value)}
+          maxLength={120}
+        />
+      </div>
+    </Sheet>
   );
 }

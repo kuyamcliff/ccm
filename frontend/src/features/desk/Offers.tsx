@@ -1,120 +1,132 @@
 import { useState } from "react";
 import { api } from "~/lib/api";
 import type { Offer } from "~/lib/api";
-import { longDate } from "~/lib/format";
-import { useResource } from "~/lib/useResource";
-import { Button, IconButton } from "~/ui/Button";
-import { SelectField, TextAreaField, TextField } from "~/ui/Field";
+import { useMutation, useQuery, invalidate } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { todayISO } from "~/lib/format";
+import { Action, Button, IconButton } from "~/ui/Button";
+import { TextField, TextAreaField, Switch } from "~/ui/Field";
 import { Sheet, useConfirm } from "~/ui/Sheet";
+import { DeskPage, Loaded, Nothing, State } from "./parts";
 import { useToast } from "~/state/toast";
-import { DeskPage, Loaded, Nothing, TableWrap } from "./parts";
 
 /**
- * What is running this week.
+ * Whatever is running this week.
  *
- * The icon is chosen from a fixed list rather than typed, because the public
- * page can only draw the icons it has, and a typo would silently fall back to
- * the flame with no clue why.
+ * A short list, because it should be a short list: three offers at once is no
+ * offer at all. The badge is the two or three words that appear on the customer
+ * side in red, so it is the field that does most of the work.
  */
 
-const ICONS = ["flame", "gift", "tag", "users", "star", "clock", "calendar", "bag", "sparkle"];
+interface Draft {
+  id: number | null;
+  title: string;
+  description: string;
+  badge: string;
+  valid_until: string;
+  is_active: boolean;
+}
 
-type Draft = Partial<Offer>;
-
-const BLANK: Draft = { title: "", description: "", badge: "", icon: "flame", sort_order: 0, valid_until: null };
+const BLANK: Draft = { id: null, title: "", description: "", badge: "", valid_until: "", is_active: true };
 
 export function Offers() {
-  const offers = useResource(() => api.desk.offers.list(), []);
   const toast = useToast();
-  const { confirm, confirmElement } = useConfirm();
+  const { confirm, element } = useConfirm();
   const [draft, setDraft] = useState<Draft | null>(null);
+
+  const offers = useQuery(K.desk.offers, () => api.desk.offers.list(), { staleMs: 60_000 });
+
+  function refresh() {
+    invalidate("desk.offers*");
+    invalidate(K.offers);
+    offers.reload();
+  }
+
+  const save = useMutation(async () => {
+    if (!draft) return;
+    const payload: Partial<Offer> = {
+      title: draft.title.trim(),
+      description: draft.description.trim(),
+      badge: draft.badge.trim(),
+      valid_until: draft.valid_until || null,
+      is_active: draft.is_active ? 1 : 0,
+    };
+    if (draft.id === null) await api.desk.offers.create(payload);
+    else await api.desk.offers.update(draft.id, payload);
+    setDraft(null);
+    refresh();
+    toast.done("Saved.");
+  });
+
+  const toggle = useMutation(async (offer: Offer) => {
+    await api.desk.offers.update(offer.id, { is_active: offer.is_active === 1 ? 0 : 1 });
+    refresh();
+  });
+
+  const remove = useMutation(async (id: number) => {
+    await api.desk.offers.remove(id);
+    setDraft(null);
+    refresh();
+    toast.done("Deleted.");
+  });
 
   return (
     <DeskPage
       title="Offers"
-      lead="Shown on the offers page, newest first by the order you set."
+      hint="Keep it to one or two. Three offers at once is no offer at all."
       actions={
-        <Button tone="primary" icon="plus" onClick={() => setDraft({ ...BLANK })}>
+        <Button size="sm" tone="primary" icon="plus" onClick={() => setDraft({ ...BLANK })}>
           New offer
         </Button>
       }
     >
-      {confirmElement}
-
-      <Loaded resource={offers}>
-        {(rows) =>
-          rows.length === 0 ? (
-            <Nothing>No offers yet.</Nothing>
+      <Loaded query={offers}>
+        {(list) =>
+          list.length === 0 ? (
+            <Nothing icon="tag">Nothing running.</Nothing>
           ) : (
-            <TableWrap>
-              <thead>
-                <tr>
-                  <th>Offer</th>
-                  <th>Badge</th>
-                  <th>Until</th>
-                  <th className="table__num">Order</th>
-                  <th>Showing</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((offer) => (
-                  <tr key={offer.id}>
-                    <td>
-                      <strong>{offer.title}</strong>
-                      <p className="fine faint">{offer.description}</p>
-                    </td>
-                    <td className="fine">{offer.badge || "None"}</td>
-                    <td className="fine">{offer.valid_until ? longDate(offer.valid_until) : "No end date"}</td>
-                    <td className="table__num">{offer.sort_order}</td>
-                    <td>
-                      <label className="switch">
-                        <input
-                          type="checkbox"
-                          role="switch"
-                          checked={offer.is_active === 1}
-                          onChange={async (event) => {
-                            try {
-                              await api.desk.offers.update(offer.id, { is_active: event.target.checked ? 1 : 0 });
-                              offers.reload();
-                            } catch (err) {
-                              toast.failed(err);
-                            }
-                          }}
-                        />
-                        <span className="switch__track" aria-hidden="true" />
-                        <span className="sr-only">{offer.title} showing</span>
-                      </label>
-                    </td>
-                    <td>
-                      <div className="table__actions">
-                        <IconButton name="edit" label={`Edit ${offer.title}`} size="sm" onClick={() => setDraft({ ...offer })} />
-                        <IconButton
-                          name="trash"
-                          label={`Delete ${offer.title}`}
-                          size="sm"
-                          onClick={async () => {
-                            const ok = await confirm({
-                              title: `Delete "${offer.title}"?`,
-                              body: "Switching it off hides it without losing the wording.",
-                              confirmLabel: "Delete",
-                            });
-                            if (!ok) return;
-                            try {
-                              await api.desk.offers.remove(offer.id);
-                              offers.reload();
-                              toast.done("Deleted.");
-                            } catch (err) {
-                              toast.failed(err);
-                            }
-                          }}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </TableWrap>
+            <div className="rows">
+              {list.map((offer) => (
+                <div key={offer.id} className="row row--top row--tall">
+                  <span className="grow stack stack--tight">
+                    <span className="bar bar--tight">
+                      <span className="small strong">{offer.title}</span>
+                      {offer.badge ? <State tone="hot">{offer.badge}</State> : null}
+                      {offer.is_active === 0 ? <State>Off</State> : null}
+                    </span>
+                    <span className="fine faint clip-2">{offer.description}</span>
+                    {offer.valid_until ? <span className="micro faint">Until {offer.valid_until}</span> : null}
+                  </span>
+
+                  <div className="bar bar--tight nowrap">
+                    <Action
+                      size="sm"
+                      tone="quiet"
+                      pending={toggle.pending}
+                      pendingLabel="Saving"
+                      onClick={() => void toggle.run(offer)}
+                    >
+                      {offer.is_active === 1 ? "Turn off" : "Turn on"}
+                    </Action>
+                    <IconButton
+                      name="edit"
+                      label={`Edit ${offer.title}`}
+                      size="sm"
+                      onClick={() =>
+                        setDraft({
+                          id: offer.id,
+                          title: offer.title,
+                          description: offer.description,
+                          badge: offer.badge,
+                          valid_until: offer.valid_until ?? "",
+                          is_active: offer.is_active === 1,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           )
         }
       </Loaded>
@@ -122,89 +134,82 @@ export function Offers() {
       <Sheet
         open={draft !== null}
         onClose={() => setDraft(null)}
-        title={draft?.id ? "Edit offer" : "New offer"}
+        title={draft?.id === null ? "New offer" : "Edit offer"}
         footer={
           <>
-            <Button tone="ghost" onClick={() => setDraft(null)}>
-              Cancel
-            </Button>
-            <Button
+            {draft && draft.id !== null ? (
+              <Action
+                tone="quiet"
+                pending={remove.pending}
+                pendingLabel="Deleting"
+                onClick={async () => {
+                  const sure = await confirm({
+                    title: `Delete "${draft.title}"?`,
+                    confirmLabel: "Delete it",
+                  });
+                  if (!sure) return;
+                  await remove.run(draft.id!);
+                }}
+              >
+                Delete
+              </Action>
+            ) : null}
+            <Action
               tone="primary"
+              pending={save.pending}
+              pendingLabel="Saving"
+              disabled={!draft?.title.trim()}
               onClick={async () => {
-                if (!draft?.title?.trim()) {
-                  toast.failed(new Error("An offer needs a title."));
-                  return;
-                }
-                try {
-                  const payload = {
-                    title: draft.title.trim(),
-                    description: draft.description ?? "",
-                    badge: draft.badge ?? "",
-                    icon: draft.icon ?? "flame",
-                    sort_order: draft.sort_order ?? 0,
-                    valid_until: draft.valid_until || null,
-                  };
-                  if (draft.id) await api.desk.offers.update(draft.id, payload);
-                  else await api.desk.offers.create(payload);
-                  setDraft(null);
-                  offers.reload();
-                  toast.done("Saved.");
-                } catch (err) {
-                  toast.failed(err);
-                }
+                await save.run();
+                const error = save.readError();
+                if (error) toast.failed(error, "desk");
               }}
             >
               Save
-            </Button>
+            </Action>
           </>
         }
       >
         {draft ? (
-          <>
+          <div className="stack">
             <TextField
               label="Title"
-              value={draft.title ?? ""}
-              maxLength={120}
-              onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+              value={draft.title}
+              onChange={(event) => setDraft({ ...draft, title: event.target.value })}
               required
-            />
-            <TextAreaField
-              label="What it is"
-              value={draft.description ?? ""}
-              maxLength={400}
-              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
             />
             <TextField
               label="Badge"
-              hint="Two or three words. Sits above the title."
-              placeholder="Tuesdays"
-              value={draft.badge ?? ""}
-              maxLength={40}
-              onChange={(e) => setDraft({ ...draft, badge: e.target.value })}
+              hint="Two or three words. This is the bit that shows in red."
+              value={draft.badge}
+              onChange={(event) => setDraft({ ...draft, badge: event.target.value })}
+              maxLength={24}
             />
-            <SelectField label="Icon" value={draft.icon ?? "flame"} onChange={(e) => setDraft({ ...draft, icon: e.target.value })}>
-              {ICONS.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </SelectField>
+            <TextAreaField
+              label="Description"
+              value={draft.description}
+              onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+              rows={3}
+              maxLength={300}
+            />
             <TextField
-              label="Last day"
+              label="Runs until"
+              hint="Leave empty for no end date."
               type="date"
-              hint="Leave empty if it runs until you stop it."
-              value={draft.valid_until ?? ""}
-              onChange={(e) => setDraft({ ...draft, valid_until: e.target.value || null })}
+              min={todayISO()}
+              value={draft.valid_until}
+              onChange={(event) => setDraft({ ...draft, valid_until: event.target.value })}
             />
-            <TextField
-              label="Order on the page"
-              type="number"
-              value={draft.sort_order ?? 0}
-              onChange={(e) => setDraft({ ...draft, sort_order: Number(e.target.value) })}
+            <Switch
+              label="Showing on the site"
+              checked={draft.is_active}
+              onChange={(next) => setDraft({ ...draft, is_active: next })}
             />
-          </>
+          </div>
         ) : null}
       </Sheet>
+
+      {element}
     </DeskPage>
   );
 }

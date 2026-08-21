@@ -62,7 +62,9 @@ export interface SiteConfig {
     phone: boolean;
     afterHoursMessage: LocalizedMessage;
   };
-  payments: { mtn: boolean; orange: boolean };
+  /** Which ways of paying are offered. `cash` is settle-at-the-counter for a
+      takeaway order: the order is placed and held unpaid. */
+  payments: { mtn: boolean; orange: boolean; cash: boolean };
   announcement: { enabled: boolean; tone: "info" | "good" | "warn"; message: LocalizedMessage };
   /** The site closed to customers while the owner works on it. Staff always
       get through, so turning this on can never lock them out of turning it off. */
@@ -96,13 +98,13 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
     enabled: true, staffed: true, responseMinutes: 15, whatsapp: true, phone: true,
     afterHoursMessage: { en: "Nobody is at the desk right now. Leave a message and we'll get back to you.", fr: "Personne n'est disponible pour le moment. Laissez un message et nous vous répondrons." },
   },
-  payments: { mtn: true, orange: true },
+  payments: { mtn: true, orange: true, cash: true },
   announcement: { enabled: false, tone: "info", message: { en: "", fr: "" } },
   maintenance: {
     enabled: false,
     message: {
-      en: "We are making some changes and will be back shortly. The grill is still on — call us if you need us.",
-      fr: "Nous faisons quelques changements et revenons très vite. Le grill tourne toujours — appelez-nous si besoin.",
+      en: "We are making some changes and will be back shortly. The grill is still on, so give us a call if you need us.",
+      fr: "Nous faisons quelques changements et revenons très vite. Le grill tourne toujours, appelez-nous si besoin.",
     },
   },
 };
@@ -170,7 +172,7 @@ export function parseSiteConfig(raw?: string): SiteConfig {
         whatsapp: bool(support.whatsapp, true), phone: bool(support.phone, true),
         afterHoursMessage: localized(support.afterHoursMessage, DEFAULT_SITE_CONFIG.support.afterHoursMessage),
       },
-      payments: { mtn: bool(payments.mtn, true), orange: bool(payments.orange, true) },
+      payments: { mtn: bool(payments.mtn, true), orange: bool(payments.orange, true), cash: bool(payments.cash, true) },
       announcement: {
         enabled: bool(announcement.enabled, false),
         tone: mode(announcement.tone, ["info", "good", "warn"] as const, "info"),

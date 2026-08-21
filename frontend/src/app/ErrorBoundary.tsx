@@ -1,45 +1,46 @@
-import { Component } from "react";
-import type { ErrorInfo, ReactNode } from "react";
-
-interface Props {
-  children: ReactNode;
-}
-
-interface State {
-  failed: boolean;
-}
+import { Component, type ErrorInfo, type ReactNode } from "react";
 
 /**
- * Last line of defence.
+ * The last thing between a bug and a blank page.
  *
- * A render error anywhere below this leaves React with an empty document —
- * a white screen with no explanation, which on a phone reads as "the
- * restaurant's site is broken". This catches it and offers the only two moves
- * that ever help: reload, or go back to the start.
+ * A thrown render in React 19 unmounts the whole tree, so without this the
+ * result of one bad property access is a white screen with no explanation and no
+ * way out. Here it is a short apology, a reload button, and the phone number,
+ * because somebody who cannot book online should still be able to ring the door.
+ *
+ * Deliberately a class. Error boundaries are the one thing hooks still cannot
+ * do.
  */
-export class ErrorBoundary extends Component<Props, State> {
-  override state: State = { failed: false };
 
-  static getDerivedStateFromError(): State {
-    return { failed: true };
+interface State {
+  error: Error | null;
+}
+
+export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
+  override state: State = { error: null };
+
+  static getDerivedStateFromError(error: Error): State {
+    return { error };
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo) {
-    // Kept: the production build ships hidden source maps, so this stack is
-    // readable when somebody reports the screen below.
-    console.error("[render]", error, info.componentStack);
+    /* The console is the only place this can go. There is no error reporting
+       service wired up, and adding one means a third-party script on a page
+       whose whole problem is weight on a slow connection. */
+    console.error("[ccm] render failed", error, info.componentStack);
   }
 
   override render() {
-    if (!this.state.failed) return this.props.children;
+    if (!this.state.error) return this.props.children;
 
     return (
-      <div className="page section stack" style={{ maxWidth: "34rem" }}>
-        <h1 className="display display--lg">Something on this page broke</h1>
+      <main className="page section stack center broke" role="alert">
+        <h1 className="display display--xl">This page broke</h1>
         <p className="lead">
-          Not your fault, and nothing you were doing has been lost. Reload the page and it will most likely behave.
+          Sorry about that. Reload it, and if it keeps happening give us a call and we will take your order over the
+          phone.
         </p>
-        <div className="row row--wrap">
+        <div className="bar bar--tight" style={{ justifyContent: "center" }}>
           <button type="button" className="btn btn--primary" onClick={() => window.location.reload()}>
             Reload
           </button>
@@ -47,7 +48,7 @@ export class ErrorBoundary extends Component<Props, State> {
             Back to the start
           </a>
         </div>
-      </div>
+      </main>
     );
   }
 }

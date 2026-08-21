@@ -1,71 +1,87 @@
 import { api } from "~/lib/api";
-import { longDate } from "~/lib/format";
-import { useResource } from "~/lib/useResource";
+import { useQuery } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { Badge } from "~/ui/Bits";
 import { LinkButton } from "~/ui/Button";
-import { Icon, type IconName } from "~/ui/Icon";
-import { EmptyState, ErrorState, SkeletonCards } from "~/ui/Feedback";
+import { EmptyState, ErrorState, SkeletonRows } from "~/ui/Feedback";
+import { Reveal } from "~/ui/Reveal";
+import { useCopy } from "~/state/locale";
+import { useVenue } from "~/state/venue";
 
 /**
- * Whatever is running this week.
+ * What is running this week.
  *
- * The icon on each offer is a name the owner picks in the console. Anything
- * unrecognised falls back to the flame rather than rendering nothing.
+ * A list of rows. Each offer is a badge, a title, a line of description and a
+ * date it runs until, which is four things and does not need a card around it.
  */
-
-const ICONS: Record<string, IconName> = {
-  flame: "flame",
-  gift: "gift",
-  tag: "tag",
-  users: "users",
-  star: "star",
-  clock: "clock",
-  calendar: "calendar",
-  bag: "bag",
-  sparkle: "sparkle",
-};
-
 export function OffersPage() {
-  const offers = useResource(() => api.site.offers(), []);
-  const rows = offers.data ?? [];
+  const { locale, c } = useCopy();
+  const { siteConfig } = useVenue();
+  const { data, loading, error, reload } = useQuery(K.offers, () => api.site.offers(), { persist: true });
+
+  const offers = (data ?? []).filter((offer) => offer.is_active === 1);
 
   return (
-    <div className="page section">
-      <div className="section-head">
-        <hr className="heat-rule" />
-        <h1 className="display display--xl">What is on</h1>
-      </div>
+    <div className="page section stack">
+      <header className="stack stack--tight">
+        <h1 className="display display--xl">{c.offers.title}</h1>
+        <p className="lead">{c.offers.lead}</p>
+      </header>
 
-      {offers.loading ? (
-        <SkeletonCards count={2} height="8rem" />
-      ) : offers.error ? (
-        <ErrorState error={offers.error} onRetry={offers.reload} />
-      ) : rows.length === 0 ? (
+      {error ? (
+        <ErrorState error={error} intent="load" onRetry={reload} />
+      ) : loading ? (
+        <SkeletonRows count={3} />
+      ) : offers.length === 0 ? (
         <EmptyState
-          icon="flame"
-          title="Nothing running right now"
+          icon="tag"
+          title={c.offers.none}
+          body={c.offers.noneBody}
           action={
-            <LinkButton to="/menu" tone="primary">
-              See the menu
+            <LinkButton to="/menu" tone="ghost" size="sm">
+              {c.nav.menu}
             </LinkButton>
           }
-        >
-          The usual prices are the usual prices. Check back on a match day.
-        </EmptyState>
+        />
       ) : (
-        <div className="offer-grid">
-          {rows.map((offer) => (
-            <article key={offer.id} className="offer card">
-              <span className="offer__icon">
-                <Icon name={ICONS[offer.icon] ?? "flame"} size={24} />
-              </span>
-              {offer.badge ? <span className="badge badge--hot">{offer.badge}</span> : null}
-              <h2 className="card__title">{offer.title}</h2>
-              <p className="fine muted">{offer.description}</p>
-              {offer.valid_until ? <p className="fine faint">Until {longDate(offer.valid_until)}</p> : null}
+        <Reveal className="rows">
+          {offers.map((offer) => (
+            <article key={offer.id} className="row row--top row--tall">
+              <div className="grow stack stack--tight">
+                <div className="bar bar--tight">
+                  {offer.badge ? <Badge tone="hot">{offer.badge}</Badge> : null}
+                  {offer.valid_until ? (
+                    <span className="fine faint">
+                      {c.offers.until}{" "}
+                      {new Date(offer.valid_until).toLocaleDateString(locale === "fr" ? "fr-FR" : "en-GB", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </span>
+                  ) : null}
+                </div>
+                <h2 className="title">{offer.title}</h2>
+                <p className="fine muted">{offer.description}</p>
+              </div>
             </article>
           ))}
-        </div>
+        </Reveal>
       )}
+
+      {siteConfig.features.ordering || siteConfig.features.booking ? (
+        <div className="bar bar--wrap">
+          {siteConfig.features.ordering ? (
+            <LinkButton to="/order" tone="primary" size="sm" icon="bag">
+              {c.home.orderNow}
+            </LinkButton>
+          ) : null}
+          {siteConfig.features.booking ? (
+            <LinkButton to="/book" tone="ghost" size="sm" icon="calendar">
+              {c.home.holdTable}
+            </LinkButton>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

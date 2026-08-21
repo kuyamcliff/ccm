@@ -64,3 +64,53 @@ export function waitlistReady(name: string): string {
   const who = name.trim() ? `${name.trim()}, ` : "";
   return `${VENUE}: ${who}your table is ready. Come to the counter and we will seat you.`;
 }
+
+/**
+ * The reminders.
+ *
+ * Two of them, at 24 hours and at 3 hours, which is the shape the research
+ * consistently supports: the first gives somebody time to cancel and free the
+ * table, the second catches the ones who genuinely forgot.
+ *
+ * Both carry a way to cancel in one tap. That is the whole point of sending
+ * them. A guest who can cancel in two taps cancels, and a cancelled table can be
+ * resold; a no-show cannot. Making the reminder a dead end would leave the
+ * restaurant with the same empty table and a guest who now feels nagged.
+ */
+export function bookingReminder(facts: {
+  name: string;
+  date: string;
+  time: string;
+  partySize: number;
+  tableLabel?: string | null;
+  code: string;
+  /** True for the 3 hour one, which is shorter and more immediate. */
+  soon: boolean;
+  manageUrl: string;
+}): string {
+  const where = facts.tableLabel ? `table ${facts.tableLabel}` : "your table";
+
+  if (facts.soon) {
+    return [
+      `${facts.name}, see you at ${facts.time} today.`,
+      `${VENUE}, ${where} for ${facts.partySize}. Code ${facts.code}.`,
+      `Cannot make it? ${facts.manageUrl}`,
+    ].join(" ");
+  }
+
+  return [
+    `${facts.name}, this is ${VENUE}.`,
+    `You have ${where} for ${facts.partySize} tomorrow, ${shortDate(facts.date)} at ${facts.time}.`,
+    `Code ${facts.code}.`,
+    `Need to change or cancel? ${facts.manageUrl}`,
+  ].join(" ");
+}
+
+/** Sent when a payment fell over, so nobody is left thinking they have a table. */
+export function paymentFailed(facts: { name: string; date: string; time: string; retryUrl: string }): string {
+  return [
+    `${facts.name}, your payment for ${shortDate(facts.date)} at ${facts.time} did not go through,`,
+    `so the table is not held yet. Nothing was taken.`,
+    `Try again here: ${facts.retryUrl}`,
+  ].join(" ");
+}

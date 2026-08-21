@@ -1,100 +1,164 @@
-import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
+import { api } from "~/lib/api";
 import type { Booking } from "~/lib/api";
-import { longDate, timeLabel } from "~/lib/format";
+import { dayLabel, timeLabel } from "~/lib/format";
+import { Code, Badge } from "~/ui/Bits";
+import { AnchorButton, Button } from "~/ui/Button";
 import { Icon } from "~/ui/Icon";
-import { Money } from "~/ui/Bits";
+import { useCopy } from "~/state/locale";
 
 /**
- * A booking, as the guest holds it.
+ * The thing you hold up at the door.
  *
- * The thing that actually matters at the door is the code, so it is the
- * largest element on the card and set in mono where every character is
- * unambiguous — somebody is going to read it out over a phone. The QR that
- * goes with it lives on the PDF receipt, which is signed by the server; there
- * is no point drawing an unsigned one here.
+ * One of only three raised surfaces in the product, and it earns it: this is an
+ * object you carry and hand to somebody, so it is drawn as one. Everything else
+ * on the site is a row on a page.
+ *
+ * ── Working with no signal ─────────────────────────────────────────────────
+ *
+ * The moment this is needed is the moment somebody is standing outside a
+ * building in Buea at night, and that is not a moment to be making a network
+ * request. So the code is written to localStorage the first time it is seen and
+ * read back from there afterwards. The service worker deliberately does not
+ * cache `/api/*`, so this is the only thing that makes the pass work offline.
+ *
+ * What is cached is only what the door needs: the code, the date, the time and
+ * the table. Not the whole booking.
  */
 
-const STATUS: Record<Booking["status"], { label: string; tone: string }> = {
-  confirmed: { label: "Confirmed", tone: "good" },
-  pending_payment: { label: "Awaiting deposit", tone: "warn" },
-  cancelled: { label: "Cancelled", tone: "bad" },
-  completed: { label: "Done", tone: "neutral" },
-};
+const PASS_KEY = "ccm.pass.v1";
 
-export function BookingPass({
-  booking,
-  actions,
-  compact,
-}: {
-  booking: Booking;
-  actions?: ReactNode;
-  /** The tighter cut used for the guest's own list, where several passes sit
-      one under the other and the full ticket size is more than the page needs. */
-  compact?: boolean;
-}) {
-  const status = STATUS[booking.status];
-  const dead = booking.status === "cancelled";
+interface CachedPass {
+  id: number;
+  code: string;
+  date: string;
+  time: string;
+  table: string | null;
+  party: number;
+}
+
+function cachePass(booking: Booking) {
+  if (!booking.ccm_code) return;
+  try {
+    const entry: CachedPass = {
+      id: booking.id,
+      code: booking.ccm_code,
+      date: booking.date,
+      time: booking.time,
+      table: booking.table_label ?? null,
+      party: booking.party_size,
+    };
+    const all = readPasses().filter((pass) => pass.id !== entry.id);
+    localStorage.setItem(PASS_KEY, JSON.stringify([...all, entry].slice(-6)));
+  } catch {
+    /* Storage refused. The pass still works while there is a connection. */
+  }
+}
+
+export function readPasses(): CachedPass[] {
+  try {
+    const raw = localStorage.getItem(PASS_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as CachedPass[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function BookingPass({ booking }: { booking: Booking }) {
+  const { c, fill } = useCopy();
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    cachePass(booking);
+  }, [booking]);
+
+  const held = booking.status === "confirmed";
 
   return (
-    <article className={`pass${dead ? " pass--void" : ""}${compact ? " pass--compact" : ""}`}>
-      <header className="pass__head">
-        <span className={`badge badge--${status.tone}`}>{status.label}</span>
-        {booking.table_label ? (
-          <span className="pass__table">
-            Table <strong>{booking.table_label}</strong>
+    <div className="carry pass" data-held={held ? "true" : undefined}>
+      <div className="bar bar--between">
+        <span className="label">{c.mine.pass}</span>
+        <Badge tone={held ? "good" : "warn"}>
+          {held ? c.mine.bookingStatus.confirmed : c.mine.bookingStatus.pending_payment}
+        </Badge>
+      </div>
+
+      <p className="display display--lg pass__when">
+        {dayLabel(booking.date)}, {timeLabel(booking.time)}
+      </p>
+
+      <div className="rows pass__facts">
+        <div className="row">
+          <span className="grow label">{c.book.stepWho}</span>
+          <span className="fine">
+            {booking.party_size === 1 ? c.book.partyOne : fill(c.book.partyMany, { n: booking.party_size })}
           </span>
-        ) : (
-          <span className="pass__table faint">Table on arrival</span>
-        )}
-      </header>
-
-      <p className="pass__when display display--lg">{longDate(booking.date)}</p>
-
-      <div className="pass__facts">
-        <div>
-          <span className="label">Time</span>
-          <p className="mono pass__big">{timeLabel(booking.time)}</p>
         </div>
-        <div>
-          <span className="label">People</span>
-          <p className="mono pass__big">{booking.party_size}</p>
-        </div>
-        {booking.amount_fcfa ? (
-          <div>
-            <span className="label">Deposit paid</span>
-            <p className="pass__big">
-              <Money value={booking.amount_fcfa} />
-            </p>
+        {booking.table_label ? (
+          <div className="row">
+            <span className="grow label">{c.book.stepWhere}</span>
+            <span className="fine">
+              Table {booking.table_label}
+              {booking.table_zone ? `, ${booking.table_zone}` : ""}
+            </span>
           </div>
         ) : null}
       </div>
 
-      {booking.note ? (
-        <p className="pass__note fine">
-          <Icon name="info" size={15} />
-          {booking.note}
-        </p>
-      ) : null}
-
-      {/* The perforation. Below it is the part the door cares about. */}
+      {/* The perforation. Purely visual, and the reason this reads as a torn
+          ticket rather than as another rounded rectangle. */}
       <div className="pass__tear" aria-hidden="true">
         <span />
         <span />
       </div>
 
-      <footer className="pass__foot">
-        <div>
-          <span className="label">Show this code</span>
-          <p className="pass__code mono">{booking.ccm_code ?? `#${String(booking.id).padStart(4, "0")}`}</p>
-        </div>
-        {booking.checked_in_at ? (
-          <span className="badge badge--good">Checked in</span>
-        ) : booking.cancel_reason ? (
-          <span className="fine faint">{booking.cancel_reason}</span>
-        ) : null}
-      </footer>
+      <div className="pass__code">
+        {booking.ccm_code ? <Code value={booking.ccm_code} size="lg" /> : <span className="fine faint">Not held yet</span>}
+        <p className="fine muted">{c.mine.passHint}</p>
+      </div>
 
-      {actions ? <div className="pass__actions">{actions}</div> : null}
-    </article>
+      <div className="bar bar--tight bar--wrap">
+        {held ? (
+          <>
+            <AnchorButton href={api.booking.calendarUrl(booking.id)} tone="ghost" size="sm" icon="calendar">
+              {c.mine.addToCalendar}
+            </AnchorButton>
+            <Button
+              tone="quiet"
+              size="sm"
+              icon="download"
+              onClick={async () => {
+                setDownloading(true);
+                try {
+                  const blob = await api.me.bookingReceiptFile(booking.id);
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement("a");
+                  link.href = url;
+                  link.download = `cam-chop-meat-${booking.ccm_code ?? booking.id}.pdf`;
+                  document.body.appendChild(link);
+                  link.click();
+                  link.remove();
+                  URL.revokeObjectURL(url);
+                } catch {
+                  /* The receipt is a nicety; the code above is the thing that
+                     actually gets somebody through the door. */
+                } finally {
+                  setDownloading(false);
+                }
+              }}
+            >
+              {downloading ? c.pending.saving : c.mine.receipt}
+            </Button>
+          </>
+        ) : (
+          <span className="fine faint bar bar--tight">
+            <Icon name="alert" size={14} />
+            Pay the deposit to hold this table.
+          </span>
+        )}
+      </div>
+    </div>
   );
 }

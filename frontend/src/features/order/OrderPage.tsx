@@ -1,52 +1,395 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { api, SLOTS } from "~/lib/api";
-import { ApiError } from "~/lib/http";
-import { money, normalisePhone, timeLabel } from "~/lib/format";
-import { pointsOffer } from "~/lib/loyalty";
-import { useAction, useResource } from "~/lib/useResource";
-import { Button, IconButton, LinkButton } from "~/ui/Button";
-import { PhoneField, SelectField, Switch, TextAreaField, TextField } from "~/ui/Field";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { api } from "~/lib/api";
+import { useMutation, useQuery, invalidate } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { money, normalisePhone } from "~/lib/format";
+import { say } from "~/lib/say";
 import { Icon } from "~/ui/Icon";
-import { Photo } from "~/ui/Photo";
-import { Money } from "~/ui/Bits";
-import { EmptyState, ErrorState, Notice, SkeletonCards } from "~/ui/Feedback";
+import { Img } from "~/ui/Img";
+import { Action, LinkButton } from "~/ui/Button";
+import { TextField, TextAreaField, SelectField, PhoneField, Counter } from "~/ui/Field";
+import { Money, Code, Badge } from "~/ui/Bits";
+import { EmptyState, Notice, SkeletonRows } from "~/ui/Feedback";
+import { usePress } from "~/ui/press";
+import { PaySheet, type PaymentDriver } from "~/features/pay/PaySheet";
 import { useBasket } from "~/state/basket";
 import { useSession } from "~/state/session";
-import { useToast } from "~/state/toast";
-import { MomoDialog } from "~/features/pay/MomoDialog";
+import { useCopy } from "~/state/locale";
+import { useVenue } from "~/state/venue";
 
-interface Placed { order_no: string; total_fcfa: number; discount_fcfa: number; points_spent: number; points_value_fcfa: number; payment_required: boolean; }
+/**
+ * The takeaway basket, and paying for it.
+ *
+ * ── Cash on collection ─────────────────────────────────────────────────────
+ *
+ * New in v5, and it changes who can order. Mobile Money was the only way to pay,
+ * which quietly excluded anybody without a wallet, anybody whose wallet was
+ * empty at eight in the evening, and anybody who simply does not want to pay a
+ * restaurant they have not eaten at yet before they have seen the food.
+ *
+ * A cash order is placed exactly like a paid one and then left unpaid: the
+ * kitchen sees it, the customer gets the same code, and the counter takes the
+ * money when they arrive. The console's Orders board has a "Mark paid" for it.
+ *
+ * Prices are never trusted from here. The basket stores ids and quantities only,
+ * they are priced against the live menu for display, and the server prices the
+ * whole order again when it is placed.
+ */
+
+/** Half-hourly, from now until closing. The server validates this again. */
+function pickupSlots(): string[] {
+  const slots: string[] = [];
+  const now = new Date();
+  /* Twenty minutes' head start: the grill needs it, and offering a slot that has
+     already passed is offering something nobody can have. */
+  const start = new Date(now.getTime() + 20 * 60 * 1000);
+  const cursor = new Date(start);
+  cursor.setMinutes(cursor.getMinutes() < 30 ? 30 : 60, 0, 0);
+
+  while (cursor.getHours() < 23) {
+    slots.push(`${String(cursor.getHours()).padStart(2, "0")}:${String(cursor.getMinutes()).padStart(2, "0")}`);
+    cursor.setMinutes(cursor.getMinutes() + 30);
+  }
+  return slots;
+}
+
+type Method = "mtn_momo" | "orange_money" | "cash";
 
 export function OrderPage() {
-  const { user } = useSession(); const basket = useBasket(); const toast = useToast();
-  const menu = useResource(() => api.site.menu(), []); const loyalty = useResource(() => (user ? api.me.loyalty() : Promise.resolve(null)), [user?.id]);
-  const [name, setName] = useState(user?.name ?? ""); const [phone, setPhone] = useState(""); const [pickup, setPickup] = useState(SLOTS[8] ?? "13:00"); const [note, setNote] = useState(""); const [promo, setPromo] = useState(""); const [gift, setGift] = useState(""); const [usePoints, setUsePoints] = useState(true); const [problem, setProblem] = useState<string | null>(null);
-  const [placed, setPlaced] = useState<Placed | null>(null); const [ordered, setOrdered] = useState<{ name: string; qty: number; total: number }[]>([]); const [paying, setPaying] = useState(false); const [collected, setCollected] = useState(false);
-  const place = useAction(api.orders.place);
+  const { c, fill } = useCopy();
+  const { siteConfig } = useVenue();
+  const { user } = useSession();
+  const basket = useBasket();
+  const navigate = useNavigate();
 
-  if (menu.loading) return <div className="page section"><SkeletonCards count={3} height="6rem" /></div>;
-  if (menu.error) return <div className="page section"><ErrorState error={menu.error} onRetry={menu.reload} /></div>;
+  const menu = useQuery(K.menu, () => api.site.menu(), { persist: true });
 
-  const { lines, subtotal, dropped } = basket.price(menu.data ?? []);
-  const offer = pointsOffer(loyalty.data, subtotal); const pointsOff = offer && usePoints ? offer.value : 0; const dueNow = Math.max(0, subtotal - pointsOff);
+  const [name, setName] = useState(user?.name ?? "");
+  const [phone, setPhone] = useState("");
+  const [note, setNote] = useState("");
+  const [method, setMethod] = useState<Method>(siteConfig.payments.mtn ? "mtn_momo" : "orange_money");
 
-  if (collected && placed) return <div className="page section stack stack--loose" style={{ maxWidth: "34rem" }}><div className="section-head"><hr className="heat-rule" /><h1 className="display display--xl">Order in</h1></div><div className="pass"><header className="pass__head"><span className="badge badge--good">Sent to the kitchen</span><span className="pass__table">Collect at <strong>{timeLabel(pickup)}</strong></span></header><div className="pass__tear" aria-hidden="true"><span /><span /></div><footer className="pass__foot"><div><span className="label">Show this at the counter</span><p className="pass__code mono">{placed.order_no}</p></div></footer>{ordered.length > 0 ? <div className="stack stack--tight"><span className="label">Your order</span><ul className="lines">{ordered.map((line) => <li key={line.name}><span className="mono lines__qty">{line.qty}</span><span>{line.name}</span><Money value={line.total} className="push" /></li>)}</ul>{placed.points_spent > 0 ? <div className="row row--between"><span className="muted">Points used</span><span className="fine">{placed.points_spent} points, - <Money value={placed.points_value_fcfa} /></span></div> : null}<div className="row row--between total-row"><strong>Paid</strong><strong><Money value={placed.total_fcfa} /></strong></div></div> : null}<p className="fine muted">We start cooking closer to the time so it is hot when you arrive. {user ? "Your code and this list are also saved in Mine." : "Write the code down: you ordered without an account, so this page is the only copy."}</p></div><div className="row row--wrap"><LinkButton to="/mine" tone="primary" iconEnd="arrow-right">See my orders</LinkButton><LinkButton to="/menu" tone="ghost">Order more</LinkButton></div></div>;
+  const slots = useMemo(() => pickupSlots(), []);
+  const [pickup, setPickup] = useState(slots[0] ?? "19:00");
 
-  if (lines.length === 0) return <div className="page section"><div className="section-head"><hr className="heat-rule" /><h1 className="display display--xl">Your basket</h1></div><EmptyState icon="basket" title="Nothing in it yet" action={<LinkButton to="/menu" tone="primary">Go to the menu</LinkButton>}>Add what you want from the menu, then pick a collection time here.</EmptyState></div>;
+  /** The placed order, once it exists. Paying happens against this. */
+  const [placed, setPlaced] = useState<{ orderNo: string; total: number; payable: boolean } | null>(null);
+  const [paying, setPaying] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
 
-  async function submit() {
-    setProblem(null); const digits = normalisePhone(phone); if (name.trim().length < 2) { setProblem("Enter the name we should call out."); return; } if (digits.length < 8) { setProblem("Enter a phone number we can reach you on."); return; }
-    const result = await place.run({ name: name.trim(), phone: digits, pickup_time: pickup, items: lines.map((line) => ({ id: line.id, qty: line.qty })), note: note.trim() || undefined, promo_code: user && promo.trim() ? promo.trim() : undefined, gift_card_code: user && gift.trim() ? gift.trim() : undefined, use_points: Boolean(offer) && usePoints });
-    if (!result) { const failure = place.readError(); setProblem(failure instanceof ApiError ? failure.message : "That order could not be sent."); return; }
-    setOrdered(lines.map((line) => ({ name: line.item.name, qty: line.qty, total: line.lineTotal }))); setPlaced(result);
-    if (result.payment_required) setPaying(true); else { basket.clear(); setCollected(true); }
+  const priced = useMemo(() => basket.price(menu.data ?? []), [basket, menu.data]);
+
+  const cashAllowed = siteConfig.payments.cash !== false;
+  const walletAllowed = siteConfig.payments.mtn || siteConfig.payments.orange;
+
+  const place = useMutation(async () => {
+    setProblem(null);
+    const result = await api.orders.place({
+      name: name.trim(),
+      phone: normalisePhone(phone),
+      pickup_time: pickup,
+      items: priced.lines.map((line) => ({ id: line.id, qty: line.qty })),
+      note: note.trim() || undefined,
+      payment_method: method === "cash" ? "cash" : undefined,
+    });
+
+    basket.clear();
+    invalidate(K.myOrders);
+
+    /* The server has the last word on whether there is anything to charge: a
+       promo or gift card can cover the whole order, in which case there is no
+       payment sheet to open even for a wallet order. */
+    const payable = result.payment_required;
+    setPlaced({ orderNo: result.order_no, total: result.total_fcfa, payable });
+    if (payable) setPaying(true);
+  });
+
+  /* ── Placed ───────────────────────────────────────────────────────────────*/
+  if (placed && !paying) {
+    return (
+      <div className="page section stack">
+        <header className="stack stack--tight">
+          <h1 className="display display--xl">{c.order.placed}</h1>
+          <p className="lead">{placed.payable ? c.order.lead : c.order.payCashNote}</p>
+        </header>
+
+        {/* A carried surface: this is the thing they hold up at the counter. */}
+        <div className="carry order__code">
+          <p className="label">{c.order.yourCode}</p>
+          <Code value={placed.orderNo} size="lg" />
+          <p className="fine muted">{c.order.codeHint}</p>
+          <div className="bar bar--between order__codefoot">
+            <span className="label">{c.common.total}</span>
+            <Money value={placed.total} />
+          </div>
+          {!placed.payable ? <Badge tone="warn">{c.order.payCash}</Badge> : null}
+        </div>
+
+        <div className="bar bar--wrap">
+          <LinkButton to="/mine" tone="primary" size="sm" icon="ticket">
+            {c.yours.trackOrder}
+          </LinkButton>
+          <LinkButton to="/menu" tone="ghost" size="sm">
+            {c.nav.menu}
+          </LinkButton>
+        </div>
+      </div>
+    );
   }
 
-  return <div className="page section"><div className="section-head"><hr className="heat-rule" /><h1 className="display display--xl">Your basket</h1></div><div className="checkout"><section className="stack stack--loose">{dropped > 0 ? <Notice tone="warn">{dropped === 1 ? "An item" : `${dropped} items`} came off the menu since you added it, so it is no longer in the basket.</Notice> : null}<ul className="basket">{lines.map((line) => <li key={line.id} className="basket__line"><Photo className="basket__photo" src={line.item.image_url} alt="" /><div className="basket__body"><p className="basket__name">{line.item.name}</p><p className="fine faint"><Money value={line.item.price_fcfa ?? 0} /> each</p></div><div className="counter" role="group" aria-label={`Quantity, ${line.item.name}`}><button type="button" className="counter__btn" onClick={() => basket.setQty(line.id, line.qty - 1)} aria-label={`One fewer ${line.item.name}`}><Icon name="minus" size={16} /></button><span className="counter__value">{line.qty}</span><button type="button" className="counter__btn" onClick={() => basket.setQty(line.id, line.qty + 1)} disabled={line.qty >= 20} aria-label={`One more ${line.item.name}`}><Icon name="plus" size={16} /></button></div><Money value={line.lineTotal} className="basket__total" /><IconButton name="trash" label={`Remove ${line.item.name}`} size="sm" onClick={() => basket.remove(line.id)} /></li>)}</ul>
-    <div className="stack" style={{ maxWidth: "32rem" }}><h2 className="display display--lg">Who is collecting</h2><TextField label="Name for the order" hint="What we call out at the counter." value={name} autoComplete="name" onChange={(e) => setName(e.target.value)} required /><PhoneField label="Phone number" hint="We call this number if there is a question about your order." value={phone} onChange={setPhone} required /><SelectField label="Collection time" hint="Give us at least half an hour. Everything is grilled fresh when you order it." value={pickup} onChange={(e) => setPickup(e.target.value)}>{SLOTS.map((slot) => <option key={slot} value={slot}>{slot}</option>)}</SelectField><TextAreaField label="Anything to add" placeholder="Optional. Extra pepper, no onions, that sort of thing." maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} />{offer ? <Switch checked={usePoints} onChange={setUsePoints} label={<>Use {offer.points} points, <Money value={offer.value} /> off</>} /> : null}{user ? <div className="grid--two"><TextField label="Promo code" placeholder="Optional" value={promo} autoCapitalize="characters" onChange={(e) => setPromo(e.target.value)} /><TextField label="Gift card" placeholder="Optional" value={gift} autoCapitalize="characters" onChange={(e) => setGift(e.target.value)} /></div> : <p className="fine faint"><Link to="/signin" state={{ from: "/order" }}>Sign in</Link> to use a promo code or a gift card, and to keep your orders in one place.</p>}</div></section>
-    <aside className="checkout__side"><div className="card stack"><div className="row row--between"><span className="muted">Subtotal</span><Money value={subtotal} /></div><div className="row row--between"><span className="muted">Takeaway</span><span className="fine">Free</span></div>{pointsOff > 0 ? <div className="row row--between"><span className="muted">Points</span><span className="fine">- <Money value={pointsOff} /></span></div> : null}<div className="row row--between total-row"><strong>To pay</strong><strong className="checkout__total"><Money value={dueNow} /></strong></div><p className="fine faint">Pay securely with MTN Mobile Money or Orange Money. No card payment is used.</p>{problem ? <Notice tone="bad">{problem}</Notice> : null}<Button tone="primary" size="lg" block className="checkout__pay" busy={place.busy} onClick={submit} icon="wallet">Pay {money(dueNow)} FCFA</Button></div></aside></div>
-    <div className="basket-bar basket-bar--phone"><div className="page row row--between"><span className="stack stack--tight"><span className="label">To pay</span><strong className="basket-bar__total">{money(dueNow)} FCFA</strong></span><Button tone="primary" busy={place.busy} onClick={submit} icon="wallet">Pay {money(dueNow)} FCFA</Button></div></div>
-    {placed ? <MomoDialog open={paying} amountFcfa={placed.total_fcfa} title="Pay for your order" what={`Order ${placed.order_no}, collect at ${timeLabel(pickup)}`} driver={{ start: (input) => api.orders.pay(placed.order_no, input.momoPhone, input.wallet, input.idempotencyKey).then((prompt) => ({ reference: prompt.reference, amount_fcfa: prompt.amount_fcfa, expires_in_seconds: prompt.expires_in_seconds, payment_url: prompt.payment_url })), poll: api.orders.paymentStatus, abandon: api.orders.abandonPayment }} onClose={() => { setPaying(false); basket.clear(); toast.say(user ? `Order ${placed.order_no} is saved. Pay for it in Mine so the kitchen can start.` : `Order ${placed.order_no} was not paid, so the kitchen has not started on it. Order again when you are ready to pay.`); setCollected(true); }} onPaid={() => { setPaying(false); basket.clear(); setCollected(true); }} /> : null}
-  </div>;
+  /* ── Empty ────────────────────────────────────────────────────────────────*/
+  if (menu.loading) {
+    return (
+      <div className="page section">
+        <SkeletonRows count={4} />
+      </div>
+    );
+  }
+
+  if (priced.lines.length === 0) {
+    return (
+      <div className="page section">
+        <EmptyState
+          icon="basket"
+          title={c.order.empty}
+          body={c.order.emptyBody}
+          action={
+            <LinkButton to="/menu" tone="primary" size="sm" icon="list">
+              {c.order.goToMenu}
+            </LinkButton>
+          }
+        />
+      </div>
+    );
+  }
+
+  const ready = name.trim().length > 1 && normalisePhone(phone).length === 9 && priced.lines.length > 0;
+
+  const driver: PaymentDriver = {
+    allowDiscounts: true,
+    start: ({ momoPhone, wallet, idempotencyKey }) =>
+      api.orders.pay(placed!.orderNo, momoPhone, wallet, idempotencyKey).then((result) => ({
+        reference: result.reference,
+        amount_fcfa: result.amount_fcfa,
+        expires_in_seconds: result.expires_in_seconds,
+        payment_url: result.payment_url,
+      })),
+    poll: (reference) => api.orders.paymentStatus(reference),
+    abandon: (reference) => api.orders.abandonPayment(reference),
+  };
+
+  return (
+    <div className="page section stack order">
+      <header className="stack stack--tight">
+        <h1 className="display display--xl">{c.order.title}</h1>
+        <p className="lead">{c.order.lead}</p>
+      </header>
+
+      {priced.dropped > 0 ? (
+        <Notice tone="warn">
+          {priced.dropped === 1
+            ? "One thing in your basket is no longer on the menu, so we took it out."
+            : `${priced.dropped} things in your basket are no longer on the menu, so we took them out.`}
+        </Notice>
+      ) : null}
+
+      {/* ── The lines ────────────────────────────────────────────────────────*/}
+      <div className="rows rows--inset order__lines">
+        {priced.lines.map((line) => (
+          <div key={line.id} className="row">
+            <Img src={line.item.image_url} alt="" ratio={1} radius="var(--r-sm)" className="order__thumb" />
+            <div className="grow stack stack--tight">
+              <span className="head clip">{line.item.name}</span>
+              <Money value={line.item.price_fcfa ?? 0} size="fine" />
+            </div>
+            <Counter
+              value={line.qty}
+              onChange={(next) => basket.setQty(line.id, next)}
+              min={0}
+              max={20}
+              label={line.item.name}
+            />
+            <Money value={line.lineTotal} size="fine" />
+          </div>
+        ))}
+      </div>
+
+      <div className="rows order__totals">
+        <div className="row">
+          <span className="grow label">{c.order.subtotal}</span>
+          <Money value={priced.subtotal} />
+        </div>
+      </div>
+
+      <p className="fine faint">
+        Promo codes, gift cards and points are applied at the payment step, once we know what you owe.
+      </p>
+
+      {/* ── Details ──────────────────────────────────────────────────────────*/}
+      <form
+        className="stack"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          await place.run();
+          const error = place.readError();
+          if (error) setProblem(say(error, "order"));
+        }}
+      >
+        <h2 className="head">{c.order.yourDetails}</h2>
+
+        <TextField
+          label={c.order.name}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          autoComplete="name"
+          required
+        />
+
+        <PhoneField label={c.order.phone} hint={c.order.phoneHint} value={phone} onChange={setPhone} required />
+
+        <SelectField
+          label={c.order.pickupTime}
+          hint={c.order.pickupHint}
+          value={pickup}
+          onChange={(event) => setPickup(event.target.value)}
+        >
+          {slots.map((slot) => (
+            <option key={slot} value={slot}>
+              {slot}
+            </option>
+          ))}
+        </SelectField>
+
+        <TextAreaField
+          label={c.order.note}
+          placeholder={c.order.notePlaceholder}
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          rows={2}
+          maxLength={300}
+        />
+
+        {/* ── How to pay ─────────────────────────────────────────────────────*/}
+        <h2 className="head">{c.order.payHow}</h2>
+        <div className="rows rows--inset methods" role="radiogroup" aria-label={c.order.payHow}>
+          {siteConfig.payments.mtn ? (
+            <MethodRow
+              on={method === "mtn_momo"}
+              onSelect={() => setMethod("mtn_momo")}
+              icon="wallet"
+              label={c.order.payMtn}
+              hint="A PIN prompt comes to your handset."
+            />
+          ) : null}
+          {siteConfig.payments.orange ? (
+            <MethodRow
+              on={method === "orange_money"}
+              onSelect={() => setMethod("orange_money")}
+              icon="wallet"
+              label={c.order.payOrange}
+              hint="Opens Orange Money to approve it."
+            />
+          ) : null}
+          {cashAllowed ? (
+            <MethodRow
+              on={method === "cash"}
+              onSelect={() => setMethod("cash")}
+              icon="cash"
+              label={c.order.payCash}
+              hint={c.order.payCashNote}
+            />
+          ) : null}
+        </div>
+
+        {!walletAllowed && !cashAllowed ? (
+          <Notice tone="warn" title="Ordering is off">
+            No payment method is switched on. Give the restaurant a call.
+          </Notice>
+        ) : null}
+
+        {problem ? <Notice tone="bad">{problem}</Notice> : null}
+
+        <div className="order__pay">
+          <div className="bar bar--between">
+            <span className="label">{c.common.total}</span>
+            <Money value={priced.subtotal} size="big" />
+          </div>
+          <Action
+            type="submit"
+            tone="primary"
+            block
+            size="lg"
+            pending={place.pending}
+            pendingLabel={c.pending.ordering}
+            disabled={!ready || (!walletAllowed && !cashAllowed)}
+          >
+            {method === "cash" ? c.order.placeOrder : c.order.payNow}
+          </Action>
+          {method !== "cash" ? (
+            <p className="fine faint center">
+              {fill(c.book.depositBody, { amount: money(priced.subtotal) }).replace(
+                "holds the table and comes off your bill",
+                "is what you will be asked to approve"
+              )}
+            </p>
+          ) : null}
+        </div>
+      </form>
+
+      {placed && paying ? (
+        <PaySheet
+          open
+          onClose={() => {
+            setPaying(false);
+          }}
+          onPaid={() => {
+            setPaying(false);
+            invalidate(K.myOrders);
+            navigate("/mine", { replace: true });
+          }}
+          amountFcfa={placed.total}
+          title={c.pay.title}
+          what={`${c.order.title}, ${placed.orderNo}`}
+          driver={driver}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function MethodRow({
+  on,
+  onSelect,
+  icon,
+  label,
+  hint,
+}: {
+  on: boolean;
+  onSelect: () => void;
+  icon: "wallet" | "cash";
+  label: string;
+  hint: string;
+}) {
+  const press = usePress();
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={on}
+      className="row method"
+      data-on={on ? "true" : undefined}
+      onClick={onSelect}
+      {...press.pressProps}
+    >
+      <span className="method__mark" aria-hidden="true">
+        {on ? <Icon name="check" size={13} /> : null}
+      </span>
+      <Icon name={icon} size={18} className="row__lead" />
+      <span className="grow stack stack--tight">
+        <span className="head">{label}</span>
+        <span className="fine muted">{hint}</span>
+      </span>
+    </button>
+  );
 }

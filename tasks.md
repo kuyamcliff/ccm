@@ -220,6 +220,52 @@
       padding and height, and home page dish cards went from 68vw to 54vw so
       a third card now peeks into view as an invitation to keep scrolling.
 
+## Done (2026-08-21, v5: the whole frontend again)
+Every page rebuilt from nothing, plus what the frontend needed underneath it.
+The reasoning is in `context.md`; this is the checklist.
+
+- [x] **The boot waterfall.** `GET /api/bootstrap` collapses three round trips
+      into one, `lib/boot.ts` reads a localStorage copy of it synchronously
+      before React renders, and an inline script in `index.html` preloads the
+      cached hero before the bundle has parsed. Measured cold on a throttled
+      phone profile: first paint 612ms, first image requested at 349ms.
+- [x] **The data layer.** `lib/store.ts` replaces `lib/useResource.ts`, with
+      stale-while-revalidate, request de-duplication and prefetch on intent.
+      `Action`'s `pending` prop is required, so a button that fires a promise
+      cannot be written without a pending state.
+- [x] **Press feedback on everything.** `ui/press.ts` on every control,
+      firing on pointerdown and held a minimum of 90ms so a fast tap still
+      shows. Verified with a delayed response: the button goes `aria-busy`,
+      disables, swaps its label to a verb, and a second press makes no second
+      request. Width moved 0.003px across the swap.
+- [x] **Motion.** `ui/Img.tsx` awaits `decode()` before revealing;
+      `ui/HeroFrames.tsx` only lets a frame join the rotation once it has
+      decoded, which is what the old fixed 21s crossfade never did. Named View
+      Transitions between screens.
+- [x] **No boxes.** `.card` is gone from the stylesheets entirely. Rows with
+      inset hairlines, and one raised surface (`.carry`) for a pass, a receipt
+      or the payment sheet.
+- [x] **The writing.** All of it in `src/copy/`, English and French together,
+      held in step by `copy.test.ts`. `lib/say.ts` means no server string ever
+      reaches a customer; three responses are read directly, and only because
+      each carries data the screen must show.
+- [x] Smaller throughout: the type ramp cut again, section gaps down a step,
+      body held at 16px because iOS zooms the page below that.
+- [x] **A real `developer` role**, five screens, and impersonation that
+      refuses anyone who is not a plain guest and audits before it issues the
+      cookie.
+- [x] **Sold out tonight**, with `sold_out_until` and a sweep that clears it by
+      opening, so nobody has to remember.
+- [x] **Cash on collection**, with an idempotent audited "Mark paid" on the
+      kitchen board. Still no card UI anywhere, and CI still fails the build if
+      a card term appears.
+- [x] **Reminders**, 24h and 3h, deduplicated off the `notifications` table
+      rather than a new column, behind a shared secret so a cron job can call
+      it and nobody else can.
+- [x] French is no longer a gap: the customer site ships both languages.
+- [x] Passkeys can now be registered as well as listed and removed
+      (`POST /api/account/passkeys/options` and `/verify`).
+
 ## Waiting on the owner
 - [ ] **Set FRONTEND_URL on the API to the address people actually use.**
       Passkeys are bound for life to the domain they were created under, and
@@ -232,6 +278,12 @@
       the home page hero is a full bleed photograph.
 - [ ] Confirm the phone number and hours in Desk > Details.
 - [ ] Confirm menu prices in Desk > Menu.
+- [ ] **Set `CRON_SECRET` on the API and point a cron job at
+      `/api/cron/reminders`** with it in an `x-cron-secret` header, at least
+      once an hour. Until that exists no reminder goes out, which is the safe
+      direction to fail in but is not the point of building them.
+- [ ] Set `DEVELOPER_EMAIL` if somebody is looking after the site. It only
+      promotes; clearing it never demotes anybody.
 - [ ] The menu data itself still says "From the grill", "Grilled chicken" and
       "Charcoal all the way". That is content in the database, not code, and it
       is edited in Desk > Menu. There is also no beef on the menu yet.
@@ -240,8 +292,9 @@
 - `/api/admin/reviews` returns a thinner row than `/api/reviews` (no
   admin_reply, no votes), so the console reads the public list instead. Worth
   tidying in the backend one day; it changes nothing for the user.
-- Passkeys can be listed and removed in the account, but not registered: the
-  backend has no registration endpoint yet.
-- The customer site is English only. The previous version had French strings;
-  they were written against screens that no longer exist, so translation should
-  start from the new copy when it is wanted.
+- **The image pipeline.** Deferred by the owner in favour of the frontend work.
+  Uploads are stored at full size with no derivatives and no CDN. v5 makes the
+  download start early and never shows a half-decoded picture, but a 4MB hero
+  is still 4MB. The fix is `sharp` derivatives on upload plus Supabase Storage.
+- **Delivery.** Declined. It changes how the restaurant runs, not just the
+  software.

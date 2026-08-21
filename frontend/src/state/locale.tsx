@@ -1,30 +1,79 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { useVenue } from "~/state/venue";
-import type { LocaleCode } from "~/lib/siteConfig";
-import { COPY, type CopyKey } from "./copy";
+import { COPY, fill, type Copy, type Locale } from "~/copy";
+
+/**
+ * Which language the site is in.
+ *
+ * Buea is Anglophone and English is the default, but Cameroon is not, and a
+ * francophone customer landing here from a shared link should not have to
+ * translate a menu in their head. So the choice is offered, remembered, and
+ * guessed once from the browser if it has never been made.
+ *
+ * The copy itself is reached as an object rather than through a lookup
+ * function:
+ *
+ *     const { c } = useCopy();
+ *     <h1>{c.home.heroLead}</h1>
+ *
+ * which the editor completes and the compiler checks. The previous version used
+ * `t("someKey")` plus a few hundred inline `locale === "fr" ? ... : ...`
+ * ternaries buried in JSX, and a typo in a key was a silent empty string.
+ */
 
 const STORAGE_KEY = "ccm.locale";
 
+interface LocaleValue {
+  locale: Locale;
+  /** The whole copy tree for the active language. */
+  c: Copy;
+  setLocale: (locale: Locale) => void;
+  /** Fills `{name}` placeholders. Re-exported here so a screen needs one import. */
+  fill: typeof fill;
+}
 
-interface LocaleValue { locale: LocaleCode; setLocale: (locale: LocaleCode) => void; t: (key: CopyKey) => string; }
 const LocaleContext = createContext<LocaleValue | null>(null);
-function readStored(): LocaleCode | null { try { const value = localStorage.getItem(STORAGE_KEY); return value === "fr" || value === "en" ? value : null; } catch { return null; } }
-function readUrlLocale(): LocaleCode | null { try { const value = new URLSearchParams(window.location.search).get("lang"); return value === "fr" || value === "en" ? value : null; } catch { return null; } }
+
+function firstGuess(): Locale {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === "en" || stored === "fr") return stored;
+  } catch {
+    /* Storage refused. Fall through to the browser's own preference. */
+  }
+  if (typeof navigator !== "undefined" && navigator.language?.toLowerCase().startsWith("fr")) return "fr";
+  return "en";
+}
 
 export function LocaleProvider({ children }: { children: ReactNode }) {
-  const { siteConfig } = useVenue();
-  const [locale, setLocaleState] = useState<LocaleCode>(() => {
-    const explicit = readUrlLocale();
-    if (explicit && siteConfig.locales[explicit]) return explicit;
-    const stored = readStored();
-    if (stored && siteConfig.locales[stored]) return stored;
-    return siteConfig.defaultLocale;
-  });
-  useEffect(() => { const explicit = readUrlLocale(); if (explicit && siteConfig.locales[explicit] && explicit !== locale) setLocaleState(explicit); else if (!siteConfig.locales[locale]) setLocaleState(siteConfig.defaultLocale); }, [locale, siteConfig.defaultLocale, siteConfig.locales]);
-  useEffect(() => { document.documentElement.lang = locale === "fr" ? "fr" : "en"; document.documentElement.dir = "ltr"; }, [locale]);
-  const setLocale = (next: LocaleCode) => { if (!siteConfig.locales[next]) return; setLocaleState(next); try { localStorage.setItem(STORAGE_KEY, next); } catch {} };
-  const value = useMemo<LocaleValue>(() => ({ locale, setLocale, t: (key) => COPY[locale][key] ?? COPY.en[key] }), [locale]);
+  const [locale, setLocaleState] = useState<Locale>(firstGuess);
+
+  /* Kept on the document as well, because it is what a screen reader uses to
+     choose a voice and what the browser uses to pick hyphenation rules. Getting
+     this wrong makes French read aloud in an English accent. */
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
+
+  const setLocale = useCallback((next: Locale) => {
+    setLocaleState(next);
+    try {
+      localStorage.setItem(STORAGE_KEY, next);
+    } catch {
+      /* The choice holds for this visit; it just will not survive a reload. */
+    }
+  }, []);
+
+  const value = useMemo<LocaleValue>(
+    () => ({ locale, c: COPY[locale], setLocale, fill }),
+    [locale, setLocale]
+  );
+
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
 }
-export function useLocale(): LocaleValue { const value = useContext(LocaleContext); if (!value) throw new Error("useLocale must be used inside LocaleProvider"); return value; }
+
+export function useCopy(): LocaleValue {
+  const value = useContext(LocaleContext);
+  if (!value) throw new Error("useCopy must be used inside LocaleProvider");
+  return value;
+}

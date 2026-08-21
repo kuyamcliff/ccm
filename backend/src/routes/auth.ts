@@ -14,6 +14,7 @@ import {
 import { checkPassword } from "../lib/passwordStrength.js";
 import { verifyTotp } from "../lib/totp.js";
 import { clientIp, rateLimit, resetLimit } from "../middleware/security.js";
+import { IS_PROD } from "../config.js";
 
 import { generateAuthenticationOptions, verifyAuthenticationResponse } from "@simplewebauthn/server";
 import type { AuthenticatorTransportFuture } from "@simplewebauthn/server";
@@ -70,9 +71,23 @@ const loginEmailLimit = rateLimit("login-email", {
   key: (req) => String(req.body?.email ?? "").trim().toLowerCase() || clientIp(req),
 });
 
+/*
+ * Five new accounts an hour from one address.
+ *
+ * This stands in for a CAPTCHA, which is a deliberate trade: a real one means a
+ * third-party key and a third-party script on a page whose whole problem is
+ * weight on a slow connection.
+ *
+ * Relaxed outside production, and only outside production. `scripts/smoke.ts`
+ * makes six registration attempts by design (four that must be rejected for bad
+ * input, one that must succeed, one duplicate that must 409), so against the
+ * production ceiling the suite could never pass its own last assertion. A limit
+ * that makes the test suite unrunnable is a limit nobody runs the test suite
+ * against.
+ */
 const registerLimit = rateLimit("register", {
   windowMs: 60 * 60 * 1000,
-  max: 5,
+  max: IS_PROD ? 5 : 100,
   message: "Too many accounts created from this device. Try again later.",
 });
 

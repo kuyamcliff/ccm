@@ -45,6 +45,20 @@ takeawayRouter.post("/", orderLimit, async (req, res) => {
   const usePoints = req.body?.use_points === true;
   const userId = req.user?.id ?? null;
 
+  /*
+   * Cash on collection.
+   *
+   * Mobile Money used to be the only way to pay, which quietly excluded anybody
+   * without a wallet, anybody whose wallet was empty at eight in the evening,
+   * and anybody who simply would rather not prepay a restaurant they have not
+   * eaten at. A cash order is a real order: the kitchen sees it, the customer
+   * gets the same code, and the counter takes the money when they arrive.
+   *
+   * Anything the browser asks for that is not exactly "cash" is a wallet order,
+   * so an unknown value fails towards prepaid rather than towards free food.
+   */
+  const payCash = req.body?.payment_method === "cash";
+
   if (name.length < 2 || name.length > 60) { res.status(400).json({ error: "Enter a name we can call out." }); return; }
   if (!/^[+\d\s-]{8,20}$/.test(phone)) { res.status(400).json({ error: "Enter a phone number we can reach you on." }); return; }
   if (!TIME_RE.test(pickup_time)) { res.status(400).json({ error: "Pick a valid pickup time." }); return; }
@@ -139,12 +153,17 @@ takeawayRouter.post("/", orderLimit, async (req, res) => {
 
   const total = Math.max(0, subtotal - discount);
 
-  /* Takeaway is prepaid. The order is written now so there is something for
-     the payment to attach to, but it sits outside the kitchen queue until the
-     money lands — `awaiting_payment` is deliberately not one of the statuses
-     the kitchen board shows. An order fully covered by a promo or gift card
-     has nothing left to charge, so it is confirmed immediately. */
+  /* A prepaid order is written now so there is something for the payment to
+     attach to, but it sits outside the kitchen queue until the money lands:
+     `awaiting_payment` is deliberately not one of the statuses the kitchen board
+     shows. An order fully covered by a promo or gift card has nothing left to
+     charge, so it is confirmed immediately.
+
+     A cash order goes straight to the kitchen and stays `unpaid` until somebody
+     at the counter marks it paid. That is the whole difference between the two:
+     the order is real either way, only the money is outstanding. */
   const settled = total <= 0;
+  const queued = settled || payCash;
   const orderNo = await generateOrderCode();
 
   const info = await db
@@ -156,7 +175,7 @@ takeawayRouter.post("/", orderLimit, async (req, res) => {
     .run(
       userId, name, phone, JSON.stringify(lines), total, pickup_time, note,
       appliedPromo, appliedGift, discount, giftTaken, pointsSpent, orderNo,
-      settled ? "pending" : "awaiting_payment",
+      queued ? "pending" : "awaiting_payment",
       settled ? "paid" : "unpaid",
       settled ? new Date().toISOString().replace("T", " ").slice(0, 19) : null
     );
@@ -175,8 +194,16 @@ takeawayRouter.post("/", orderLimit, async (req, res) => {
     points_spent: pointsSpent,
     points_value_fcfa: pointsValue,
     total_fcfa: total,
-    payment_required: !settled,
-    status: settled ? "pending" : "awaiting_payment",
+    /* False for a cash order too: there is money owed, but not here and not
+       now. The browser reads this to decide whether to open the payment sheet,
+       and opening it for somebody who chose to pay at the counter would be
+       ignoring what they just told us. */
+    payment_required: !settled && !payCash,
+    /* What the counter will be owed when they arrive. Zero for anything already
+       settled, and for a wallet order that has not been paid yet, since that one
+       is about to be charged rather than collected. */
+    cash_due_fcfa: payCash && !settled ? total : 0,
+    status: queued ? "pending" : "awaiting_payment",
   });
 });
 
@@ -454,6 +481,46 @@ takeawayRouter.get("/", requireAdmin, requireScope("takeaway"), async (_req, res
     )
     .all();
   res.json({ orders });
+});
+
+/**
+ * Taking the money at the counter.
+ *
+ * The other half of cash on collection. A cash order reaches the kitchen board
+ * unpaid, and this is what settles it when somebody actually hands over notes.
+ *
+ * Deliberately separate from the status route rather than another value in it:
+ * "where is this order" and "has it been paid for" are two independent facts,
+ * and an order can legitimately be collected before, after, or without either.
+ * Folding payment into the status machine is how you end up unable to represent
+ * a paid order that has not been picked up yet.
+ *
+ * Idempotent: marking an already-paid order paid changes nothing and says so,
+ * because two people at a busy counter will both press it.
+ */
+takeawayRouter.post("/:id/mark-paid", requireAdmin, requireScope("takeaway"), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad order id." }); return; }
+
+  const order = (await db
+    .prepare("SELECT id, payment_status, total_fcfa FROM takeaway_orders WHERE id = ?")
+    .get(id)) as { id: number; payment_status: string; total_fcfa: number } | undefined;
+  if (!order) { res.status(404).json({ error: "Order not found." }); return; }
+  if (order.payment_status === "paid") { res.json({ ok: true, already: true }); return; }
+
+  /* `payment_method` records how it was settled so the takings at the end of the
+     night can be split between the wallets and the till. */
+  await db
+    .prepare("UPDATE takeaway_orders SET payment_status = 'paid', payment_method = 'cash', paid_at = now_text() WHERE id = ?")
+    .run(id);
+
+  audit(req, {
+    action: "takeaway.mark_paid",
+    targetType: "takeaway_order",
+    targetId: String(id),
+    detail: `${order.total_fcfa} FCFA taken in cash`,
+  });
+  res.json({ ok: true, already: false });
 });
 
 takeawayRouter.patch("/:id/status", requireAdmin, requireScope("takeaway"), async (req, res) => {

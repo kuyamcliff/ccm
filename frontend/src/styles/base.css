@@ -1,4 +1,23 @@
-/* Reset, document defaults, typography, and the layout helpers used everywhere. */
+/*
+ * The document, the type, and the layout language.
+ *
+ * The layout language is the part worth reading. The last version put almost
+ * everything inside a bordered, tinted, rounded box, and a page of boxes reads
+ * as a template rather than as a place. So there are exactly three ways to
+ * group things here:
+ *
+ *   .rows    a list. Children are separated by an inset hairline. No border
+ *            around the outside, no background, no radius. This is the default
+ *            and it should be the answer roughly nine times out of ten.
+ *
+ *   .stack   things under each other with a gap and nothing between them.
+ *
+ *   .carry   the only raised surface in the product. A booking pass, an order
+ *            receipt, a sheet. Something you could pick up and hand to
+ *            somebody. If it is not one of those, it is .rows.
+ *
+ * There is no .card.
+ */
 
 *,
 *::before,
@@ -8,14 +27,19 @@
 
 * {
   margin: 0;
+  /* Nothing in this product needs a native focus ring drawn over the top of a
+     custom one. :focus-visible below puts a real one back. */
+  outline-offset: 2px;
 }
 
 html {
+  background: var(--bg);
+  /* Belt and braces with the inline style in index.html: on a slow connection
+     the gap between the HTML landing and the CSS parsing is where a white flash
+     lives. */
   -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   scroll-behavior: smooth;
-  /* Anything the page scrolls to by anchor clears the top bar rather than
-     hiding underneath it. */
-  scroll-padding-top: calc(var(--topbar-h) + var(--s-4));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -30,41 +54,25 @@ body {
   color: var(--text);
   font-family: var(--font-sans);
   font-size: var(--t-body);
+  font-weight: var(--w-body);
   line-height: var(--lh-body);
-  font-weight: 400;
+  /* Tabular figures everywhere, not just on prices. A time, a table number, a
+     booking code and a count all read better aligned, and switching it per
+     component is how half of them end up proportional. */
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Inter's kerning and its contextual alternates, asked for by name. Doing it
-     this way rather than through text-rendering avoids the first-paint stall
-     that optimizeLegibility causes on a long page. */
-  font-kerning: normal;
-  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
-  /* Stops the sideways wobble a phone gets when one element overshoots by a
-     pixel. Genuinely wide content scrolls inside its own container instead. */
-  overflow-x: hidden;
-  /*
-   * A long unbroken string is the single most common way a mobile layout ends
-   * up scrolling sideways, and this product is full of them: email addresses,
-   * order numbers, booking codes, a base32 authenticator secret. `break-word`
-   * only breaks a word that has nowhere else to go, so ordinary prose still
-   * wraps at spaces.
-   */
-  overflow-wrap: break-word;
+  /* The tap highlight is Android's own grey flash. It fires late, covers the
+     whole element, and fights the press response in ui.css. */
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
 }
 
-/*
- * The other half of the same problem.
- *
- * A flex or grid child defaults to `min-width: auto`, which means it refuses
- * to shrink below its own content. One long word in a row of three therefore
- * pushes the row wider than the screen instead of wrapping inside it. Every
- * layout primitive here opts out.
- */
-.row > *,
-.stack > *,
-.grid > *,
-.actions > * {
-  min-width: 0;
+/* Anything that scrolls its own content keeps its scroll chaining to itself, so
+   a sheet cannot drag the page behind it. */
+[data-scroller] {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 img,
@@ -76,10 +84,9 @@ canvas {
 }
 
 img {
+  /* No image is ever allowed to arrive and push the page down. Every <Img>
+     carries an aspect ratio; this is the floor under the ones that do not. */
   height: auto;
-  /* A photograph loading over a slow connection paints its box first. On black
-     that box has to be a shade lighter, or the layout looks like a hole. */
-  background: var(--ink-850);
 }
 
 button,
@@ -88,72 +95,50 @@ select,
 textarea {
   font: inherit;
   color: inherit;
+  letter-spacing: inherit;
 }
 
 button {
-  cursor: pointer;
   background: none;
-  border: none;
+  border: 0;
   padding: 0;
-}
-
-/*
- * Every tappable thing, not only buttons.
- *
- * Without touch-action a phone waits 300ms after a tap to see whether a second
- * one is coming, which is most of the reason an interface feels slow on a
- * phone and fine on a desk. The grey box Safari paints on top is redundant
- * once each control has a pressed state of its own.
- */
-a,
-button,
-label,
-select,
-summary,
-[role="button"],
-[role="tab"] {
+  cursor: pointer;
+  /* Touch targets must not wait 300ms to decide they were not a double tap. */
   touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
 }
 
 a {
   color: inherit;
   text-decoration: none;
-}
-
-/* Links inside a paragraph are underlined, because colour alone is not enough
-   to mark them and red here would read as a button. */
-p a:not([class]),
-li a:not([class]) {
-  color: var(--white);
-  text-decoration: underline;
-  text-decoration-color: var(--red);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 0.22em;
-  transition: color var(--dur-1) var(--ease);
-}
-
-p a:not([class]):hover,
-li a:not([class]):hover {
-  color: var(--red-hi);
+  touch-action: manipulation;
 }
 
 ul,
 ol {
-  padding: 0;
   list-style: none;
+  padding: 0;
+}
+
+fieldset {
+  border: 0;
+  padding: 0;
 }
 
 hr {
-  border: none;
-  border-top: 1px solid var(--line);
+  border: 0;
+  height: 1px;
+  background: var(--line);
 }
 
-/* Focus is never removed, only replaced. Red on an offset so the ring reads
-   against both the page and a raised panel. */
+:focus {
+  outline: none;
+}
+
+/* A real ring, for the keyboard. Two colours so it is visible on both the black
+   ground and on red. */
 :focus-visible {
-  outline: 2px solid var(--red-hi);
-  outline-offset: 3px;
+  outline: 2px solid var(--white);
+  outline-offset: 2px;
   border-radius: var(--r-xs);
 }
 
@@ -162,44 +147,22 @@ hr {
   color: var(--on-red);
 }
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--ink-700);
-  border-radius: var(--r-full);
-}
-
 /* ── Type ──────────────────────────────────────────────────────────────────
-   Headings are Plus Jakarta Sans, set heavy and pulled tight. Hierarchy comes
-   from size and weight; colour is left alone so red keeps meaning "press". */
-
-h1,
-h2,
-h3,
-h4 {
-  font-family: var(--font-display);
-  font-weight: 800;
-  line-height: var(--lh-head);
-  letter-spacing: var(--track-head);
-  text-wrap: balance;
-}
+   Classes rather than element selectors, because the right heading level for a
+   screen reader and the right size on the page are two different decisions and
+   tying them together is how an h3 ends up styled as an h1. */
 
 .display {
   font-family: var(--font-display);
-  font-weight: 800;
+  font-weight: var(--w-display);
   line-height: var(--lh-head);
   letter-spacing: var(--track-display);
+  text-wrap: balance;
 }
 
 .display--hero {
   font-size: var(--t-hero);
+  font-weight: var(--w-shout);
   line-height: var(--lh-tight);
   letter-spacing: var(--track-hero);
 }
@@ -210,40 +173,53 @@ h4 {
 
 .display--lg {
   font-size: var(--t-title);
-}
-
-.display--md {
-  font-size: var(--t-head);
   letter-spacing: var(--track-head);
 }
 
-/* Small caps for section markers. Inter, not the display face: Plus Jakarta
-   set this small and this wide loses its shape. */
-.label {
-  display: inline-block;
-  font-size: var(--t-label);
-  font-weight: 600;
-  letter-spacing: var(--track-label);
-  text-transform: uppercase;
-  line-height: 1.4;
-  color: var(--text-3);
+.title {
+  font-size: var(--t-title);
+  font-weight: var(--w-strong);
+  line-height: var(--lh-head);
+  letter-spacing: var(--track-head);
 }
 
-/* Figures a person reads out loud. Not a second font: Inter's tabular numerals
-   line up in a column and cost nothing extra to download. */
-.mono {
-  font-family: var(--font-num);
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1, "zero" 1;
-  letter-spacing: 0.01em;
+.head {
+  font-size: var(--t-head);
+  font-weight: var(--w-strong);
+  line-height: var(--lh-head);
+  letter-spacing: var(--track-head);
 }
 
 .lead {
-  font-size: var(--t-lead);
-  line-height: 1.55;
+  font-size: var(--t-small);
   color: var(--text-2);
+  line-height: var(--lh-body);
   max-width: var(--prose-max);
   text-wrap: pretty;
+}
+
+.small {
+  font-size: var(--t-small);
+}
+
+.fine {
+  font-size: var(--t-fine);
+  line-height: 1.45;
+}
+
+.micro {
+  font-size: var(--t-micro);
+}
+
+/* Small caps for a label above a value. The tracking is what makes it read as a
+   label rather than as shouting. */
+.label {
+  font-size: var(--t-label);
+  font-weight: var(--w-strong);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text-2);
+  line-height: 1.3;
 }
 
 .muted {
@@ -254,23 +230,71 @@ h4 {
   color: var(--text-3);
 }
 
-.fine {
-  font-size: var(--t-fine);
-  line-height: 1.55;
-}
-
 .hot {
-  color: var(--red-hi);
+  color: var(--red);
 }
 
 .strong {
-  font-weight: 600;
-  color: var(--white);
+  font-weight: var(--w-strong);
 }
 
-/* ── Layout ───────────────────────────────────────────────────────────────
-   Three helpers do almost all of it: a page gutter, a vertical rhythm, and a
-   stack. Everything else is a flex row. */
+.prose {
+  max-width: var(--prose-max);
+  text-wrap: pretty;
+}
+
+.prose p + p {
+  margin-top: var(--s-4);
+}
+
+.prose h2 {
+  font-family: var(--font-display);
+  font-size: var(--t-title);
+  font-weight: var(--w-display);
+  letter-spacing: var(--track-head);
+  margin: var(--s-6) 0 var(--s-3);
+}
+
+.prose h3 {
+  font-size: var(--t-head);
+  font-weight: var(--w-strong);
+  margin: var(--s-5) 0 var(--s-2);
+}
+
+.prose ul {
+  list-style: disc;
+  padding-left: 1.15em;
+  margin: var(--s-3) 0;
+}
+
+.prose li + li {
+  margin-top: var(--s-2);
+}
+
+.prose a {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  text-decoration-color: var(--line-2);
+}
+
+/* Truncation, named for what it does rather than for the CSS. */
+.clip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.clip-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Layout ────────────────────────────────────────────────────────────────*/
 
 .page {
   width: 100%;
@@ -279,29 +303,18 @@ h4 {
   padding-inline: var(--gutter);
 }
 
-.page--narrow {
-  max-width: 44rem;
-}
-
+/* A block of the page with air above and below it. One step tighter than the
+   version before this one. */
 .section {
-  padding-block: clamp(1.75rem, 6vw, 3.5rem);
-}
-
-/* Back to back sections would otherwise stack their padding into a gap twice
-   the size the rhythm intends. */
-.section + .section {
-  padding-top: 0;
+  padding-block: var(--s-6);
 }
 
 .section--tight {
-  padding-block: clamp(1.25rem, 4vw, 2.25rem);
+  padding-block: var(--s-5);
 }
 
-/* A hairline the full width of the content, used to part two sections without
-   drawing a box around either. */
-.section--ruled {
-  border-top: 1px solid var(--line);
-  padding-top: clamp(1.75rem, 6vw, 3.5rem);
+.section--loose {
+  padding-block: var(--s-7);
 }
 
 .stack {
@@ -314,97 +327,163 @@ h4 {
   gap: var(--s-2);
 }
 
+.stack--snug {
+  gap: var(--s-3);
+}
+
 .stack--loose {
-  gap: var(--s-6);
+  gap: var(--s-5);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+}
+
+.bar--between {
+  justify-content: space-between;
+}
+
+.bar--wrap {
+  flex-wrap: wrap;
+}
+
+.bar--top {
+  align-items: flex-start;
+}
+
+.bar--end {
+  justify-content: flex-end;
+}
+
+.bar--tight {
+  gap: var(--s-2);
+}
+
+/* Pushes whatever follows it to the far end of a .bar. Reads better at the call
+   site than justify-content on the parent when only one child moves. */
+.push {
+  margin-left: auto;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+/*
+ * ── Rows ──────────────────────────────────────────────────────────────────
+ *
+ * The workhorse. A list of things separated by a hairline that stops short of
+ * the left edge, which is the separator every native list on a phone uses: it
+ * groups the rows into one object without drawing a box around them.
+ *
+ * The inset is on the divider, not on the row, so a row's own content can still
+ * run to the gutter and a thumbnail can sit flush.
+ */
+.rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.rows > * + * {
+  border-top: 1px solid var(--line);
+}
+
+/* The inset. The value is the width of a row thumbnail plus its gap, so the
+   rule starts where the text starts. */
+.rows--inset > * + * {
+  border-top: 0;
+  position: relative;
+}
+
+.rows--inset > * + *::before {
+  content: "";
+  position: absolute;
+  inset-inline: var(--rows-inset, 0) 0;
+  top: 0;
+  height: 1px;
+  background: var(--line);
+  pointer-events: none;
 }
 
 .row {
   display: flex;
   align-items: center;
   gap: var(--s-3);
-}
-
-.row--between {
-  justify-content: space-between;
-}
-
-.row--wrap {
-  flex-wrap: wrap;
+  padding-block: var(--s-3);
+  min-width: 0;
+  min-height: var(--tap);
 }
 
 .row--top {
   align-items: flex-start;
 }
 
-.push {
-  margin-inline-start: auto;
+.row--tall {
+  padding-block: var(--s-4);
 }
 
 /*
- * A row of actions.
+ * ── Carry ─────────────────────────────────────────────────────────────────
  *
- * On the narrowest phones the buttons share the width evenly instead of one of
- * them wrapping onto a line by itself and looking like an afterthought. Once
- * there is room they go back to being their own size.
+ * The only raised surface. See the note at the top of this file. Depth here is
+ * a surface step and a lit top edge rather than a shadow, because on black a
+ * black shadow is invisible.
  */
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-3);
+.carry {
+  background: var(--carry);
+  border-radius: var(--r-lg);
+  padding: var(--s-4);
+  position: relative;
+  isolation: isolate;
 }
 
-.actions > * {
-  flex: 1 1 10rem;
+.carry::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid var(--carry-edge);
+  /* Only the top edge is lit, which is what reads as "above" without a shadow. */
+  mask-image: linear-gradient(to bottom, #000 0%, transparent 55%);
+  pointer-events: none;
 }
 
-@media (min-width: 30rem) {
-  .actions > * {
-    flex: 0 0 auto;
-  }
-}
+/* ── Utility ───────────────────────────────────────────────────────────────*/
 
-.grid {
-  display: grid;
-  gap: var(--s-4);
-}
-
-.grid--two {
-  display: grid;
-  gap: var(--s-4);
-  grid-template-columns: 1fr;
-}
-
-@media (min-width: 48rem) {
-  .grid--two {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-/*
- * A section heading and its marker, kept together as one unit.
- *
- * The marker is a short red bar rather than a rule across the page: it points
- * at the heading instead of boxing the section, which is the whole difference
- * between a page that breathes and a page made of panels.
- */
-.section-head {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--s-2);
-  margin-block-end: var(--s-5);
-}
-
-.section-head > .heat-rule {
-  width: 2.25rem;
-}
-
-.heat-rule {
-  height: 3px;
-  width: 2.25rem;
+.hairline {
+  height: 1px;
+  background: var(--line);
   border: 0;
-  border-radius: var(--r-full);
+}
+
+/* A short red rule that heads a section. The one place a hairline is allowed to
+   be red, because it is doing the job a heading weight cannot do on its own. */
+.heat-rule {
+  width: 1.75rem;
+  height: 2px;
   background: var(--red);
+  border-radius: var(--r-full);
+  border: 0;
+}
+
+.center {
+  text-align: center;
+}
+
+.right {
+  text-align: right;
+}
+
+.full {
+  width: 100%;
+}
+
+.nowrap {
+  white-space: nowrap;
 }
 
 .sr-only {
@@ -412,54 +491,40 @@ h4 {
   width: 1px;
   height: 1px;
   padding: 0;
+  margin: -1px;
   overflow: hidden;
-  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
-  /* A table's auto layout treats `width` as a floor, not a cap: its columns
-     still size to their content and the box renders at that content width
-     regardless of the 1px above, widening the whole page. Fixed layout makes
-     the 1px the real width, the same as it is for every other element here. */
-  table-layout: fixed;
 }
 
-/* Keyboard users get past the navigation on every page. */
 .skip-link {
-  position: absolute;
-  top: var(--s-3);
-  left: var(--s-3);
+  position: fixed;
+  top: var(--s-2);
+  left: var(--s-2);
   z-index: var(--z-toast);
-  padding: var(--s-3) var(--s-4);
+  padding: var(--s-2) var(--s-4);
   background: var(--red);
   color: var(--on-red);
   border-radius: var(--r-full);
-  font-weight: 600;
+  font-size: var(--t-fine);
+  font-weight: var(--w-strong);
   transform: translateY(-200%);
-  transition: transform var(--dur-2) var(--ease);
+  transition: transform var(--dur-1) var(--ease-out);
 }
 
 .skip-link:focus-visible {
   transform: translateY(0);
 }
 
-/* Content that is wide by nature, a floor plan or a table of takings, scrolls
-   inside itself rather than pushing the page sideways. */
-.scroll-x {
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* ── Entrances ────────────────────────────────────────────────────────────
-   Two of them, both transform and opacity only, both cheap enough to run on a
-   list of twenty menu rows without dropping a frame.
-   `.rise` is the one sections use as they come into view; `.fade-up` is what a
-   page uses on arrival, staggered by an inline --i where it helps. */
+/* ── Shared keyframes ──────────────────────────────────────────────────────
+   Transform and opacity only. Every one of these is safe to run on the
+   compositor on a mid range Android. */
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translate3d(0, 16px, 0);
+    transform: translate3d(0, 10px, 0);
   }
   to {
     opacity: 1;
@@ -467,7 +532,7 @@ h4 {
   }
 }
 
-@keyframes fade-in {
+@keyframes fade {
   from {
     opacity: 0;
   }
@@ -476,27 +541,17 @@ h4 {
   }
 }
 
-.reveal {
-  opacity: 0;
-}
-
-.reveal[data-shown="true"] {
-  animation: rise var(--dur-4) var(--ease) both;
-  animation-delay: calc(var(--i, 0) * 60ms);
-}
-
-/* Somebody who has asked for less movement still gets the content, instantly
-   and at full opacity, rather than a page of invisible sections. */
-@media (prefers-reduced-motion: reduce) {
-  .reveal,
-  .reveal[data-shown="true"] {
-    opacity: 1;
-    animation: none;
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
   }
 }
 
-/* Every route change fades its content in. Cheap enough to be free, and it
-   covers the moment a lazily loaded screen swaps in. */
-.route-in {
-  animation: fade-in var(--dur-3) var(--ease) both;
+@keyframes sheen {
+  from {
+    transform: translate3d(-100%, 0, 0);
+  }
+  to {
+    transform: translate3d(100%, 0, 0);
+  }
 }

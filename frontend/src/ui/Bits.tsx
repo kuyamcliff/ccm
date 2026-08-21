@@ -1,114 +1,233 @@
 import type { ReactNode } from "react";
 import { Icon } from "./Icon";
+import { usePress } from "./press";
+import { money } from "~/lib/format";
 
-/** Prices. Always tabular, always with the unit, never rounded away. */
-export function Money({ value, unit = "FCFA", className }: { value: number; unit?: string; className?: string }) {
+/**
+ * The small pieces. A price, a status word, a rating, a code.
+ *
+ * Each of these exists because the thing it draws appears on five or six screens
+ * and got drawn slightly differently on each of them last time round.
+ */
+
+/**
+ * A price.
+ *
+ * Always with FCFA, always in tabular figures, and the unit always smaller than
+ * the number: what somebody reads is "2,500", and the currency is there to say
+ * which 2,500 it is, not to compete with it.
+ */
+export function Money({ value, size = "body" }: { value: number; size?: "body" | "big" | "fine" }) {
   return (
-    <span className={["money", className].filter(Boolean).join(" ")}>
-      {value.toLocaleString("en-US")}{" "}
-      <span className="money__unit">{unit}</span>
+    <span className={`money money--${size}`}>
+      {money(value)}
+      <span className="money__unit"> FCFA</span>
     </span>
   );
-}
-
-type BadgeTone = "neutral" | "good" | "warn" | "bad" | "hot";
-
-export function Badge({ tone = "neutral", dot = true, children }: { tone?: BadgeTone; dot?: boolean; children: ReactNode }) {
-  return <span className={`badge${tone === "neutral" ? "" : ` badge--${tone}`}${dot ? "" : " badge--plain"}`}>{children}</span>;
 }
 
 /**
- * Star rating.
+ * A status word.
  *
- * Read-only by default. The numeric value is always rendered beside it for
- * anyone who cannot count gold shapes at a glance.
+ * Never colour on its own: every tone here pairs with a word, and the word is
+ * the thing that carries the meaning. Somebody who cannot tell the green from
+ * the red still reads "Ready".
  */
-export function Stars({ value, size = 16, showValue = true }: { value: number; size?: number; showValue?: boolean }) {
-  const rounded = Math.round(value);
+export function Badge({
+  tone = "neutral",
+  children,
+}: {
+  tone?: "neutral" | "good" | "warn" | "bad" | "hot";
+  children: ReactNode;
+}) {
+  return <span className={`badge badge--${tone}`}>{children}</span>;
+}
+
+/**
+ * A rating, as five stars.
+ *
+ * The number is given in text as well, because five glyphs at 14px is not a
+ * reliable way to communicate "3.5" on a phone in daylight.
+ */
+export function Stars({
+  value,
+  size = 15,
+  showValue = true,
+}: {
+  value: number;
+  size?: number;
+  showValue?: boolean;
+}) {
+  const rounded = Math.round(value * 2) / 2;
+
   return (
-    <span className="row" style={{ gap: "0.5rem" }}>
-      <span className="stars" role="img" aria-label={`${value.toFixed(1)} out of 5`}>
-        {[1, 2, 3, 4, 5].map((n) => (
-          <span key={n} style={{ color: n <= rounded ? "var(--warn)" : "var(--ink-600)" }}>
+    <span className="stars" role="img" aria-label={`${rounded} out of 5`}>
+      {[1, 2, 3, 4, 5].map((position) => {
+        const fill = fillFor(rounded, position);
+        return (
+          <span key={position} className="stars__slot" data-fill={fill}>
             <Icon name="star" size={size} />
+            {/* A half is a full star laid over the empty one and clipped down
+                the middle, rather than a second glyph that would have to be kept
+                optically aligned with the first. */}
+            {fill === "half" ? (
+              <span className="stars__half" aria-hidden="true">
+                <Icon name="star" size={size} />
+              </span>
+            ) : null}
           </span>
-        ))}
-      </span>
-      {showValue ? <span className="fine mono muted">{value.toFixed(1)}</span> : null}
+        );
+      })}
+      {showValue ? <span className="fine muted stars__value">{rounded.toFixed(1)}</span> : null}
     </span>
   );
 }
 
-export function StarPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
-  return (
-    <div className="stars stars--input" role="radiogroup" aria-label="Your rating">
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button
-          key={n}
-          type="button"
-          role="radio"
-          aria-checked={value === n}
-          aria-label={`${n} ${n === 1 ? "star" : "stars"}`}
-          className="stars__btn"
-          data-on={n <= value}
-          onClick={() => onChange(n)}
-        >
-          <Icon name="star" size={26} />
-        </button>
-      ))}
-    </div>
-  );
+function fillFor(value: number, position: number): "full" | "half" | "none" {
+  if (value >= position) return "full";
+  if (value >= position - 0.5) return "half";
+  return "none";
 }
 
-export function Segmented<T extends string>({
+/** Picking a rating. Separate from `Stars` because a control and a readout have
+    different jobs, and one component doing both is how a display becomes
+    accidentally clickable. */
+export function StarPicker({
   value,
-  options,
   onChange,
   label,
 }: {
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (next: T) => void;
+  value: number;
+  onChange: (value: number) => void;
   label: string;
 }) {
   return (
-    <div className="segmented" role="group" aria-label={label}>
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          className="segmented__opt"
-          aria-pressed={option.value === value}
-          onClick={() => onChange(option.value)}
-        >
-          {option.label}
-        </button>
+    <div className="star-pick" role="radiogroup" aria-label={label}>
+      {[1, 2, 3, 4, 5].map((position) => (
+        <StarPickerButton key={position} position={position} value={value} onChange={onChange} />
       ))}
     </div>
   );
 }
 
-/** Initials in a circle. No generated cartoon faces, no gravatar lookups. */
-export function Avatar({ name, large }: { name: string; large?: boolean }) {
-  const initials =
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0])
-      .join("") || "?";
+function StarPickerButton({
+  position,
+  value,
+  onChange,
+}: {
+  position: number;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const press = usePress({ haptic: true });
+
   return (
-    <span className={`avatar${large ? " avatar--lg" : ""}`} aria-hidden="true">
-      {initials}
+    <button
+      type="button"
+      role="radio"
+      aria-checked={value === position}
+      aria-label={`${position} ${position === 1 ? "star" : "stars"}`}
+      className="star-pick__btn"
+      data-on={position <= value ? "true" : undefined}
+      onClick={() => onChange(position)}
+      {...press.pressProps}
+    >
+      <Icon name="star" size={26} />
+    </button>
+  );
+}
+
+/**
+ * A booking or order code.
+ *
+ * Set in the display face at a size somebody can read out over a bad phone line
+ * while standing next to a grill, with the characters spaced so O and 0 cannot
+ * be confused at a glance.
+ */
+export function Code({ value, size = "md" }: { value: string; size?: "sm" | "md" | "lg" }) {
+  return (
+    <span className={`code code--${size}`} translate="no">
+      {value}
     </span>
   );
 }
 
-export function Meter({ value, max, label }: { value: number; max: number; label: string }) {
-  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+/** A person, as initials. No uploaded avatars anywhere in this product, so this
+    is the whole implementation rather than a fallback. */
+export function Avatar({ name, size = 30 }: { name: string; size?: number }) {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+
   return (
-    <div className="meter" role="meter" aria-valuenow={value} aria-valuemin={0} aria-valuemax={max} aria-label={label}>
-      <div className="meter__fill" style={{ width: `${pct}%` }} />
+    <span className="avatar" style={{ width: size, height: size, fontSize: size * 0.38 }} aria-hidden="true">
+      {initials || "?"}
+    </span>
+  );
+}
+
+/**
+ * A proportion, drawn as a bar.
+ *
+ * Used for loyalty progress and for the console's capacity readouts. The number
+ * is always beside it: a bar on its own tells you a ratio and not a quantity,
+ * and "how many points do I actually have" is the question being asked.
+ */
+export function Meter({
+  value,
+  max,
+  label,
+  tone = "hot",
+}: {
+  value: number;
+  max: number;
+  label?: string;
+  tone?: "hot" | "good" | "neutral";
+}) {
+  const fraction = max <= 0 ? 0 : Math.min(1, Math.max(0, value / max));
+
+  return (
+    <span className="meter" data-tone={tone}>
+      <span
+        className="meter__track"
+        role="progressbar"
+        aria-valuenow={value}
+        aria-valuemin={0}
+        aria-valuemax={max}
+        aria-label={label}
+      >
+        <span className="meter__fill" style={{ transform: `scaleX(${fraction})` }} />
+      </span>
+    </span>
+  );
+}
+
+/**
+ * A label above a value, which is most of what the console is made of.
+ *
+ * The value comes first in the source order and is flipped visually, so a screen
+ * reader reads "2,500 FCFA, taken tonight" rather than making somebody hold a
+ * label in their head while waiting for its number.
+ */
+export function Stat({ label, value, note }: { label: string; value: ReactNode; note?: string }) {
+  return (
+    <div className="stat">
+      <span className="stat__value">{value}</span>
+      <span className="label">{label}</span>
+      {note ? <span className="fine faint">{note}</span> : null}
     </div>
+  );
+}
+
+/** A dot that says something is live. Paired with a word, never alone. */
+export function Pulse({ on, label }: { on: boolean; label: string }) {
+  return (
+    <span className="pulse" data-on={on ? "true" : undefined}>
+      <span className="pulse__dot" aria-hidden="true" />
+      <span className="fine">{label}</span>
+    </span>
   );
 }

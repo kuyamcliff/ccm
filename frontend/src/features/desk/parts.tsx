@@ -1,36 +1,47 @@
-import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { Icon, type IconName } from "~/ui/Icon";
-import { Money } from "~/ui/Bits";
-import { ErrorState, SkeletonCards } from "~/ui/Feedback";
-import type { Resource } from "~/lib/useResource";
+import { Button } from "~/ui/Button";
+import { ErrorState, SkeletonRows } from "~/ui/Feedback";
+import type { Query } from "~/lib/store";
 
 /**
- * The pieces every console screen is built from.
+ * The console's own furniture.
  *
- * Twenty screens that each hand-rolled their own header and loading state is
- * twenty chances for them to drift apart, so all of it lives here.
+ * The customer site and the console are two different products wearing one
+ * bundle, and they are read in two different situations. A guest is sitting
+ * down, deciding what to eat, on their own phone. A member of staff is standing
+ * up in the middle of service, holding a phone in one hand, trying to find one
+ * booking out of forty.
+ *
+ * So the console is denser: smaller type, tighter rows, more on screen at once,
+ * and tables rather than prose. What it keeps from the customer side is the
+ * press response and the pending states, because a button that looks dead is
+ * worse at eight on a Friday than it is on a menu.
  */
+
+/* ── The page frame ─────────────────────────────────────────────────────────*/
 
 export function DeskPage({
   title,
-  lead,
+  hint,
   actions,
   children,
 }: {
   title: string;
-  lead?: string;
+  hint?: string;
+  /** Lives on the header row, not floating: at this density a floating action
+      button covers a row of the table underneath it. */
   actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <div className="desk-page">
-      <header className="desk-page__head">
-        <div>
-          <h1 className="display display--lg">{title}</h1>
-          {lead ? <p className="fine muted">{lead}</p> : null}
+    <div className="dk-page">
+      <header className="dk-head">
+        <div className="grow stack stack--tight">
+          <h1 className="dk-title">{title}</h1>
+          {hint ? <p className="fine faint">{hint}</p> : null}
         </div>
-        {actions ? <div className="desk-page__actions">{actions}</div> : null}
+        {actions ? <div className="bar bar--tight">{actions}</div> : null}
       </header>
       {children}
     </div>
@@ -38,149 +49,168 @@ export function DeskPage({
 }
 
 /**
- * Renders a resource's three states in one place.
+ * Renders a query's three states without every screen writing the same branch.
  *
- * Takes the render function as a child so a screen never has to write the
- * loading and error branches itself, and can never forget the error one.
+ * The important part is what it does **not** do: a refresh over existing data
+ * does not put a skeleton back. `loading` is only true when there is genuinely
+ * nothing to show, so a screen that reloads every minute does not flash grey
+ * boxes at somebody reading it.
  */
 export function Loaded<T>({
-  resource,
+  query,
+  intent = "desk",
+  skeleton,
   children,
-  skeletonHeight,
 }: {
-  resource: Resource<T>;
+  query: Query<T>;
+  intent?: "desk" | "load";
+  skeleton?: ReactNode;
   children: (data: T) => ReactNode;
-  skeletonHeight?: string;
 }) {
-  if (resource.loading) return <SkeletonCards count={3} height={skeletonHeight ?? "3.5rem"} />;
-  if (resource.error) return <ErrorState error={resource.error} onRetry={resource.reload} />;
-  // `== null` on purpose: an unexpected response shape resolves this to
-  // `undefined`, not `null`, and every child below assumes it has the data
-  // it asked for — one bad response would otherwise crash the whole console
-  // through the error boundary instead of just showing nothing.
-  if (resource.data == null) return null;
-  return <>{children(resource.data)}</>;
+  if (query.error && query.data === undefined) {
+    return <ErrorState error={query.error} intent={intent} onRetry={query.reload} />;
+  }
+  if (query.data === undefined) {
+    return <>{skeleton ?? <SkeletonRows count={5} />}</>;
+  }
+  return <>{children(query.data)}</>;
 }
 
-/** A row of filters and search above a table. Sticks under the console bar. */
+/* ── Controls above a list ──────────────────────────────────────────────────*/
+
 export function Toolbar({ children }: { children: ReactNode }) {
-  return <div className="desk-toolbar">{children}</div>;
+  return <div className="dk-toolbar">{children}</div>;
 }
 
-/**
- * A console table that becomes a list of cards on a phone.
- *
- * These tables carry six or seven columns because that is what reading a
- * hundred bookings at a glance needs. On a phone that same table scrolled
- * sideways, and the columns that ended up off the right-hand edge were the
- * status and the actions — so a booking could not be cancelled, and a guest
- * could not be blocked, without dragging the table across first. The most
- * important columns were the least reachable.
- *
- * Below the breakpoint each row stacks into a card. That only reads if every
- * value still says what it is, so the header text is copied onto each cell as
- * `data-label` and the CSS prints it beside the value. Doing it here rather
- * than by hand means the twenty screens that already exist need no changes and
- * a twenty-first gets it for free.
- *
- * It runs on every render, not once: the rows are replaced whenever the data
- * reloads, and the labels have to follow them.
- */
-export function TableWrap({ children }: { children: ReactNode }) {
-  const box = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const table = box.current?.querySelector("table");
-    if (!table) return;
-
-    const headings = [...table.querySelectorAll("thead th")].map((th) => th.textContent?.trim() ?? "");
-    for (const row of table.querySelectorAll("tbody tr")) {
-      [...row.children].forEach((cell, index) => {
-        const heading = headings[index];
-        /* An unnamed column is the actions column. Labelling it would print an
-           empty prefix before the buttons. */
-        if (heading) cell.setAttribute("data-label", heading);
-        else cell.removeAttribute("data-label");
-      });
-    }
-  });
-
-  return (
-    <div ref={box} className="scroll-x desk-table">
-      <table className="table">{children}</table>
-    </div>
-  );
-}
-
-export function Stat({
-  label,
+export function Search({
   value,
-  money,
-  hint,
-  icon,
+  onChange,
+  placeholder,
 }: {
-  label: string;
-  value: number | string;
-  money?: boolean;
-  hint?: string;
-  icon?: IconName;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
 }) {
   return (
-    <div className="stat">
-      <div className="row row--between">
-        <span className="label">{label}</span>
-        {icon ? (
-          <span className="stat__icon">
-            <Icon name={icon} size={16} />
-          </span>
-        ) : null}
-      </div>
-      <p className="stat__value">
-        {money && typeof value === "number" ? <Money value={value} /> : value}
-      </p>
-      {hint ? <p className="fine faint">{hint}</p> : null}
+    <div className="dk-search">
+      <Icon name="search" size={15} />
+      <input
+        type="search"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        aria-label={placeholder}
+      />
+      {value ? (
+        <button type="button" onClick={() => onChange("")} aria-label="Clear">
+          <Icon name="close" size={14} />
+        </button>
+      ) : null}
     </div>
   );
 }
 
 /**
- * A status shown as a coloured word.
+ * A table that scrolls inside itself.
  *
- * The colour is a second signal, never the only one: the word is always there,
- * which is what makes it work in a photocopied rota or for a colourblind
- * member of staff.
+ * This wrapper is not optional and it is not decoration. A wide table without it
+ * makes the whole page scroll sideways, which on a phone means the navigation
+ * and the header slide off too and somebody has to scroll back to find them.
+ * Every table in the console goes in one of these.
  */
-export function State({ value }: { value: string }) {
-  const tone = TONES[value] ?? "neutral";
-  return <span className={`badge badge--${tone}`}>{LABELS[value] ?? value.replace(/_/g, " ")}</span>;
+export function TableWrap({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <div className="dk-tablewrap" data-scroller="" role="region" aria-label={label} tabIndex={0}>
+      <table className="dk-table">{children}</table>
+    </div>
+  );
 }
 
-const TONES: Record<string, string> = {
-  confirmed: "good",
-  completed: "good",
-  paid: "good",
-  ready: "good",
-  seated: "good",
-  approved: "good",
-  picked_up: "neutral",
-  pending: "warn",
-  pending_payment: "warn",
-  waiting: "warn",
-  notified: "warn",
-  unpaid: "warn",
-  cancelled: "bad",
-  failed: "bad",
-  no_show: "bad",
-  refunded: "neutral",
-};
+/** A row of numbers across the top of a screen. */
+export function Stats({ children }: { children: ReactNode }) {
+  return <div className="dk-stats">{children}</div>;
+}
 
-const LABELS: Record<string, string> = {
-  pending_payment: "Awaiting deposit",
-  picked_up: "Collected",
-  no_show: "No show",
-};
+export function StatTile({ label, value, note }: { label: string; value: ReactNode; note?: string }) {
+  return (
+    <div className="dk-stat">
+      <span className="dk-stat__value">{value}</span>
+      <span className="label">{label}</span>
+      {note ? <span className="micro faint">{note}</span> : null}
+    </div>
+  );
+}
 
-/** Nothing to show, in the console's flatter voice. */
-export function Nothing({ children }: { children: ReactNode }) {
-  return <p className="desk-nothing fine faint">{children}</p>;
+/**
+ * Nothing to show.
+ *
+ * Console empty states are usually good news ("no cancellations today") rather
+ * than a dead end, so this is quieter than the customer one and does not insist
+ * on an action.
+ */
+export function Nothing({ icon = "check-circle", children }: { icon?: IconName; children: ReactNode }) {
+  return (
+    <div className="dk-nothing">
+      <Icon name={icon} size={20} />
+      <span className="fine">{children}</span>
+    </div>
+  );
+}
+
+/**
+ * A status word, in the console's own tone scale.
+ *
+ * Kept separate from the customer `Badge` because the console has states the
+ * customer never sees (refunded, no-show, awaiting payment) and because at this
+ * density the badge is smaller.
+ */
+export function State({ tone = "neutral", children }: { tone?: "neutral" | "good" | "warn" | "bad" | "hot"; children: ReactNode }) {
+  return <span className={`dk-state dk-state--${tone}`}>{children}</span>;
+}
+
+/** Pagination, for the two lists that have it. */
+export function Pager({
+  offset,
+  limit,
+  more,
+  onMove,
+}: {
+  offset: number;
+  limit: number;
+  more: boolean;
+  onMove: (offset: number) => void;
+}) {
+  if (offset === 0 && !more) return null;
+  return (
+    <div className="dk-pager">
+      <Button
+        size="sm"
+        tone="ghost"
+        icon="arrow-left"
+        disabled={offset === 0}
+        onClick={() => onMove(Math.max(0, offset - limit))}
+      >
+        Back
+      </Button>
+      <span className="fine faint">
+        {offset + 1} to {offset + limit}
+      </span>
+      <Button size="sm" tone="ghost" iconEnd="arrow-right" disabled={!more} onClick={() => onMove(offset + limit)}>
+        Next
+      </Button>
+    </div>
+  );
+}
+
+/** A labelled block inside a settings screen. */
+export function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  return (
+    <section className="dk-section">
+      <div className="stack stack--tight">
+        <h2 className="head">{title}</h2>
+        {hint ? <p className="fine faint">{hint}</p> : null}
+      </div>
+      {children}
+    </section>
+  );
 }

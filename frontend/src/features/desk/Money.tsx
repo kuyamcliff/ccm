@@ -1,185 +1,162 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api } from "~/lib/api";
-import { dayLabel, stampLabel, timeLabel } from "~/lib/format";
-import { useResource } from "~/lib/useResource";
-import { Button } from "~/ui/Button";
-import { Money as Amount } from "~/ui/Bits";
+import { useMutation, useQuery, invalidate } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { money } from "~/lib/format";
+import { itemMatches, tokens } from "~/lib/search";
+import { Action } from "~/ui/Button";
+import { Segmented } from "~/ui/Field";
 import { useConfirm } from "~/ui/Sheet";
+import { Code } from "~/ui/Bits";
+import { DeskPage, Loaded, Nothing, Search, State, StatTile, Stats, TableWrap, Toolbar } from "./parts";
 import { useToast } from "~/state/toast";
-import { DeskPage, Loaded, Nothing, Stat, State, TableWrap, Toolbar } from "./parts";
 
 /**
- * Money in.
+ * Every mobile money attempt, including the ones that failed.
  *
- * Two views of the same events: payments, which is every attempt including the
- * ones that failed, and receipts, which is only what settled. The failed
- * attempts matter — a customer saying "it took my money" is usually a pending
- * prompt that never got a PIN, and this is where that gets checked.
+ * The failures are the point. A payment that never completed is a guest sitting
+ * somewhere thinking they have a table, and the only way anybody finds out is by
+ * looking here. So failed is a tab of its own rather than a row colour buried in
+ * a list of six hundred.
  *
- * Marking a payment settled by hand is possible and deliberately awkward: it
- * moves money in the books without moving any, so it asks first.
+ * Marking one completed by hand exists for the case the wallet settled but the
+ * webhook never arrived. It asks first, and it is audited, because it is the one
+ * button in the console that says money arrived without any money arriving.
  */
-export function MoneyDesk() {
-  const payments = useResource(() => api.desk.money.payments(), []);
-  const receipts = useResource(() => api.desk.money.receipts(), []);
+
+type Tab = "all" | "pending" | "failed";
+
+export function Money() {
   const toast = useToast();
-  const { confirm, confirmElement } = useConfirm();
-  const [tab, setTab] = useState<"payments" | "receipts">("payments");
+  const { confirm, element } = useConfirm();
+  const [tab, setTab] = useState<Tab>("all");
+  const [query, setQuery] = useState("");
 
-  const rows = payments.data ?? [];
-  const settled = rows.filter((payment) => payment.status === "completed");
-  const taken = settled.reduce((sum, payment) => sum + payment.amount_fcfa, 0);
-  const pending = rows.filter((payment) => payment.status === "pending").length;
-  const failed = rows.filter((payment) => payment.status === "failed").length;
+  const payments = useQuery(K.desk.payments, () => api.desk.money.payments(), { staleMs: 30_000 });
 
-  async function mark(id: number, status: "completed" | "failed") {
-    const ok = await confirm({
-      title: status === "completed" ? "Mark this as paid?" : "Mark this as failed?",
-      body:
-        status === "completed"
-          ? "Only do this when you have seen the money arrive in the mobile money account. It confirms the booking."
-          : "The customer will be able to try paying again.",
-      confirmLabel: status === "completed" ? "Mark paid" : "Mark failed",
-      destructive: status === "failed",
-    });
-    if (!ok) return;
+  const setStatus = useMutation(async (input: { id: number; status: "completed" | "failed" }) => {
+    await api.desk.money.setPaymentStatus(input.id, input.status);
+    invalidate("desk.payments*");
+    payments.reload();
+    toast.done("Saved.");
+  });
 
-    try {
-      await api.desk.money.setPaymentStatus(id, status);
-      payments.reload();
-      receipts.reload();
-      toast.done("Payment updated.");
-    } catch (err) {
-      toast.failed(err);
-    }
-  }
+  const all = payments.data ?? [];
+
+  const totals = useMemo(
+    () => ({
+      taken: all.filter((p) => p.status === "completed").reduce((sum, p) => sum + p.amount_fcfa, 0),
+      pending: all.filter((p) => p.status === "pending").length,
+      failed: all.filter((p) => p.status === "failed").length,
+    }),
+    [all]
+  );
+
+  const shown = useMemo(() => {
+    const needles = tokens(query);
+    return all
+      .filter((payment) => {
+        if (tab !== "all" && payment.status !== tab) return false;
+        if (needles.length === 0) return true;
+        return itemMatches({ haystack: `${payment.user_name} ${payment.reference} ${payment.method ?? ""}` }, needles);
+      })
+      .slice(0, 300);
+  }, [all, tab, query]);
 
   return (
-    <DeskPage title="Payments">
-      {confirmElement}
+    <DeskPage title="Payments" hint="Every attempt, including the ones that did not go through.">
+      <Stats>
+        <StatTile label="Taken" value={`${money(totals.taken)} FCFA`} />
+        <StatTile label="Still pending" value={totals.pending} />
+        <StatTile label="Failed" value={totals.failed} note="Somebody may think they have a table" />
+      </Stats>
 
-      <div className="stat-grid">
-        <Stat label="Taken" value={taken} money icon="wallet" hint={`${settled.length} payments`} />
-        <Stat label="Waiting on a PIN" value={pending} icon="clock" />
-        <Stat label="Failed" value={failed} icon="alert" />
-      </div>
+      <Toolbar>
+        <Segmented
+          value={tab}
+          onChange={setTab}
+          label="Which payments"
+          options={[
+            { value: "all", label: "All" },
+            { value: "pending", label: totals.pending > 0 ? `Pending (${totals.pending})` : "Pending" },
+            { value: "failed", label: totals.failed > 0 ? `Failed (${totals.failed})` : "Failed" },
+          ]}
+        />
+        <Search value={query} onChange={setQuery} placeholder="Name or reference" />
+      </Toolbar>
 
-      <div className="tabs" role="tablist" aria-label="Money views">
-        <button type="button" role="tab" className="tab" aria-selected={tab === "payments"} onClick={() => setTab("payments")}>
-          Every attempt
-        </button>
-        <button type="button" role="tab" className="tab" aria-selected={tab === "receipts"} onClick={() => setTab("receipts")}>
-          Receipts
-        </button>
-      </div>
-
-      {tab === "payments" ? (
-        <>
-          <Toolbar>
-            <Button tone="ghost" icon="refresh" onClick={payments.reload}>
-              Refresh
-            </Button>
-          </Toolbar>
-
-          <Loaded resource={payments}>
-            {(list) =>
-              list.length === 0 ? (
-                <Nothing>No payments yet.</Nothing>
-              ) : (
-                <TableWrap>
-                  <thead>
-                    <tr>
-                      <th>Guest</th>
-                      <th>For</th>
-                      <th className="table__num">Amount</th>
-                      <th>Method</th>
-                      <th>Status</th>
-                      <th>Reference</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {list.map((payment) => (
-                      <tr key={payment.id}>
-                        <td>{payment.user_name}</td>
-                        <td className="fine">
-                          {payment.res_date ? (
-                            <>
-                              {dayLabel(payment.res_date)} {timeLabel(payment.res_time)}
-                            </>
-                          ) : (
-                            payment.type
-                          )}
-                        </td>
-                        <td className="table__num">
-                          <Amount value={payment.amount_fcfa} />
-                        </td>
-                        <td className="fine">{payment.method ?? "mtn_momo"}</td>
-                        <td>
-                          <State value={payment.status} />
-                        </td>
-                        <td className="mono fine">{payment.reference}</td>
-                        <td>
-                          {payment.status === "pending" ? (
-                            <div className="table__actions">
-                              <Button size="sm" tone="ghost" onClick={() => mark(payment.id, "completed")}>
-                                Paid
-                              </Button>
-                              <Button size="sm" tone="danger" onClick={() => mark(payment.id, "failed")}>
-                                Failed
-                              </Button>
-                            </div>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </TableWrap>
-              )
-            }
-          </Loaded>
-        </>
-      ) : (
-        <Loaded resource={receipts}>
-          {(list) =>
-            list.length === 0 ? (
-              <Nothing>Nothing settled yet.</Nothing>
-            ) : (
-              <TableWrap>
-                <thead>
-                  <tr>
-                    <th>Guest</th>
-                    <th>Booking</th>
-                    <th>Code</th>
-                    <th className="table__num">Paid</th>
-                    <th>Reference</th>
-                    <th>When</th>
+      <Loaded query={payments}>
+        {() =>
+          shown.length === 0 ? (
+            <Nothing icon="wallet">Nothing here.</Nothing>
+          ) : (
+            <TableWrap label="Payments">
+              <thead>
+                <tr>
+                  <th>Guest</th>
+                  <th>For</th>
+                  <th>Amount</th>
+                  <th>How</th>
+                  <th>Reference</th>
+                  <th>State</th>
+                  <th aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((payment) => (
+                  <tr key={payment.id}>
+                    <td>{payment.user_name}</td>
+                    <td className="nowrap fine faint">
+                      {payment.res_date} {payment.res_time}
+                    </td>
+                    <td className="nowrap strong">{money(payment.amount_fcfa)} FCFA</td>
+                    <td className="fine">{payment.method ?? "Unknown"}</td>
+                    <td>
+                      <Code value={payment.reference} size="sm" />
+                    </td>
+                    <td>
+                      <State
+                        tone={
+                          payment.status === "completed" ? "good" : payment.status === "failed" ? "bad" : "warn"
+                        }
+                      >
+                        {payment.status === "completed" ? "Paid" : payment.status === "failed" ? "Failed" : "Pending"}
+                      </State>
+                    </td>
+                    <td>
+                      {payment.status !== "completed" ? (
+                        <Action
+                          size="sm"
+                          tone="ghost"
+                          pending={setStatus.pending}
+                          pendingLabel="Saving"
+                          onClick={async () => {
+                            const sure = await confirm({
+                              title: "Mark this as paid?",
+                              body: "Only when the money really did arrive and the wallet failed to tell us. This is written to the audit log.",
+                              confirmLabel: "It was paid",
+                              tone: "primary",
+                            });
+                            if (!sure) return;
+                            await setStatus.run({ id: payment.id, status: "completed" });
+                          }}
+                        >
+                          Mark paid
+                        </Action>
+                      ) : null}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {list.map((receipt) => (
-                    <tr key={receipt.id}>
-                      <td>
-                        {receipt.user_name}
-                        <span className="fine faint"> {receipt.user_email}</span>
-                      </td>
-                      <td className="fine">
-                        {dayLabel(receipt.date)} {timeLabel(receipt.time)}
-                      </td>
-                      <td className="mono fine">{receipt.ccm_code}</td>
-                      <td className="table__num">
-                        {receipt.amount_fcfa ? <Amount value={receipt.amount_fcfa} /> : "None"}
-                      </td>
-                      <td className="mono fine">{receipt.pay_reference}</td>
-                      <td className="fine faint">{stampLabel(receipt.created_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </TableWrap>
-            )
-          }
-        </Loaded>
-      )}
+                ))}
+              </tbody>
+            </TableWrap>
+          )
+        }
+      </Loaded>
+
+      {element}
     </DeskPage>
   );
 }
+
+/* The routes file imports this name. */
+export { Money as MoneyDesk };

@@ -1,119 +1,95 @@
 /*
- * The primitives: buttons, fields, sheets, toasts, and the small pieces that
- * appear on more than one screen.
+ * The primitives, drawn.
  *
- * Two things run through all of it. Every control is at least 3rem tall so it
- * can be hit with a thumb, and every state change is a transform or an opacity
- * so it stays smooth on a mid-range Android.
+ * Read `press` first if you are reading one thing: it is the answer to the
+ * complaint that started this rewrite, and the trick in it (a different curve on
+ * the way down from the way back) is the whole difference between a control that
+ * feels like software and one that feels like a key.
  */
 
-/* ── Buttons ──────────────────────────────────────────────────────────────
-   Pills. A pill reads as pressable at a glance in a way a soft rectangle does
-   not, and on a phone that glance is all the attention a button gets. */
+/* ══ Press ═════════════════════════════════════════════════════════════════
+ *
+ * Applied to every interactive element in the product through `usePress`.
+ *
+ * The two transitions are the point. Going down is fast and decelerating: the
+ * control gets out of the way of the finger immediately. Coming back up is on a
+ * spring that overshoots about four percent and settles, which is what a
+ * physical key does when you release it. An eased return reads as an animation.
+ * A sprung one reads as a thing.
+ */
+.btn,
+.pressable,
+.check,
+.switch__track,
+.counter__btn,
+.segmented__opt,
+.star-pick__btn,
+.field__reveal,
+.chip {
+  /* The release. */
+  transition:
+    transform var(--dur-3) var(--ease-spring),
+    background-color var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out),
+    opacity var(--dur-1) var(--ease-out),
+    filter var(--dur-1) var(--ease-out);
+  transform: translateZ(0);
+}
+
+.btn[data-pressed="true"],
+.pressable[data-pressed="true"],
+.check[data-pressed="true"],
+.switch__track[data-pressed="true"],
+.counter__btn[data-pressed="true"],
+.segmented__opt[data-pressed="true"],
+.star-pick__btn[data-pressed="true"],
+.field__reveal[data-pressed="true"],
+.chip[data-pressed="true"] {
+  /* The press. */
+  transition:
+    transform var(--press-dur) var(--ease-out),
+    filter var(--press-dur) var(--ease-out);
+  transform: scale(var(--press-scale));
+  filter: brightness(var(--press-lift));
+}
+
+/* A big surface scales less. A full-width button at 0.97 travels a visible
+   distance at its edges and reads as the whole page flinching. */
+.btn--block[data-pressed="true"],
+.pressable[data-pressed="true"] {
+  transform: scale(var(--press-scale-lg));
+}
+
+/* ══ Buttons ═══════════════════════════════════════════════════════════════*/
 
 .btn {
-  --btn-bg: var(--ink-800);
-  --btn-fg: var(--white);
-  --btn-line: transparent;
-
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--s-2);
   min-height: var(--tap);
-  padding: 0 var(--s-5);
-  border: 1px solid var(--btn-line);
+  padding-inline: var(--s-5);
   border-radius: var(--r-full);
-  background: var(--btn-bg);
-  color: var(--btn-fg);
-  font-family: var(--font-sans);
   font-size: var(--t-small);
-  font-weight: 600;
-  letter-spacing: -0.006em;
+  font-weight: var(--w-strong);
+  letter-spacing: -0.005em;
   line-height: 1;
   white-space: nowrap;
   user-select: none;
-  transition:
-    transform var(--dur-1) var(--ease),
-    background-color var(--dur-2) var(--ease),
-    border-color var(--dur-2) var(--ease),
-    opacity var(--dur-2) var(--ease);
-}
-
-/*
- * The press.
- *
- * Scaling the whole button down a hair is the single cheapest thing that makes
- * a web interface feel native, and it costs one composited transform. It has
- * to be on :active rather than a class, so it fires on the touchdown and not
- * after React has re-rendered.
- */
-.btn:active:not(:disabled) {
-  transform: scale(0.96);
-}
-
-.btn:disabled,
-.btn[aria-busy="true"] {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.btn:hover:not(:disabled) {
-  background: var(--ink-700);
-}
-
-.btn--primary {
-  --btn-bg: var(--red);
-  --btn-fg: var(--on-red);
-  box-shadow: var(--shadow-red);
-}
-
-.btn--primary:hover:not(:disabled) {
-  background: var(--red-hi);
-}
-
-.btn--ghost {
-  --btn-bg: transparent;
-  --btn-fg: var(--white);
-  --btn-line: var(--line-2);
-}
-
-.btn--ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.btn--quiet {
-  --btn-bg: transparent;
-  --btn-fg: var(--text-2);
-}
-
-.btn--quiet:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
-  --btn-fg: var(--white);
-}
-
-.btn--danger {
-  --btn-bg: transparent;
-  --btn-fg: var(--bad);
-  --btn-line: rgba(255, 90, 95, 0.35);
-}
-
-.btn--danger:hover:not(:disabled) {
-  background: var(--bad-wash);
+  -webkit-user-select: none;
 }
 
 .btn--sm {
-  min-height: 2.375rem;
-  padding: 0 var(--s-4);
+  min-height: var(--tap-sm);
+  padding-inline: var(--s-4);
   font-size: var(--t-fine);
-  gap: var(--s-1);
 }
 
 .btn--lg {
-  min-height: 3.5rem;
-  padding: 0 var(--s-6);
-  font-size: var(--t-lead);
+  min-height: 3.125rem;
+  padding-inline: var(--s-6);
+  font-size: var(--t-body);
 }
 
 .btn--block {
@@ -121,766 +97,753 @@
   width: 100%;
 }
 
+/* Red. The instruction. One per screen, at the thing the screen is asking for. */
+.btn--primary {
+  background: var(--red);
+  color: var(--on-red);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--red-hi);
+}
+
+/* Neutral. The second action beside a red one. */
+.btn--default {
+  background: var(--ink-800);
+  color: var(--text);
+}
+
+.btn--default:hover:not(:disabled) {
+  background: var(--ink-700);
+}
+
+/* Outline. For an action that is available but not being asked for. */
+.btn--ghost {
+  border: 1px solid var(--line-2);
+  color: var(--text);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  border-color: var(--text-3);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Bare. An icon in a bar, a tertiary link that needs a tap target. */
+.btn--quiet {
+  color: var(--text-2);
+}
+
+.btn--quiet:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.btn--danger {
+  background: var(--bad);
+  color: var(--black);
+}
+
+.btn--danger:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* A busy button is not faded. It is working, not unavailable, and fading it is
+   what made the old one look broken. */
+.btn[aria-busy="true"] {
+  opacity: 1;
+  cursor: progress;
+}
+
 .btn--icon {
-  padding: 0;
+  padding-inline: 0;
   width: var(--tap);
-  min-width: var(--tap);
+  aspect-ratio: 1;
 }
 
 .btn--icon.btn--sm {
-  width: 2.375rem;
-  min-width: 2.375rem;
+  width: var(--tap-sm);
 }
 
-/* The spinner takes the button's own text colour, so it works on red and on
-   nothing without a second rule. */
-.btn__spinner {
-  width: 1.05rem;
-  height: 1.05rem;
+/* ── The label swap ────────────────────────────────────────────────────────
+   Both faces occupy the same grid cell, so the button is as wide as the longer
+   of the two from the first frame and the swap moves nothing. */
+.btn__swap {
+  display: grid;
+  align-items: center;
+  justify-items: center;
+}
+
+.btn__face {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  white-space: nowrap;
+  transition: opacity var(--dur-1) var(--ease-out);
+}
+
+.btn__face--busy {
+  opacity: 0;
+}
+
+.btn__swap[data-pending="true"] .btn__face--rest {
+  opacity: 0;
+}
+
+.btn__swap[data-pending="true"] .btn__face--busy {
+  opacity: 1;
+}
+
+/* Neither face may take pointer events while it is the hidden one, or a tap can
+   land on an invisible label. */
+.btn__face--busy,
+.btn__swap[data-pending="true"] .btn__face--rest {
+  pointer-events: none;
+}
+
+.btn__spin {
+  width: 0.9em;
+  height: 0.9em;
   border-radius: 50%;
   border: 2px solid currentColor;
   border-top-color: transparent;
-  animation: spin 640ms linear infinite;
+  animation: spin 620ms linear infinite;
+  flex: none;
 }
 
-@keyframes spin {
+@media (prefers-reduced-motion: reduce) {
+  .btn__spin {
+    animation-duration: 1.6s;
+  }
+}
+
+/* A whole row that presses. See `PressableRow` / `PressableLink`. */
+.pressable {
+  display: block;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  border-radius: var(--r-md);
+}
+
+/* An inline text button. Underlined, because a coloured word on its own is not
+   a reliable signal that something is pressable. */
+.link {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  text-decoration-color: var(--line-2);
+  font: inherit;
+}
+
+.link:hover {
+  text-decoration-color: currentColor;
+}
+
+/* A small removable or selectable pill. Filters, tags, categories. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--tap-sm);
+  padding-inline: var(--s-3);
+  border-radius: var(--r-full);
+  border: 1px solid var(--line);
+  font-size: var(--t-fine);
+  font-weight: var(--w-mid);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.chip[data-on="true"] {
+  background: var(--white);
+  border-color: var(--white);
+  color: var(--black);
+  font-weight: var(--w-strong);
+}
+
+/* ══ Images ════════════════════════════════════════════════════════════════*/
+
+.img {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  /* Keeps the child's paint inside the box, which is what lets the drift
+     transform composite instead of invalidating the page around it. */
+  contain: paint;
+}
+
+.img > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity var(--dur-3) var(--ease-out);
+}
+
+/* Set only once `decode()` has resolved. Nothing here ever fades in a picture
+   that is still being drawn. */
+.img > img[data-ready="true"] {
+  opacity: 1;
+}
+
+.img--blank {
+  display: grid;
+  place-items: center;
+  color: var(--text-4);
+}
+
+/* ── The hero rotation ─────────────────────────────────────────────────────*/
+
+.hero-frames {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  contain: paint;
+  background: var(--bg-sunk);
+}
+
+.hero-frames__frame {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  /* Only the crossfade is on this element. The drift below is on the image, so
+     the two never fight for the same property. */
+  transition: opacity var(--dur-4) var(--ease-in-out);
+}
+
+.hero-frames__frame[data-active="true"] {
+  opacity: 1;
+}
+
+.hero-frames__frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.05);
+  will-change: transform;
+  /* Nudges the element onto its own compositor layer on older Chromium on
+     Android, where `will-change` alone is sometimes ignored. */
+  backface-visibility: hidden;
+}
+
+/*
+ * The drift.
+ *
+ * Runs only on the frame that is showing, and restarts each time one becomes
+ * active, so every photograph gets the same slow push rather than the third one
+ * arriving already halfway through its travel. Fourteen seconds of movement
+ * across roughly six percent is imperceptible frame to frame, which is what
+ * gives a still photograph the weight of a moving picture without ever asking
+ * the phone to decode video.
+ */
+.hero-frames__frame[data-active="true"] img {
+  animation: hero-drift 14s var(--ease-in-out) forwards;
+}
+
+@keyframes hero-drift {
+  from {
+    transform: scale(1.05);
+  }
   to {
-    transform: rotate(360deg);
+    transform: scale(1.13);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .btn__spinner {
-    animation-duration: 1600ms;
+  .hero-frames__frame[data-active="true"] img {
+    animation: none;
+    transform: scale(1.05);
   }
 }
 
-/* ── Cards ────────────────────────────────────────────────────────────────
-   Used sparingly and deliberately kept flat: a hairline and one step of
-   surface, never a border plus a shadow plus a nested panel. Most of this
-   product is a list on the page itself, not a grid of boxes. */
-
-.card {
-  padding: var(--s-4);
-  border-radius: var(--r-md);
-  background: var(--surface);
-  border: 1px solid var(--line);
-}
-
-.card--flat {
-  background: transparent;
-  border-color: var(--line);
-}
-
-.card--tight {
-  padding: var(--s-3);
-}
-
-.card--hot {
-  border-color: var(--red-line);
-  background: linear-gradient(180deg, var(--red-wash), transparent 60%), var(--surface);
-}
-
-/* A card that is itself a link. It lifts on press rather than on hover, which
-   is the only one of the two a phone has. */
-.card--action {
-  display: block;
-  transition:
-    transform var(--dur-2) var(--ease),
-    border-color var(--dur-2) var(--ease),
-    background-color var(--dur-2) var(--ease);
-}
-
-.card--action:hover {
-  border-color: var(--line-2);
-  background: var(--surface-2);
-}
-
-.card--action:active {
-  transform: scale(0.985);
-}
-
-.card__title {
-  font-family: var(--font-display);
-  font-size: var(--t-small);
-  font-weight: 700;
-  letter-spacing: var(--track-head);
-}
-
-/* A card is a container, not a paragraph. Its own stack runs tighter than the
-   page's so a section of five fields is not five screens tall. */
-.card.stack {
-  gap: var(--s-3);
-}
-
-/* ── Fields ───────────────────────────────────────────────────────────────
-   Label above, control below, error underneath the control it belongs to.
-   Nothing floats: a label that animates into a border is charming once and
-   confusing on the second visit. */
+/* ══ Fields ════════════════════════════════════════════════════════════════*/
 
 .field {
   display: flex;
   flex-direction: column;
   gap: var(--s-2);
+  min-width: 0;
 }
 
 .field__label {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s-2);
   font-size: var(--t-fine);
-  font-weight: 600;
-  color: var(--white);
-}
-
-.field__req {
-  font-size: var(--t-micro);
-  font-weight: 500;
-  letter-spacing: var(--track-label);
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-
-.field__hint {
-  font-size: var(--t-fine);
-  line-height: 1.5;
-  color: var(--text-2);
-  margin-top: calc(var(--s-1) * -1);
-}
-
-.field__error {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  font-size: var(--t-fine);
-  color: var(--bad);
-}
-
-/*
- * Password strength.
- *
- * Four hairlines rather than one sliding bar: a bar that grows invites the
- * reading that the goal is to fill it, and the goal is a password somebody can
- * remember. The colours are the semantic three, never the brand red, which
- * stays reserved for things you press and things you pay.
- *
- * The row keeps its height whether or not there is anything to say, so the
- * button below it does not jump out from under a thumb mid-tap.
- */
-.pwmeter {
-  display: grid;
-  gap: var(--s-2);
-  margin-top: calc(var(--s-1) * -1);
-}
-
-.pwmeter__track {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--s-1);
-}
-
-.pwmeter__step {
-  height: 2px;
-  border-radius: 1px;
-  background: var(--line);
-  transition: background-color 160ms ease;
-}
-
-.pwmeter__step--bad {
-  background: var(--bad);
-}
-
-.pwmeter__step--warn {
-  background: var(--warn);
-}
-
-.pwmeter__step--good {
-  background: var(--good);
-}
-
-.pwmeter__say {
-  min-height: 1.5em;
-  font-size: var(--t-fine);
-  line-height: 1.5;
+  font-weight: var(--w-strong);
   color: var(--text-2);
 }
 
-.pwmeter__problem {
+.field__wrap {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--s-2);
-  color: var(--bad);
-}
-
-.pwmeter__word--warn {
-  color: var(--warn);
-}
-
-.pwmeter__word--good {
-  color: var(--good);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pwmeter__step {
-    transition: none;
-  }
-}
-
-.field__row {
-  display: flex;
-  align-items: stretch;
-  gap: var(--s-2);
-}
-
-/* Short fields with nothing to explain — a town, a handle — cost the same
-   row whether they sit alone or beside each other. Two or three to a row
-   halves or thirds that cost without crowding anything, on a phone as much
-   as a desk. */
-.field-grid {
-  display: grid;
-  grid-template-columns: repeat(var(--field-grid-cols, 2), minmax(0, 1fr));
-  gap: var(--s-3);
-}
-
-.field__row > .input {
-  flex: 1;
-}
-
-.input,
-.select,
-.textarea {
-  width: 100%;
-  min-height: var(--tap);
-  padding: var(--s-3) var(--s-4);
-  border: 1px solid var(--line-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--r-md);
-  background: var(--ink-900);
-  color: var(--white);
-  /* 16px exactly. Anything under it and iOS zooms the page on focus, which
-     throws the layout and cannot be undone without disabling pinch zoom
-     altogether. */
-  font-size: 1rem;
-  line-height: 1.4;
   transition:
-    border-color var(--dur-2) var(--ease),
-    background-color var(--dur-2) var(--ease);
+    border-color var(--dur-1) var(--ease-out),
+    background-color var(--dur-1) var(--ease-out);
 }
 
-.input::placeholder,
-.textarea::placeholder {
-  color: var(--text-3);
+.field__wrap:focus-within {
+  border-color: var(--text-3);
+  background: var(--surface-2);
 }
 
-.input:focus,
-.select:focus,
-.textarea:focus {
-  outline: none;
-  border-color: var(--red);
-  background: var(--ink-850);
-}
-
-.input[aria-invalid="true"],
-.textarea[aria-invalid="true"],
-.select[aria-invalid="true"] {
+.field[data-invalid="true"] .field__wrap {
   border-color: var(--bad);
 }
 
-.textarea {
-  min-height: 6.5rem;
-  resize: vertical;
-  line-height: 1.55;
+.field__input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  padding: 0 var(--s-3);
+  min-height: var(--tap);
+  /*
+   * Sixteen pixels. Do not change this.
+   *
+   * Below 16px, iOS Safari zooms the layout viewport the instant the field takes
+   * focus, and there is no way back out of that zoom short of the person
+   * pinching. It is the one size in this product that is not a design decision.
+   */
+  font-size: 1rem;
+  color: var(--text);
 }
 
-.select {
+.field__input::placeholder {
+  color: var(--text-4);
+}
+
+.field__input--area {
+  padding: var(--s-3);
+  min-height: 5rem;
+  resize: vertical;
+  line-height: var(--lh-body);
+}
+
+.field__input--select {
   appearance: none;
   padding-right: var(--s-7);
-  background-image: linear-gradient(45deg, transparent 50%, var(--text-2) 50%),
-    linear-gradient(135deg, var(--text-2) 50%, transparent 50%);
-  background-position:
-    calc(100% - 1.35rem) 55%,
-    calc(100% - 1rem) 55%;
-  background-size:
-    6px 6px,
-    6px 6px;
-  background-repeat: no-repeat;
-}
-
-/* The country code sits beside the input rather than inside it: people type
-   their number the way they say it, starting with 6, and a prefilled prefix
-   is something they then have to delete. */
-.phone-prefix {
-  display: flex;
-  align-items: center;
-  padding-inline: var(--s-4);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-md);
-  background: var(--ink-850);
-  color: var(--text-2);
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.check,
-.switch {
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
-  min-height: var(--tap);
   cursor: pointer;
 }
 
-.check input[type="checkbox"] {
-  width: 1.35rem;
-  height: 1.35rem;
-  flex: none;
-  accent-color: var(--red);
-  cursor: pointer;
+.field__wrap--select {
+  position: relative;
 }
 
-.check__text {
-  font-size: var(--t-small);
-  line-height: 1.45;
-}
-
-.switch input {
+.field__chevron {
   position: absolute;
-  opacity: 0;
+  right: var(--s-3);
+  color: var(--text-3);
   pointer-events: none;
 }
 
-.switch__track {
-  position: relative;
+.field__icon {
+  margin-left: var(--s-3);
+  color: var(--text-3);
   flex: none;
-  width: 3rem;
-  height: 1.75rem;
-  border-radius: var(--r-full);
-  background: var(--ink-700);
-  transition: background-color var(--dur-2) var(--ease);
 }
 
-.switch__track::after {
-  content: "";
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: 50%;
-  background: var(--white);
-  transition: transform var(--dur-2) var(--ease-soft);
+.field__icon + .field__input {
+  padding-left: var(--s-2);
 }
 
-.switch input:checked + .switch__track {
-  background: var(--red);
-}
-
-.switch input:checked + .switch__track::after {
-  transform: translateX(1.25rem);
-}
-
-.switch input:focus-visible + .switch__track {
-  outline: 2px solid var(--red-hi);
-  outline-offset: 3px;
-}
-
-.switch input:disabled + .switch__track {
-  opacity: 0.4;
-}
-
-/* ── Counter ──────────────────────────────────────────────────────────────
-   Two buttons and a number. Faster than a number keyboard on a phone for the
-   small whole numbers this product asks for: party size, quantity. */
-
-.counter {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-1);
-  padding: 3px;
-  border-radius: var(--r-full);
-  background: var(--ink-850);
-  border: 1px solid var(--line);
-}
-
-.counter__btn {
-  display: grid;
-  place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
-  color: var(--white);
-  transition:
-    background-color var(--dur-1) var(--ease),
-    transform var(--dur-1) var(--ease);
-}
-
-.counter__btn:hover:not(:disabled) {
-  background: var(--ink-700);
-}
-
-.counter__btn:active:not(:disabled) {
-  transform: scale(0.9);
-}
-
-.counter__btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.counter__value {
-  min-width: 2.25rem;
-  text-align: center;
-  font-family: var(--font-num);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--t-lead);
-  font-weight: 700;
-}
-
-/* ── Chips and rails ──────────────────────────────────────────────────────
-   A horizontal rail of chips is how a phone does tabs once there are more than
-   four of them. It scrolls under the thumb and snaps. */
-
-.chip-rail {
-  display: flex;
-  gap: var(--s-2);
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-snap-type: x proximity;
-  -webkit-overflow-scrolling: touch;
-  padding-block: var(--s-2);
-  /* Bleeds into the page gutter so the first chip starts at the text edge and
-     the last one can still scroll clear of it. */
-  margin-inline: calc(var(--gutter) * -1);
-  padding-inline: var(--gutter);
-  /* Scroll snap reads the padding box as its target, not the padded content
-     edge, so without this the first chip's own `scroll-snap-align: start`
-     pulled the rail's scroll position forward by exactly the gutter on load —
-     it snapped the padding itself out of view, and the first chip sat flush
-     against the screen edge with no gutter, no matter what the padding said.
-     `scroll-padding` is the property scroll snap actually consults. */
-  scroll-padding-inline: var(--gutter);
-  scrollbar-width: none;
-}
-
-.chip-rail::-webkit-scrollbar {
-  display: none;
-}
-
-.chip {
-  flex: none;
-  scroll-snap-align: start;
-  min-height: 2.625rem;
-  padding: 0 var(--s-4);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-2);
-  border-radius: var(--r-full);
-  border: 1px solid var(--line-2);
-  background: transparent;
-  color: var(--text-2);
-  font-size: var(--t-fine);
-  font-weight: 600;
-  white-space: nowrap;
-  transition:
-    background-color var(--dur-2) var(--ease),
-    color var(--dur-2) var(--ease),
-    border-color var(--dur-2) var(--ease),
-    transform var(--dur-1) var(--ease);
-}
-
-.chip:active {
-  transform: scale(0.95);
-}
-
-/* White, not red: a category filter is a state, not an instruction, and the
-   page can have only one thing on it that says press me. */
-.chip[aria-pressed="true"],
-.chip--on {
-  background: var(--white);
-  border-color: var(--white);
-  color: var(--black);
-}
-
-/* The rail follows the page down so a category is always one tap away. The
-   blur keeps the rows readable as they pass underneath it. */
-.sticky-rail {
-  position: sticky;
-  top: 0;
-  z-index: var(--z-sticky);
-  background: linear-gradient(180deg, var(--bg) 62%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-@media (min-width: 60rem) {
-  .sticky-rail {
-    top: var(--topbar-h);
-  }
-}
-
-/* ── Tabs ─────────────────────────────────────────────────────────────────
-   Two or three destinations inside one page. Underlined, not boxed. */
-
-.tabs {
-  display: flex;
-  gap: var(--s-5);
-  border-bottom: 1px solid var(--line);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.tab {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-2);
-  padding: var(--s-3) 0 var(--s-4);
+.field__prefix {
+  padding-left: var(--s-3);
   color: var(--text-2);
   font-size: var(--t-small);
-  font-weight: 600;
-  white-space: nowrap;
-  transition: color var(--dur-2) var(--ease);
+  font-weight: var(--w-mid);
+  flex: none;
 }
 
-.tab::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  border-radius: var(--r-full);
-  background: var(--red);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform var(--dur-3) var(--ease);
+.field__prefix + .field__input {
+  padding-left: var(--s-2);
 }
 
-.tab:active {
-  opacity: 0.6;
-}
-
-.tab[aria-selected="true"] {
-  color: var(--white);
-}
-
-.tab[aria-selected="true"]::after {
-  transform: scaleX(1);
-}
-
-.tab__count {
-  display: inline-grid;
-  place-items: center;
-  min-width: 1.35rem;
-  height: 1.35rem;
-  padding-inline: 0.35rem;
-  border-radius: var(--r-full);
-  background: var(--red);
-  color: var(--on-red);
-  font-size: var(--t-micro);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ── Segmented control ────────────────────────────────────────────────── */
-
-.segmented {
-  display: inline-flex;
-  padding: 3px;
-  gap: 2px;
-  border-radius: var(--r-full);
-  background: var(--ink-850);
-  border: 1px solid var(--line);
-}
-
-.segmented__opt {
-  min-height: 2.375rem;
-  padding: 0 var(--s-4);
-  border-radius: var(--r-full);
-  color: var(--text-2);
-  font-size: var(--t-fine);
-  font-weight: 600;
-  transition:
-    background-color var(--dur-2) var(--ease),
-    color var(--dur-2) var(--ease),
-    transform var(--dur-1) var(--ease);
-}
-
-.segmented__opt:active {
-  transform: scale(0.94);
-}
-
-.segmented__opt[aria-pressed="true"] {
-  background: var(--ink-700);
-  color: var(--white);
-}
-
-/* ── Badges ───────────────────────────────────────────────────────────── */
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.25rem 0.65rem;
-  border-radius: var(--r-full);
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text-2);
-  font-size: var(--t-micro);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-}
-
-/* The dot carries the state at a glance; the word behind it carries it for
-   anyone who cannot tell the colours apart. */
-.badge:not(.badge--plain)::before {
-  content: "";
-  width: 0.4rem;
-  height: 0.4rem;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.badge--good {
-  background: var(--good-wash);
-  color: var(--good);
-}
-
-.badge--warn {
-  background: var(--warn-wash);
-  color: var(--warn);
-}
-
-.badge--bad {
-  background: var(--bad-wash);
-  color: var(--bad);
-}
-
-.badge--hot {
-  background: var(--red-wash);
-  color: var(--red-hi);
-}
-
-/* ── Money ────────────────────────────────────────────────────────────────
-   The figure and its unit, always together. FCFA is set smaller and quieter so
-   a column of prices scans on the digits. */
-
-.money {
-  font-family: var(--font-num);
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.money__unit {
-  margin-left: 0.3em;
-  font-size: 0.72em;
-  font-weight: 500;
-  color: var(--text-3);
-  letter-spacing: 0.04em;
-}
-
-/* ── Stars ────────────────────────────────────────────────────────────── */
-
-.stars {
-  display: inline-flex;
-  gap: 0.15rem;
-  line-height: 0;
-}
-
-.stars--input {
-  gap: var(--s-2);
-}
-
-.stars__btn {
+.field__reveal {
   display: grid;
   place-items: center;
   width: var(--tap);
   height: var(--tap);
-  border-radius: var(--r-sm);
-  color: var(--ink-600);
-  transition:
-    color var(--dur-2) var(--ease),
-    transform var(--dur-1) var(--ease);
-}
-
-.stars__btn[data-on="true"] {
-  color: var(--warn);
-}
-
-.stars__btn:active {
-  transform: scale(0.88);
-}
-
-/* ── Avatar ───────────────────────────────────────────────────────────── */
-
-.avatar {
-  display: grid;
-  place-items: center;
+  color: var(--text-3);
   flex: none;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
-  background: var(--ink-800);
-  border: 1px solid var(--line);
-  color: var(--text-2);
+}
+
+.field__note {
   font-size: var(--t-fine);
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  color: var(--text-3);
+  line-height: 1.4;
 }
 
-.avatar--lg {
-  width: 4rem;
-  height: 4rem;
-  font-size: var(--t-lead);
+.field[data-invalid="true"] .field__note {
+  color: var(--bad);
 }
 
-/* ── Meter ────────────────────────────────────────────────────────────── */
+/* ── Password strength ─────────────────────────────────────────────────────*/
 
-.meter {
-  width: 100%;
-  height: 4px;
+.strength {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-top: var(--s-1);
+}
+
+.strength__bar {
+  display: block;
+  height: 3px;
   border-radius: var(--r-full);
   background: var(--ink-800);
   overflow: hidden;
 }
 
-.meter__fill {
+.strength__bar > span {
+  display: block;
   height: 100%;
-  border-radius: var(--r-full);
-  background: var(--red);
-  transition: width var(--dur-3) var(--ease);
+  transform-origin: left;
+  background: var(--bad);
+  transition:
+    transform var(--dur-2) var(--ease-out),
+    background-color var(--dur-2) var(--ease-out);
 }
 
-/* ── Notices ──────────────────────────────────────────────────────────────
-   A tinted panel with an icon. The icon and the words carry the meaning; the
-   colour only reinforces it. */
+.strength[data-score="2"] .strength__bar > span {
+  background: var(--warn);
+}
+
+.strength[data-score="3"] .strength__bar > span,
+.strength[data-score="4"] .strength__bar > span {
+  background: var(--good);
+}
+
+.strength__label {
+  color: var(--text-2);
+}
+
+.strength__problems {
+  list-style: disc;
+  padding-left: 1.1em;
+}
+
+/* ── Checkbox and switch ───────────────────────────────────────────────────*/
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  min-height: var(--tap);
+  padding-block: var(--s-2);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.check__input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.check__box {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.15rem;
+  border: 1.5px solid var(--line-2);
+  border-radius: var(--r-xs);
+  color: transparent;
+  transition:
+    background-color var(--dur-1) var(--ease-out),
+    border-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+
+.check__input:checked + .check__box {
+  background: var(--red);
+  border-color: var(--red);
+  color: var(--on-red);
+}
+
+.check__input:focus-visible + .check__box {
+  outline: 2px solid var(--white);
+  outline-offset: 2px;
+}
+
+.check__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--t-small);
+}
+
+.switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  min-height: var(--tap);
+}
+
+.switch__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--t-small);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.switch__track {
+  flex: none;
+  width: 2.75rem;
+  height: 1.625rem;
+  border-radius: var(--r-full);
+  background: var(--ink-700);
+  padding: 3px;
+  display: flex;
+}
+
+.switch__track[aria-checked="true"] {
+  background: var(--red);
+}
+
+.switch__knob {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: var(--white);
+  transition: transform var(--dur-2) var(--ease-spring);
+}
+
+.switch__track[aria-checked="true"] .switch__knob {
+  transform: translateX(1.125rem);
+}
+
+/* ── Counter ───────────────────────────────────────────────────────────────*/
+
+.counter {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  overflow: hidden;
+}
+
+.counter__btn {
+  display: grid;
+  place-items: center;
+  width: var(--tap-sm);
+  height: var(--tap-sm);
+  color: var(--text);
+  flex: none;
+}
+
+.counter__btn:disabled {
+  color: var(--text-4);
+}
+
+.counter__value {
+  min-width: 2rem;
+  text-align: center;
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+}
+
+/* ── Segmented ─────────────────────────────────────────────────────────────*/
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--ink-900);
+  border-radius: var(--r-full);
+}
+
+.segmented__opt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  flex: 1;
+  min-height: 2.125rem;
+  padding-inline: var(--s-4);
+  border-radius: var(--r-full);
+  font-size: var(--t-fine);
+  font-weight: var(--w-strong);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.segmented__opt[data-on="true"] {
+  background: var(--ink-800);
+  color: var(--text);
+}
+
+/* ══ Sheet ═════════════════════════════════════════════════════════════════*/
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.sheet__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  opacity: 0;
+  transition: opacity var(--dur-3) var(--ease-out);
+  /* Cheap on a phone, and it is what separates the sheet from the page rather
+     than just darkening it. Dropped entirely below 40rem is not needed: one
+     blurred layer composites fine; a page of them does not. */
+  backdrop-filter: blur(2px);
+}
+
+.sheet[data-open="true"] .sheet__scrim {
+  opacity: 1;
+}
+
+.sheet__panel {
+  position: relative;
+  width: min(100%, 32rem);
+  max-height: min(92dvh, 46rem);
+  display: flex;
+  flex-direction: column;
+  background: var(--carry);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  border-top: 1px solid var(--carry-edge);
+  box-shadow: var(--shadow-3);
+  padding-bottom: var(--safe-b);
+  transform: translate3d(0, 100%, 0);
+  transition: transform var(--dur-3) var(--ease-out);
+  touch-action: none;
+}
+
+.sheet[data-open="true"] .sheet__panel {
+  transform: translate3d(0, 0, 0);
+}
+
+/* While the thumb is on it the panel must be exactly where the thumb is, with
+   no transition in between, or it lags a third of a second behind the finger. */
+.sheet__panel[data-dragging="true"] {
+  transition: none;
+}
+
+@media (min-width: 40rem) {
+  .sheet {
+    align-items: center;
+    padding: var(--s-5);
+  }
+
+  .sheet__panel {
+    border-radius: var(--r-xl);
+    border: 1px solid var(--carry-edge);
+    /* On a pointer device there is no drag gesture, so it arrives by rising
+       rather than sliding all the way up from the bottom edge. */
+    transform: translate3d(0, 12px, 0) scale(0.99);
+    opacity: 0;
+    transition:
+      transform var(--dur-3) var(--ease-out),
+      opacity var(--dur-2) var(--ease-out);
+  }
+
+  .sheet[data-open="true"] .sheet__panel {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.sheet__grip {
+  display: grid;
+  place-items: center;
+  padding: var(--s-3) 0 var(--s-1);
+  cursor: grab;
+  touch-action: none;
+}
+
+.sheet__handle {
+  width: 2.25rem;
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--ink-600);
+}
+
+.sheet__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-4) var(--s-3);
+  touch-action: none;
+}
+
+.sheet__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--s-4) var(--s-4);
+  /* The body scrolls; the panel drags. Without this the two gestures fight and
+     the sheet jumps whenever a scroll starts. */
+  touch-action: pan-y;
+}
+
+.sheet__foot {
+  display: flex;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+  border-top: 1px solid var(--line);
+  background: var(--carry);
+}
+
+.sheet__foot > * {
+  flex: 1;
+}
+
+/* ══ Feedback ══════════════════════════════════════════════════════════════*/
 
 .notice {
   display: flex;
   align-items: flex-start;
   gap: var(--s-3);
-  padding: var(--s-4);
+  padding: var(--s-3);
   border-radius: var(--r-md);
-  background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--line);
-  font-size: var(--t-small);
-  line-height: 1.5;
+  background: var(--surface);
 }
 
 .notice__icon {
   flex: none;
-  margin-top: 1px;
+  margin-top: 0.1rem;
+}
+
+.notice__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.notice__action {
+  flex: none;
+}
+
+.notice--info .notice__icon {
   color: var(--text-2);
 }
 
 .notice--good {
+  border-color: rgba(46, 194, 107, 0.28);
   background: var(--good-wash);
-  border-color: rgba(47, 191, 107, 0.3);
 }
 
 .notice--good .notice__icon {
@@ -888,8 +851,8 @@
 }
 
 .notice--warn {
+  border-color: rgba(237, 164, 42, 0.28);
   background: var(--warn-wash);
-  border-color: rgba(240, 169, 39, 0.3);
 }
 
 .notice--warn .notice__icon {
@@ -897,241 +860,289 @@
 }
 
 .notice--bad {
+  border-color: rgba(255, 91, 96, 0.28);
   background: var(--bad-wash);
-  border-color: rgba(255, 90, 95, 0.3);
 }
 
 .notice--bad .notice__icon {
   color: var(--bad);
 }
 
-/* ── Empty and error states ───────────────────────────────────────────── */
-
-.empty {
+.state {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--s-3);
-  padding: var(--s-6) var(--s-4);
+  padding: var(--s-7) var(--s-4);
   text-align: center;
 }
 
-.empty__icon {
-  display: grid;
-  place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: 50%;
-  background: var(--ink-850);
-  border: 1px solid var(--line);
-  color: var(--text-3);
+.state__icon {
+  color: var(--text-4);
 }
 
-.empty__title {
-  font-family: var(--font-display);
-  font-size: var(--t-head);
-  font-weight: 700;
-  letter-spacing: var(--track-head);
+.stale-note {
+  margin-top: var(--s-2);
 }
-
-.empty .fine {
-  max-width: 26rem;
-  color: var(--text-2);
-}
-
-/* ── Skeletons ────────────────────────────────────────────────────────────
-   A shape the size of the thing that is coming, so nothing jumps when it
-   lands. The sheen animates a gradient's position, which the compositor
-   handles without repainting anything underneath. */
 
 .skeleton {
-  border-radius: var(--r-md);
-  background: linear-gradient(100deg, var(--ink-900) 30%, var(--ink-800) 50%, var(--ink-900) 70%);
-  background-size: 220% 100%;
-  animation: sheen 1.6s var(--ease-inout) infinite;
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: var(--ink-900);
+  flex: none;
 }
 
-@keyframes sheen {
-  from {
-    background-position: 180% 0;
-  }
-  to {
-    background-position: -80% 0;
-  }
+/* The sheen travels on a transform, so it composites. A background-position
+   animation repaints the whole element every frame, and a page of those is a
+   page that stutters before it has shown anything. */
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.045), transparent);
+  animation: sheen 1.5s var(--ease-in-out) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .skeleton {
+  .skeleton::after {
     animation: none;
-    background: var(--ink-900);
   }
 }
 
-/* ── Sheet ────────────────────────────────────────────────────────────────
-   One overlay for the whole product: a sheet from the bottom on a phone, a
-   dialog in the middle from 40rem up. The difference is entirely here. */
+/* ══ Bits ══════════════════════════════════════════════════════════════════*/
 
-.scrim {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.66);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  animation: fade-in var(--dur-2) var(--ease) both;
+.money {
+  font-weight: var(--w-strong);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.sheet {
+.money--big {
+  font-size: var(--t-display);
+  font-family: var(--font-display);
+  letter-spacing: var(--track-display);
+}
+
+.money--fine {
+  font-size: var(--t-fine);
+}
+
+/* Smaller and quieter than the number. It says which currency, it does not
+   compete with the figure. */
+.money__unit {
+  font-size: 0.72em;
+  font-weight: var(--w-mid);
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  padding: 0.2rem var(--s-2);
+  border-radius: var(--r-xs);
+  font-size: var(--t-micro);
+  font-weight: var(--w-shout);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.badge--neutral {
+  background: var(--ink-800);
+  color: var(--text-2);
+}
+
+.badge--good {
+  background: var(--good-wash);
+  color: var(--good);
+  border-color: rgba(46, 194, 107, 0.25);
+}
+
+.badge--warn {
+  background: var(--warn-wash);
+  color: var(--warn);
+  border-color: rgba(237, 164, 42, 0.25);
+}
+
+.badge--bad {
+  background: var(--bad-wash);
+  color: var(--bad);
+  border-color: rgba(255, 91, 96, 0.25);
+}
+
+.badge--hot {
+  background: var(--red-wash);
+  color: var(--red-hi);
+  border-color: var(--red-line);
+}
+
+.stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.stars__slot {
+  display: inline-flex;
+  color: var(--ink-700);
   position: relative;
-  display: flex;
-  flex-direction: column;
+}
+
+.stars__slot[data-fill="full"] {
+  color: var(--warn);
+}
+
+/* The lit half, laid over the empty star and clipped down the middle. */
+.stars__half {
+  position: absolute;
+  inset: 0;
+  width: 50%;
+  overflow: hidden;
+  color: var(--warn);
+}
+
+.stars__value {
+  margin-left: var(--s-2);
+}
+
+.star-pick {
+  display: inline-flex;
+  gap: var(--s-1);
+}
+
+.star-pick__btn {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  color: var(--ink-600);
+}
+
+.star-pick__btn[data-on="true"] {
+  color: var(--warn);
+}
+
+.code {
+  font-family: var(--font-display);
+  font-weight: var(--w-shout);
+  letter-spacing: 0.14em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.code--sm {
+  font-size: var(--t-small);
+}
+
+.code--md {
+  font-size: var(--t-title);
+}
+
+.code--lg {
+  font-size: var(--t-display);
+}
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ink-800);
+  color: var(--text-2);
+  font-weight: var(--w-shout);
+  letter-spacing: 0.02em;
+  flex: none;
+}
+
+.meter {
+  display: block;
   width: 100%;
-  max-height: 92dvh;
-  padding-bottom: var(--safe-b);
-  background: var(--surface);
-  border-top: 1px solid var(--line-2);
-  border-radius: var(--r-xl) var(--r-xl) 0 0;
-  box-shadow: var(--shadow-3);
-  animation: sheet-up var(--dur-3) var(--ease-soft) both;
 }
 
-@keyframes sheet-up {
-  from {
-    transform: translate3d(0, 100%, 0);
-  }
-  to {
-    transform: none;
-  }
-}
-
-.sheet:focus {
-  outline: none;
-}
-
-/* The grab handle. It is not draggable, but it is the universal sign for
-   "this came up from the bottom and goes back down". */
-.sheet__grip {
-  width: 2.25rem;
+.meter__track {
+  display: block;
   height: 4px;
-  margin: var(--s-3) auto 0;
   border-radius: var(--r-full);
-  background: var(--ink-600);
-  flex: none;
+  background: var(--ink-800);
+  overflow: hidden;
 }
 
-.sheet__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--s-4);
-  padding: var(--s-4) var(--s-5) var(--s-3);
-  flex: none;
+.meter__fill {
+  display: block;
+  height: 100%;
+  transform-origin: left;
+  background: var(--red);
+  transition: transform var(--dur-3) var(--ease-out);
 }
 
-.sheet__head .display {
-  font-size: var(--t-head);
+.meter[data-tone="good"] .meter__fill {
+  background: var(--good);
 }
 
-.sheet__body {
+.meter[data-tone="neutral"] .meter__fill {
+  background: var(--text-3);
+}
+
+.stat {
   display: flex;
   flex-direction: column;
-  gap: var(--s-4);
-  padding: var(--s-2) var(--s-5) var(--s-5);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
+  gap: 2px;
+  min-width: 0;
 }
 
-.sheet__foot {
-  display: flex;
-  gap: var(--s-3);
-  padding: var(--s-4) var(--s-5);
-  padding-bottom: calc(var(--s-4) + var(--safe-b));
-  border-top: 1px solid var(--line);
-  background: var(--surface);
+.stat__value {
+  font-family: var(--font-display);
+  font-size: var(--t-title);
+  font-weight: var(--w-display);
+  letter-spacing: var(--track-head);
+  line-height: 1.1;
+}
+
+.pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--text-2);
+}
+
+.pulse__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-4);
   flex: none;
 }
 
-/* The action being offered is on the right and takes the room. */
-.sheet__foot > .btn {
-  flex: 1;
+.pulse[data-on="true"] .pulse__dot {
+  background: var(--good);
+  box-shadow: 0 0 0 3px var(--good-wash);
 }
 
-.sheet__foot > .btn:last-child:not(:only-child) {
-  flex: 1.4;
+.pulse[data-on="true"] {
+  color: var(--text);
 }
 
-@media (min-width: 40rem) {
-  .scrim {
-    align-items: center;
-    padding: var(--s-5);
-  }
-
-  .sheet {
-    max-width: 32rem;
-    max-height: 86dvh;
-    border-radius: var(--r-xl);
-    border: 1px solid var(--line-2);
-    animation-name: sheet-in;
-  }
-
-  .sheet__grip {
-    display: none;
-  }
-
-  .sheet__head {
-    padding-top: var(--s-5);
-  }
-}
-
-@keyframes sheet-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 12px, 0) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* ── Toasts ───────────────────────────────────────────────────────────────
-   Above the tab bar on a phone, so the thing being announced is not hidden
-   behind the thing about to be pressed. */
+/* ══ Toast ═════════════════════════════════════════════════════════════════*/
 
 .toaster {
   position: fixed;
-  left: 0;
-  right: 0;
+  left: 50%;
   bottom: calc(var(--tabbar-h) + var(--safe-b) + var(--s-3));
+  transform: translateX(-50%);
   z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: var(--s-2);
-  padding-inline: var(--gutter);
+  width: min(100% - var(--s-6), 28rem);
   pointer-events: none;
-}
-
-/* A page with a sticky basket bar has already claimed that strip, and a toast
-   landing on top of it hides the button the customer is reaching for. When
-   there is a bar, the toasts stand off it. */
-body:has(.basket-bar) .toaster {
-  bottom: calc(var(--tabbar-h) + var(--safe-b) + 5rem);
 }
 
 @media (min-width: 60rem) {
   .toaster {
     bottom: var(--s-5);
-    align-items: flex-end;
-    padding-inline: var(--s-5);
-  }
-
-  body:has(.basket-bar) .toaster {
-    bottom: 5.5rem;
   }
 }
 
@@ -1139,28 +1150,14 @@ body:has(.basket-bar) .toaster {
   display: flex;
   align-items: center;
   gap: var(--s-3);
-  width: 100%;
-  max-width: 26rem;
-  padding: var(--s-3) var(--s-4);
+  padding: var(--s-3);
   border-radius: var(--r-md);
   background: var(--ink-800);
   border: 1px solid var(--line-2);
   box-shadow: var(--shadow-2);
   font-size: var(--t-fine);
-  line-height: 1.45;
   pointer-events: auto;
-  animation: toast-in var(--dur-3) var(--ease-soft) both;
-}
-
-@keyframes toast-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 14px, 0);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  animation: rise var(--dur-3) var(--ease-out);
 }
 
 .toast__icon {
@@ -1172,409 +1169,85 @@ body:has(.basket-bar) .toaster {
   color: var(--good);
 }
 
-.toast--bad {
-  border-color: rgba(255, 90, 95, 0.4);
-}
-
 .toast--bad .toast__icon {
   color: var(--bad);
 }
 
+.toast__text {
+  flex: 1;
+  min-width: 0;
+}
+
 .toast__close {
-  margin-left: auto;
   flex: none;
   display: grid;
   place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 50%;
-  color: var(--text-3);
-  transition:
-    color var(--dur-1) var(--ease),
-    background-color var(--dur-1) var(--ease);
-}
-
-.toast__close:hover {
-  color: var(--white);
-  background: rgba(255, 255, 255, 0.08);
-}
-
-/* ── Photo fallback ───────────────────────────────────────────────────────
-   What a menu photograph becomes when its URL is gone or the network blocked
-   it. Reads as deliberate rather than as a broken image. */
-
-.photo--blank {
-  display: grid;
-  place-items: center;
-  background: linear-gradient(150deg, var(--ink-850), var(--ink-900));
-  color: var(--ink-600);
-}
-
-/* ── Tables ───────────────────────────────────────────────────────────────
-   Only the console uses these, but the styling belongs with the primitives. */
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--t-fine);
-}
-
-.table th {
-  text-align: left;
-  padding: var(--s-3);
-  font-size: var(--t-micro);
-  font-weight: 600;
-  letter-spacing: var(--track-label);
-  text-transform: uppercase;
-  color: var(--text-3);
-  border-bottom: 1px solid var(--line);
-  white-space: nowrap;
-}
-
-.table td {
-  padding: var(--s-3);
-  border-bottom: 1px solid var(--line);
-  vertical-align: middle;
-}
-
-.table tbody tr {
-  transition: background-color var(--dur-1) var(--ease);
-}
-
-.table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.table__num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.table__actions {
-  display: flex;
-  gap: var(--s-2);
-  justify-content: flex-end;
-}
-
-/* ── Dropzone ─────────────────────────────────────────────────────────── */
-
-.dropzone {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--s-2);
-  min-height: 8rem;
-  padding: var(--s-5);
-  border: 1px dashed var(--line-2);
-  border-radius: var(--r-md);
-  background: var(--ink-900);
-  color: var(--text-2);
-  text-align: center;
-  cursor: pointer;
-  transition:
-    border-color var(--dur-2) var(--ease),
-    background-color var(--dur-2) var(--ease);
-}
-
-.dropzone:hover {
-  border-color: var(--red-line);
-  background: var(--ink-850);
-}
-
-.dropzone__hint {
-  font-size: var(--t-fine);
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--r-xs);
   color: var(--text-3);
 }
 
-/* ── Question and answer ──────────────────────────────────────────────────
-   A native <details>, so it works before the JavaScript arrives and the
-   browser handles the keyboard for us. */
+/* ══ View transitions ══════════════════════════════════════════════════════
+ *
+ * The default cross-fade the browser gives is a dissolve of two full pages,
+ * which on a phone reads as a flash. These replace it with a short slide, which
+ * is what a native stack does.
+ */
 
-.qa {
-  border-bottom: 1px solid var(--line);
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root) {
+    animation: vt-out var(--dur-2) var(--ease-in) both;
+  }
+
+  ::view-transition-new(root) {
+    animation: vt-in var(--dur-3) var(--ease-out) both;
+  }
+
+  @keyframes vt-out {
+    to {
+      opacity: 0;
+      transform: translate3d(0, -6px, 0);
+    }
+  }
+
+  @keyframes vt-in {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 10px, 0);
+    }
+  }
 }
 
-.qa summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s-3);
-  min-height: var(--tap);
-  padding: var(--s-3) 0;
-  font-size: var(--t-small);
-  font-weight: 600;
-  list-style: none;
-  cursor: pointer;
-  transition: color var(--dur-2) var(--ease);
+/*
+ * A named element morphing between two screens: a menu thumbnail into the dish
+ * sheet's photograph, a booking row into its pass. The browser interpolates the
+ * two boxes itself; all this does is stop it cross-fading the contents at the
+ * same time, which makes the morph look like a ghost.
+ */
+::view-transition-group(*) {
+  animation-duration: var(--dur-3);
+  animation-timing-function: var(--ease-out);
 }
 
-.qa summary::-webkit-details-marker {
-  display: none;
-}
+/* ══ Reveal ════════════════════════════════════════════════════════════════*/
 
-.qa summary:hover {
-  color: var(--red-hi);
-}
-
-.qa summary svg {
-  flex: none;
-  color: var(--text-3);
-  transition: transform var(--dur-3) var(--ease);
-}
-
-.qa[open] summary svg {
-  transform: rotate(180deg);
-}
-
-.qa > p {
-  padding-bottom: var(--s-4);
-  animation: rise var(--dur-3) var(--ease) both;
-}
-
-/* ── Support launcher ─────────────────────────────────────────────────────
-   Sits above the tab bar, clear of the thumb's path to it. */
-
-.helper {
-  position: fixed;
-  right: var(--gutter);
-  bottom: calc(var(--tabbar-h) + var(--safe-b) + var(--s-3));
-  z-index: var(--z-nav);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-2);
-  min-height: 2.75rem;
-  padding: 0 var(--s-4);
-  border-radius: var(--r-full);
-  background: var(--ink-800);
-  border: 1px solid var(--line-2);
-  color: var(--white);
-  font-size: var(--t-fine);
-  font-weight: 600;
-  box-shadow: var(--shadow-2);
-  /* Out of the way, and out of the tab order, until the page has been
-     scrolled. See SupportLauncher for why. */
+.reveal {
   opacity: 0;
-  visibility: hidden;
-  transform: translate3d(0, 8px, 0);
+  transform: translate3d(0, 12px, 0);
   transition:
-    transform var(--dur-3) var(--ease),
-    opacity var(--dur-3) var(--ease),
-    visibility var(--dur-3) var(--ease),
-    background-color var(--dur-2) var(--ease);
+    opacity var(--dur-3) var(--ease-out),
+    transform var(--dur-4) var(--ease-out);
 }
 
-.helper[data-shown="true"] {
+.reveal[data-shown="true"] {
   opacity: 1;
-  visibility: visible;
   transform: none;
 }
 
-.helper[data-shown="true"]:active {
-  transform: scale(0.94);
-}
-
-.helper:hover {
-  background: var(--ink-700);
-}
-
-@media (min-width: 60rem) {
-  .helper {
-    bottom: var(--s-5);
-  }
-}
-
-/* A screen with a basket bar or a booking footer has an action fixed to the
-   bottom of it, and a floating chat button lands squarely on top of it. Nobody
-   is opening a support chat in the middle of paying. */
-body:has(.basket-bar) .helper,
-body:has(.booking__foot) .helper {
-  display: none;
-}
-
-.helper__dot {
-  width: 0.45rem;
-  height: 0.45rem;
-  border-radius: 50%;
-  background: var(--red);
-}
-
-/* ── Chat ─────────────────────────────────────────────────────────────────
-   Support, both on the help page and inside the launcher sheet. */
-
-.chat {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
-  min-height: 22rem;
-}
-
-.chat--compact {
-  min-height: 16rem;
-}
-
-.chat__intro {
-  font-size: var(--t-fine);
-  color: var(--text-2);
-}
-
-.chat__log {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
-  flex: 1;
-  max-height: 26rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: var(--s-1);
-}
-
-.chat__row {
-  display: flex;
-}
-
-.chat__row[data-mine="true"] {
-  justify-content: flex-end;
-}
-
-.bubble {
-  max-width: 85%;
-  padding: var(--s-3) var(--s-4);
-  border-radius: var(--r-md);
-  background: var(--ink-800);
-  font-size: var(--t-small);
-  line-height: 1.5;
-  animation: rise var(--dur-3) var(--ease) both;
-}
-
-.bubble--user {
-  background: var(--red);
-  color: var(--on-red);
-  border-bottom-right-radius: var(--r-xs);
-}
-
-.bubble--admin {
-  background: var(--ink-800);
-  border-bottom-left-radius: var(--r-xs);
-}
-
-.bubble--system {
-  background: transparent;
-  border: 1px dashed var(--line-2);
-  color: var(--text-2);
-  font-size: var(--t-fine);
-  max-width: 100%;
-  text-align: center;
-  margin-inline: auto;
-}
-
-.bubble__meta {
-  display: block;
-  margin-top: var(--s-1);
-  font-size: var(--t-micro);
-  opacity: 0.7;
-}
-
-.chat__composer {
-  display: flex;
-  gap: var(--s-2);
-  align-items: flex-end;
-}
-
-.chat__input {
-  flex: 1;
-  min-height: var(--tap);
-  max-height: 8rem;
-  padding: var(--s-3) var(--s-4);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-lg);
-  background: var(--ink-900);
-  color: var(--white);
-  font-size: 1rem;
-  resize: none;
-}
-
-.chat__input:focus {
-  outline: none;
-  border-color: var(--red);
-}
-
-.chat__status {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  font-size: var(--t-fine);
-  color: var(--text-3);
-}
-
-.chat__typing {
-  display: inline-flex;
-  gap: 3px;
-}
-
-.chat__typing span {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--text-3);
-  animation: blink 1.2s var(--ease-inout) infinite;
-}
-
-.chat__typing span:nth-child(2) {
-  animation-delay: 160ms;
-}
-
-.chat__typing span:nth-child(3) {
-  animation-delay: 320ms;
-}
-
-@keyframes blink {
-  0%,
-  60%,
-  100% {
-    opacity: 0.25;
-  }
-  30% {
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
     opacity: 1;
+    transform: none;
   }
-}
-
-/* ── Lightbox image ───────────────────────────────────────────────────── */
-
-.lightbox__img {
-  width: 100%;
-  border-radius: var(--r-md);
-  background: var(--ink-900);
-}
-
-/* ── Error reference ──────────────────────────────────────────────────────
-   The code that ties what the customer saw to what the server logged. Quiet
-   by default: it only matters once somebody is actually asking about it. */
-
-.error-ref {
-  margin-top: var(--s-3);
-}
-
-.error-ref__code {
-  padding: 0.15rem 0.45rem;
-  border: 1px solid var(--line);
-  border-radius: var(--r-xs);
-  background: var(--ink-900);
-  color: var(--text-2);
-  font-size: var(--t-fine);
-  letter-spacing: 0.04em;
-  transition: border-color var(--dur-2) var(--ease), color var(--dur-2) var(--ease), transform var(--dur-1) var(--ease);
-}
-
-.error-ref__code:hover {
-  border-color: var(--line-2);
-  color: var(--text);
-}
-
-.error-ref__code:active {
-  transform: scale(0.96);
-}
-
-.error-ref__copied {
-  color: var(--good);
 }

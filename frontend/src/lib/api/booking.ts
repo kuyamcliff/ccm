@@ -134,10 +134,16 @@ export const bookingApi = {
   }) => http.post<{ reservation: Booking }>("/api/reservations", input).then((r) => r.reservation),
 
   /**
-   * Cancels a booking. Close to the sitting the restaurant keeps a fee, and the
-   * server answers with that instead of cancelling, so the guest can decide.
+   * Cancels a booking.
+   *
+   * Inside the last hour of a paid booking the restaurant keeps a fee, and the
+   * server quotes it as a **402** rather than cancelling: read `fee_fcfa` off
+   * the error, show it, and call again with `acceptFee` once the guest has said
+   * yes to that number. Two steps on purpose, so nobody is charged a fee they
+   * were never shown.
    */
-  cancel: (id: number) => http.del<{ ok: true } | { requires_fee: true; fee_fcfa: number }>(`/api/reservations/${id}`),
+  cancel: (id: number, acceptFee = false) =>
+    http.del<{ ok: true; fee_fcfa?: number }>(`/api/reservations/${id}`, acceptFee ? { accept_fee: true } : undefined),
 
   /** Clears a finished or cancelled booking off the guest's own list only. */
   hide: (id: number) => http.del<{ ok: true }>(`/api/reservations/${id}/hide`),

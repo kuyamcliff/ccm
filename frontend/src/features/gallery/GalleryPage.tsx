@@ -1,157 +1,234 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "~/lib/api";
 import type { GalleryPhoto } from "~/lib/api";
-import { IMAGE_ACCEPT, ImageError, readImageFile } from "~/lib/imageFile";
-import { useAction, useResource } from "~/lib/useResource";
-import { Button } from "~/ui/Button";
+import { useMutation, useQuery } from "~/lib/store";
+import { K } from "~/lib/keys";
+import { readImageFile } from "~/lib/imageFile";
+import { Img } from "~/ui/Img";
+import { Action, Button, IconButton, LinkButton } from "~/ui/Button";
 import { TextField } from "~/ui/Field";
-import { Icon } from "~/ui/Icon";
-import { Photo } from "~/ui/Photo";
-import { EmptyState, ErrorState, Notice, Skeleton } from "~/ui/Feedback";
 import { Sheet } from "~/ui/Sheet";
+import { EmptyState, ErrorState, Skeleton } from "~/ui/Feedback";
+import { transitionName } from "~/ui/motion";
+import { usePress } from "~/ui/press";
+import { useSession } from "~/state/session";
 import { useToast } from "~/state/toast";
+import { useCopy } from "~/state/locale";
 
 /**
- * Photos, mostly other people's.
+ * The photographs.
  *
- * Anything sent in waits for the owner to approve it before it appears, so the
- * submit form says exactly that rather than implying an instant post.
+ * A masonry-ish grid of squares that fills the width of the screen with no
+ * gutters on the outside, because a photograph looks better edge to edge than
+ * framed in a card. Tapping one opens it full size, and the tapped square morphs
+ * into the full image through a named view transition rather than the page
+ * cross-fading over it.
+ *
+ * Guests can send a photo in. It goes to Desk > Photos for approval rather than
+ * straight onto the site, which is the only sane default for anything a stranger
+ * can upload to a restaurant's front page.
  */
-
-function Lightbox({ photo, onClose }: { photo: GalleryPhoto; onClose: () => void }) {
-  return (
-    <Sheet open onClose={onClose} title={photo.caption || "Photo"}>
-      <img className="lightbox__img" src={photo.image_url} alt={photo.caption} />
-      {photo.submitter_name ? <p className="fine faint">Sent in by {photo.submitter_name}</p> : null}
-    </Sheet>
-  );
-}
-
 export function GalleryPage() {
-  const photos = useResource(() => api.site.gallery(), []);
+  const { c } = useCopy();
+  const { user } = useSession();
   const toast = useToast();
 
+  const { data, loading, error, reload } = useQuery(K.gallery, () => api.site.gallery(), { persist: true });
   const [open, setOpen] = useState<GalleryPhoto | null>(null);
   const [sending, setSending] = useState(false);
-  const [image, setImage] = useState<string | null>(null);
-  const [caption, setCaption] = useState("");
-  const [problem, setProblem] = useState<string | null>(null);
 
-  const submit = useAction(api.site.submitPhoto);
-  const rows = photos.data ?? [];
+  const photos = (data ?? []).filter((photo) => photo.is_approved === 1);
 
   return (
-    <div className="page section">
-      <div className="section-head">
-        <hr className="heat-rule" />
-        <h1 className="display display--xl">The gallery</h1>
-        <p className="lead">Nights at Cam Chop Meat, sent in by people who were there.</p>
-        <div className="row">
-          <Button icon="camera" onClick={() => setSending(true)}>
-            Send a photo
-          </Button>
-        </div>
-      </div>
+    <div className="section stack gallery">
+      <header className="page stack stack--tight">
+        <h1 className="display display--xl">{c.gallery.title}</h1>
+        <p className="lead">{c.gallery.lead}</p>
+      </header>
 
-      {photos.loading ? (
-        <div className="mosaic">
+      {error ? (
+        <div className="page">
+          <ErrorState error={error} intent="load" onRetry={reload} />
+        </div>
+      ) : loading ? (
+        <div className="gallery__grid">
           {[0, 1, 2, 3, 4, 5].map((n) => (
-            <Skeleton key={n} height="12rem" radius="var(--r-md)" />
+            <Skeleton key={n} height="0" className="gallery__shim" radius="0" />
           ))}
         </div>
-      ) : photos.error ? (
-        <ErrorState error={photos.error} onRetry={photos.reload} />
-      ) : rows.length === 0 ? (
-        <EmptyState icon="image" title="No photos up yet">
-          Send one in and it will be here once the owner has looked at it.
-        </EmptyState>
+      ) : photos.length === 0 ? (
+        <div className="page">
+          <EmptyState icon="camera" title={c.gallery.none} body={c.gallery.sendBody} />
+        </div>
       ) : (
-        <div className="mosaic">
-          {rows.map((photo) => (
-            <button
-              key={photo.id}
-              type="button"
-              className={`mosaic__cell${photo.is_featured ? " mosaic__cell--big" : ""}`}
-              onClick={() => setOpen(photo)}
-              aria-label={photo.caption || "Open photo"}
-            >
-              <Photo src={photo.image_url} alt={photo.caption} />
-              {photo.caption ? <span className="mosaic__caption">{photo.caption}</span> : null}
-            </button>
+        <div className="gallery__grid">
+          {photos.map((photo) => (
+            <GalleryTile key={photo.id} photo={photo} onOpen={() => setOpen(photo)} />
           ))}
         </div>
       )}
 
-      {open ? <Lightbox photo={open} onClose={() => setOpen(null)} /> : null}
+      <div className="page bar bar--wrap">
+        {user ? (
+          <Button tone="ghost" size="sm" icon="camera" onClick={() => setSending(true)}>
+            {c.gallery.send}
+          </Button>
+        ) : (
+          <LinkButton to="/signin" tone="ghost" size="sm" icon="camera">
+            {c.gallery.send}
+          </LinkButton>
+        )}
+      </div>
 
-      <Sheet
+      <Lightbox photo={open} onClose={() => setOpen(null)} />
+      <SendPhoto
         open={sending}
         onClose={() => setSending(false)}
-        title="Send a photo"
-        description="It goes to the owner first. Nothing appears here until they say so."
-        footer={
-          <>
-            <Button tone="ghost" onClick={() => setSending(false)}>
-              Cancel
-            </Button>
-            <Button
-              tone="primary"
-              busy={submit.busy}
-              disabled={!image}
-              onClick={async () => {
-                if (!image) return;
-                const result = await submit.run(image, caption.trim());
-                if (!result) {
-                  setProblem("That photo could not be sent. Try a smaller one.");
-                  return;
-                }
-                setSending(false);
-                setImage(null);
-                setCaption("");
-                toast.done(result.message || "Sent. Thanks.");
-              }}
-            >
-              Send it
-            </Button>
-          </>
-        }
-      >
+        onSent={() => {
+          setSending(false);
+          toast.done(c.gallery.sent);
+        }}
+      />
+    </div>
+  );
+}
+
+function GalleryTile({ photo, onOpen }: { photo: GalleryPhoto; onOpen: () => void }) {
+  const press = usePress();
+  return (
+    <button
+      type="button"
+      className="gallery__tile"
+      onClick={onOpen}
+      aria-label={photo.caption || "Open photo"}
+      {...press.pressProps}
+    >
+      <Img
+        src={photo.image_url}
+        alt={photo.caption || ""}
+        ratio={1}
+        radius="0"
+        style={transitionName("photo", photo.id)}
+      />
+    </button>
+  );
+}
+
+/**
+ * One photograph, full size.
+ *
+ * Not a Sheet: a sheet is for controls and this is for looking at a picture, so
+ * it takes the whole screen with one close button over it. Escape and the back
+ * gesture both close it.
+ */
+function Lightbox({ photo, onClose }: { photo: GalleryPhoto | null; onClose: () => void }) {
+  useEffect(() => {
+    if (!photo) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [photo, onClose]);
+
+  if (!photo) return null;
+
+  return (
+    <div className="lightbox" role="dialog" aria-modal="true" aria-label={photo.caption || "Photo"}>
+      <div className="lightbox__scrim" onClick={onClose} aria-hidden="true" />
+      <IconButton name="close" label="Close" onClick={onClose} className="lightbox__close" />
+      <figure className="lightbox__figure">
+        <Img
+          src={photo.image_url}
+          alt={photo.caption || ""}
+          ratio={1}
+          radius="var(--r-md)"
+          priority
+          className="lightbox__img"
+          style={transitionName("photo", photo.id)}
+        />
+        {photo.caption ? <figcaption className="fine muted center">{photo.caption}</figcaption> : null}
+      </figure>
+    </div>
+  );
+}
+
+/* ── Sending one in ─────────────────────────────────────────────────────────*/
+
+function SendPhoto({ open, onClose, onSent }: { open: boolean; onClose: () => void; onSent: () => void }) {
+  const { c } = useCopy();
+  const toast = useToast();
+
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [caption, setCaption] = useState("");
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const send = useMutation(async () => {
+    if (!dataUrl) return;
+    await api.site.submitPhoto(dataUrl, caption.trim());
+    setDataUrl(null);
+    setCaption("");
+    onSent();
+  });
+
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={c.gallery.send}
+      footer={
+        <Action
+          tone="primary"
+          block
+          pending={send.pending}
+          pendingLabel={c.pending.uploading}
+          disabled={!dataUrl}
+          onClick={async () => {
+            await send.run();
+            const error = send.readError();
+            if (error) toast.failed(error, "upload");
+          }}
+        >
+          {c.gallery.send}
+        </Action>
+      }
+    >
+      <div className="stack">
+        <p className="lead">{c.gallery.sendBody}</p>
+
         <label className="dropzone">
-          {image ? (
-            <img src={image} alt="" />
-          ) : (
-            <span className="dropzone__hint">
-              <Icon name="upload" size={24} />
-              Choose a photo, up to 6 MB
-            </span>
-          )}
           <input
             type="file"
-            accept={IMAGE_ACCEPT}
+            accept="image/jpeg,image/png,image/webp,image/avif"
             className="sr-only"
             onChange={async (event) => {
               const file = event.target.files?.[0];
               if (!file) return;
               setProblem(null);
               try {
-                setImage(await readImageFile(file));
-              } catch (err) {
-                setProblem(err instanceof ImageError ? err.message : "That photo could not be used.");
+                setDataUrl(await readImageFile(file));
+              } catch (error) {
+                setProblem(error instanceof Error ? error.message : "We could not read that file.");
               }
             }}
           />
+          {dataUrl ? (
+            <Img src={dataUrl} alt="" ratio={4 / 3} />
+          ) : (
+            <span className="dropzone__prompt fine muted">Choose a photo, under 6 MB</span>
+          )}
         </label>
+
+        {problem ? <p className="fine hot">{problem}</p> : null}
 
         <TextField
           label="Caption"
-          placeholder="Optional"
+          hint="Optional. A few words about what this is."
           value={caption}
-          maxLength={200}
-          onChange={(e) => setCaption(e.target.value)}
+          onChange={(event) => setCaption(event.target.value)}
+          maxLength={120}
         />
-
-        {problem ? <Notice tone="bad">{problem}</Notice> : null}
-      </Sheet>
-    </div>
+      </div>
+    </Sheet>
   );
 }

@@ -1,92 +1,232 @@
 # Project context (living file)
 
 ## State
-v4, 2026-08-04. The frontend was redesigned end to end: a new design language,
-new type, new chrome and rewritten customer screens, plus two new pages (Our
-story, Find us). The data layer, the routes and the backend were untouched, so
-every feature v3 had, v4 still has. v1 (static site), v2 (butcher paper) and v3
-(Charcoal and Ember) are in git history.
+v5, 2026-08-21. The whole frontend was rebuilt from nothing: every customer
+screen, all 23 console screens, and a new developer tier. Unlike v4, this one
+went below the paint. The boot sequence, the data layer, the motion system and
+the copy were all replaced, and the backend gained four things the frontend
+needed (`/api/bootstrap`, `/api/dev/*`, `/api/cron/reminders`, and a real
+`developer` role) plus three features the restaurant was missing: sold out
+tonight, cash on collection, and reminders. v1 (static site), v2 (butcher
+paper), v3 (Charcoal and Ember) and v4 are in git history.
+
+What v5 was for, in the owner's words: the first load waited on pictures, the
+transitions were not smooth, buttons showed no sign of being touched,
+everything sat in a box, and the writing sounded like a machine. Each of those
+had a cause in the code, and each cause is named below.
 
 ## Backend file map (backend/)
-Unchanged in this rewrite. Postgres (Supabase) through `pg`, 23 routers under
-/api. See `backend/src/server.ts` for the mount list, and MOMO-SETUP.md for the
-mobile-money credentials.
+Postgres (Supabase) through `pg`, 28 routers under /api. See
+`backend/src/server.ts` for the mount list, and MOMO-SETUP.md for the
+mobile-money credentials. New in v5:
+
+- `src/routes/bootstrap.ts` — session, site settings, highlights and one review
+  in a single response. See "The boot sequence" below for why it exists.
+- `src/routes/dev.ts` — the developer tier: health, held errors, feature flags,
+  table counts, impersonation. Every route behind `requireDeveloper`.
+- `src/routes/cron.ts` — `POST /api/cron/reminders`, behind a shared secret
+  compared in constant time. A platform cron job rather than an in-process
+  `setInterval`, which dies with the dyno and doubles up across instances.
+- `src/lib/errorLog.ts` — a 200-entry in-memory ring of recent 500s, keyed by
+  the same `reference` the customer is shown. No bodies, headers, cookies or
+  query strings are kept, so the buffer cannot become a place secrets collect.
+- `src/lib/soldOut.ts` (pure) and `src/lib/menuSweep.ts` (touches the database).
+  Split the same way `lib/loyalty.ts` and `routes/loyalty.ts` are, so the
+  opening-time arithmetic can be tested without a Postgres.
+- `src/lib/bootstrapDeveloper.ts` — promotes `DEVELOPER_EMAIL` at boot. It
+  never demotes, so removing the variable cannot lock the tier away mid-flight.
 
 ## Frontend file map (frontend/)
 Vite + React 19 + TypeScript. Path alias `~/` points at `src/`.
 
-- `src/main.tsx` — mounts the app inside the four providers and registers the
-  service worker. Fonts are imported here, bundled rather than fetched from a
-  font CDN.
-- `src/app/` — `App.tsx` (routes, lazy loading), `Shell.tsx` (top bar, tab bar,
-  footer), `guards.tsx` (RequireAccount, RequireStaff), `ErrorBoundary.tsx`.
+- `src/main.tsx` — mounts the app and registers the service worker. Fonts are
+  imported here, bundled rather than fetched from a font CDN.
+- `src/app/` — `App.tsx` (routes, lazy loading), `Boot.tsx` (the synchronous
+  first paint), `Shell.tsx` (top bar, tab bar, footer), `guards.tsx`,
+  `ErrorBoundary.tsx`, `routeMeta.ts` + `RouteMeta.tsx`.
 - `src/lib/http.ts` — the only place that talks to the network. Timeouts,
   retries on idempotent reads, `ApiError`.
-- `src/lib/api/` — the typed API surface, grouped by what a person is doing:
-  `me`, `site`, `booking`, `orders`, `support`, `desk`, `deskSupport`. Types in
-  `types.ts` mirror the server's SQL rows.
-- `src/lib/useResource.ts` — `useResource` (read), `useAction` (write),
-  `usePoll`. Nothing else fetches.
+- `src/lib/api/` — the typed API surface, grouped by what a person is doing.
+  Types in `types.ts` mirror the server's SQL rows.
+- `src/lib/store.ts` — `useQuery`, `useMutation`, `usePoll`, `prefetch`,
+  `seed`, `invalidate`. Nothing else fetches. Replaced `useResource.ts`.
+- `src/lib/keys.ts` — every cache key in one file, so two screens cannot
+  disagree about what a thing is called.
+- `src/lib/boot.ts` — the localStorage boot cache and the hero preload.
+- `src/lib/say.ts` — turns an `ApiError` into a sentence a person wrote.
 - `src/lib/format.ts` — every date, money and phone conversion in the product.
-- `src/state/` — session, toast, venue (the restaurant's own details) and
-  basket (takeaway orders, kept in localStorage).
-- `src/ui/` — the primitives: Button, Field, Sheet, Icon, Bits, Feedback, Photo,
-  and Reveal (the scroll entrance).
-- `src/features/` — one folder per area. `story/` and `find/` are the two pages
-  added in v4. `booking/` is a four step flow on one route, with the step in
-  the URL so the back gesture works; its `FloorPlan.tsx` fits the screen and
-  never scrolls sideways. `desk/` is the staff console, code-split away from
-  the customer site, and its floor editor keeps a scrolling canvas of its own.
+- `src/copy/` — all customer-facing wording, English and French side by side,
+  with a test that holds the two in step.
+- `src/state/` — session, toast, venue, locale and basket.
+- `src/ui/` — the primitives: `press.ts`, `Button`, `Field`, `Sheet`, `Img`,
+  `HeroFrames`, `Icon`, `Bits`, `Feedback`, `Reveal`, `motion.ts`.
+- `src/features/` — one folder per area. `desk/` is the staff console, code
+  split away from the customer site, with `parts.tsx` holding its shared
+  furniture and `desk/dev/` the developer screens.
 - `src/styles/` — `tokens.css` (the design language), `base.css`, `ui.css`,
   `shell.css`, `pages.css`, and `desk.css` which ships with the console chunk.
+
+## The boot sequence
+The complaint was "I have to wait for all the pictures to load". The cause was
+four sequential round trips before the first image byte was even requested:
+HTML, then the JS chunks, then `/api/auth/me` and `/api/site-settings`, then a
+gate that refused to render anything until those settled, then `/api/popular`
+— and only then did an image URL exist. Nothing started an image download in
+the first three seconds of a visit.
+
+Four changes, in the order they matter:
+
+1. **`GET /api/bootstrap`** returns session, settings and highlights together.
+   Three round trips become one.
+2. **The boot cache.** `lib/boot.ts` writes that payload to localStorage under
+   a schema-versioned key (`ccm.boot.v5`, 12-hour life) and reads it
+   synchronously before React renders. A repeat visitor gets a painted page
+   with real content on frame one; fresh data swaps in behind them.
+3. **The hero preload.** An inline script in `index.html` emits
+   `<link rel="preload" as="image" fetchpriority="high">` for the cached hero
+   URL before the bundle has parsed.
+4. **The blocking gate is gone.** The shell paints immediately; only a route
+   body that genuinely depends on role waits.
+
+Measured cold on a throttled Pixel 7 profile with no cache at all: first
+contentful paint 612ms, first image requested at 349ms.
+
+`/api/bootstrap` is deliberately **not** in the service worker's
+stale-while-revalidate list, though the other public reads are. Its body
+carries `user`, and a cache the app cannot reach into would outlive a sign-out
+and show the previous person's name to the next one. The app caches that
+payload itself, in localStorage, where `clearBoot()` can wipe it.
+
+It is also in `ALWAYS_OPEN` in `lib/maintenance.ts`. Gating it would mean a
+closed site answering 503 to the one request that could explain the 503,
+leaving the visitor on a blank screen.
 
 ## Design
 Black, white and one red. Committed to dark rather than offering a light mode:
 it is the brand, and one well made theme beats two half checked ones.
 
-- Ground `#0A0A0A`, panels a measured amount of white mixed back in.
-- Red `#E31C23`, and it is an instruction. If it is not a button, an active
-  state or a price about to be paid, it is not red. That rule is why the menu
-  rows use a neutral Add button that only turns red once the dish is in the
-  order.
-- Plus Jakarta Sans for headings, Inter for the interface and every figure in
-  it, with tabular numerals doing the job a second mono face used to. Both are
-  variable, self hosted and subset by unicode range.
-- Space and hairlines before borders, borders before boxes. Menu rows, basket
-  lines, reviews and the "three ways in" are rows on the page, not cards
-  floating on it. A card is kept for something you can pick up and carry: a
-  booking pass, an order receipt.
-- Motion is transform and opacity only, so it stays on the compositor on a mid
-  range Android. Sections arrive on scroll through `ui/Reveal.tsx`, one
-  observer per element, disconnected as soon as it fires. Everything collapses
-  under `prefers-reduced-motion`.
+Four rules, stated at the top of `styles/tokens.css` and enforced by what the
+stylesheets do and do not contain:
 
-Full reasoning is at the top of `src/styles/tokens.css`.
+- **Red is an instruction.** If it is not a button, an active state or a price
+  about to be paid, it is not red. That rule is why a menu row uses a neutral
+  Add that only turns red once the dish is in the order.
+- **Boxes are earned.** `base.css` has no `.card`, and says so. The layout
+  language is `.rows` (lines separated by inset hairlines), `.stack` and
+  `.carry`, which is the only raised surface in the product and is reserved for
+  something you carry: a booking pass, an order receipt, the payment sheet.
+- **Small.** The type ramp was cut again in v5 — hero
+  `clamp(1.875rem, 7.2vw, 3rem)`, down from 2.125 to 4rem — and the section
+  gaps with it. Body stays at 16px and will not go lower: below that, iOS zooms
+  the page on input focus and the layout never recovers.
+- **Transform and opacity only**, so a four-year-old Android holds 60fps.
+
+Plus Jakarta Sans for headings, Inter for the interface and every figure in it,
+with tabular numerals. Both variable, self hosted, subset by unicode range.
+
+## Motion and touch
+The two complaints here were that transitions were not smooth and that buttons
+gave nothing back. Both were true.
+
+- **Press.** `ui/press.ts` is one hook used by every interactive element in the
+  product, including the ones that are links and the ones that are page-local
+  `<button>`s. It fires on `pointerdown`, not on click: `scale(0.97)` for 90ms
+  minimum so a fast tap still registers visibly, released on
+  `pointerup`/`pointercancel`/`pointerleave`, with `navigator.vibrate` where
+  the device offers it. The release curve is a sampled `linear()` spring that
+  overshoots about 4%.
+- **Pending.** `Action`'s `pending` prop is **required**, not optional. A
+  button that fires a promise cannot be written without a pending state,
+  because it would not compile. The label swaps to a verb ("Signing you in",
+  "Holding your table") with a spinner, and both labels live in the same CSS
+  grid cell so the width cannot jump — measured at 362.9375 to 362.9408px
+  across the swap. A second press while pending makes no second request.
+- **Images.** `ui/Img.tsx` awaits `img.decode()` before revealing, inside a
+  fixed aspect-ratio box so nothing shifts. `ui/HeroFrames.tsx` warms the next
+  frame one at a time and only lets it join the rotation once it has decoded,
+  which is the actual fix for "the transitions are not smooth": the old
+  crossfade was a fixed 21s CSS loop fading into images that had not arrived.
+- **Between screens.** Same-document View Transitions through React Router's
+  `viewTransition` prop, with named transitions so a dish thumbnail morphs into
+  its sheet. Browsers without support simply navigate.
+- Everything collapses under `prefers-reduced-motion`.
 
 ## Voice
-Plain and direct: "off the fire, every day", "chicken, goat and pork grilled
-fresh", "order for takeaway or book your table". The word is "takeaway", never
-"collection". The payment button says "Pay Now" and nothing else.
+All customer-facing wording lives in `src/copy/index.ts`, English written first
+and French carried beside it. Before v5 it was split between a 50-key module
+and inline `locale === "fr" ? … : …` ternaries buried in JSX, which is how the
+French drifted. `copy.test.ts` holds the two in step: every key present in
+both, placeholders matching, nothing blank, and no em or en dashes anywhere.
 
-No em dashes or en dashes anywhere a customer can read. `stampLabel` returns
-"Not yet" rather than a dash, and the console's empty table cells say what is
-missing instead of drawing one.
+`EN` is deliberately not `as const`. Literal types would make every French
+string a type error against its English sibling.
+
+The tagline is **"The best meat in Buea."** The register is plain Cameroonian
+English: "Off the fire, every day", not restaurant-brochure prose. The word is
+"takeaway", never "collection". Success lines say what happened to you, not
+what happened to a row: "Table held. See you Friday at 7."
+
+**Nothing echoes the server.** `lib/say.ts` maps an `ApiError` to a sentence by
+status and intent, and the raw string never reaches a customer — the old
+`customerSafeError` passed anything through that missed a blocklist regex, so
+`Request failed (500).` was reaching people. Three responses are read directly
+instead, and only three, because each carries data the screen must show: the
+409 booking clash with its alternatives, the 402 late cancellation with its
+fee, and the 503 that means the site is closed.
+
+## The developer tier
+`developer` is a real role, ranked above owner because it exists to look at the
+machinery the owner's business runs on rather than at the business. It is in
+`UserRole`, in `STAFF_ROLES`, and in `canAccessScope`. Five screens under
+`/desk/dev`: system health, held errors by reference, feature flags as raw
+JSON, table counts, and impersonation.
+
+Impersonation is the sharp one, so it is fenced four ways: only a developer may
+call it, it refuses any target who is not a plain guest, it writes the audit
+entry **before** it issues the cookie, and what it issues is an ordinary
+session that "sign out everywhere" revokes like any other.
+
+## Sold out, cash, and reminders
+- **Sold out tonight.** `menu_items.sold_out` already existed and takeaway
+  already refused a sold-out dish; what was missing was that nobody remembered
+  to switch it back on. `sold_out_until` is stamped when the toggle is thrown,
+  and a lazy sweep at the top of both menu reads clears anything past the next
+  opening. `lib/soldOut.ts` computes that in explicit UTC against a WAT+1
+  offset rather than trusting the server's clock zone.
+- **Cash on collection.** An order path that skips the wallet: the order is
+  created `pending` with `payment_required: false` and a `cash_due_fcfa`, and
+  the kitchen board gets an idempotent "Mark paid" that is audited. No card UI,
+  ever: CI fails the build if a card term appears in either `src` tree.
+- **Reminders.** `lib/notify.ts` was a finished WhatsApp/SMS sender that only
+  three messages ever used, and there was no scheduler anywhere.
+  `POST /api/cron/reminders` sends the 24h and 3h booking reminders and the
+  order-ready message through it, deduplicating off the `notifications` table
+  rather than adding a column. Each reminder carries a one-tap cancel link,
+  because a cancelled table can be resold and a no-show cannot.
 
 ## State awareness
 The site shows different things to a visitor and to a customer.
 
-- Signed out: the hero, the pitch, and one prompt explaining what an account is
-  for. Tabs are Home, Menu, Order, Book, Find us.
+- Signed out: the hero, what people order, and one line explaining what an
+  account is for. Tabs are Home, Menu, Order (or Book), Find us.
 - Signed in: `features/home/YourStuff.tsx` replaces the hero with their next
-  table and their live order, and the account prompt disappears. Tabs are Home,
-  Menu, Book, Mine, You.
-- Staff additionally get a Desk button in the top bar.
+  table and their live order. Tabs are Home, Menu, Order (or Book), Mine, You.
+- Staff additionally get a Desk button in the top bar. A developer gets the
+  Developer group inside the console rail, and nobody else sees it exists.
 
-The switch is `useSession()`. Anything gated by it must wait for `ready`, or it
-flashes the wrong state at somebody.
+The switch is `useSession()`, and the tab list is also filtered by
+`siteConfig.features`, so a service the owner has switched off does not leave a
+tab pointing at a page that refuses.
 
-Navigation is a bottom tab bar on phones and a top bar from 60rem up. The staff
-console has its own chrome: a rail that becomes a drawer, denser type, tables.
+In v4 anything gated by the session had to wait for `ready` or it flashed the
+wrong state. v5 mostly removes the wait rather than the rule: the boot cache
+means `user` is usually known on frame one. Where it is not known, the rule
+still stands.
+
+Navigation is a bottom tab bar on phones and a top bar from 60rem up, never
+both: a phone showing a top nav and a tab bar spends a fifth of a small screen
+on navigation. The staff console has its own chrome: a rail that becomes a
+drawer, denser type, tables that scroll inside themselves.
 
 ## Passkeys
 Real WebAuthn, `backend/src/lib/passkeys.ts` and `frontend/src/lib/passkey.ts`.
@@ -103,7 +243,7 @@ repeated blocks, and anything built out of the account's own name or email.
 Long passphrases pass untouched; only short ones have to mix character types.
 
 `frontend/src/lib/passwordStrength.ts` is a byte-for-byte copy below the header
-comment, so the meter in `ui/PasswordField.tsx` says exactly what the server
+comment, so the meter in `ui/Field.tsx` says exactly what the server
 would say. `cd backend && npm run check:rules` fails if the two drift. Change
 one, change both.
 
@@ -256,9 +396,29 @@ covered, so this records what was verified rather than implying it was added:
 - **Sessions**: httpOnly cookie, 30-day expiry, and `session_version` so a
   password change or "sign out everywhere" kills tokens already issued.
 
+Three things v5 added that are worth naming, because each one is a new way in:
+
+- **`/api/bootstrap`** returns the session, so it is the one public-shaped
+  route with a personal body. It is kept out of the service worker cache for
+  exactly that reason; see "The boot sequence".
+- **`/api/dev/*`** is `requireDeveloper` on every route, and `/api/dev/errors`
+  holds no request bodies, headers, cookies or query strings, so the buffer
+  cannot become a place secrets accumulate. Impersonation refuses any target
+  who is not a plain guest, audits before it issues the cookie, and issues an
+  ordinary revocable session.
+- **`/api/cron/reminders`** has no session at all, so the secret is the whole
+  door. It is compared in constant time, a length mismatch returns false
+  instead of throwing, and an unset `CRON_SECRET` refuses every request rather
+  than accepting an empty one.
+
 Two things are knowingly not done. There is no CAPTCHA on signup — the
-registration rate limit (5 per hour per address) stands in for one, and adding
-a real one means a third-party key. And `npm audit` reports a high-severity
+registration rate limit stands in for one, and adding a real one means a
+third-party key and a third-party script on a page whose whole problem is
+weight on a slow connection. The ceiling is 5 per hour per address in
+production and 100 outside it, because `scripts/smoke.ts` makes six
+registration attempts by design and a limit that makes the test suite
+unrunnable is a limit nobody runs the test suite against. The relaxation is
+keyed on `IS_PROD` and cannot follow the code to production. And `npm audit` reports a high-severity
 React Router advisory (GHSA-qwww-vcr4-c8h2): it applies to RSC mode, this app
 mounts a plain `BrowserRouter` with no server actions, and no patched version
 exists yet — 8.3.0 is not published. Recheck when it is; downgrading below

@@ -1,139 +1,157 @@
 import { useState } from "react";
 import { api } from "~/lib/api";
+import type { Review } from "~/lib/api";
+import { useMutation, useQuery, invalidate } from "~/lib/store";
+import { K } from "~/lib/keys";
 import { timeAgo } from "~/lib/format";
-import { useResource } from "~/lib/useResource";
-import { Button } from "~/ui/Button";
-import { Avatar, Badge, Stars } from "~/ui/Bits";
-import { TextAreaField } from "~/ui/Field";
-import { Photo } from "~/ui/Photo";
+import { Action, Button } from "~/ui/Button";
+import { TextAreaField, Segmented } from "~/ui/Field";
 import { Sheet, useConfirm } from "~/ui/Sheet";
+import { Avatar, Stars } from "~/ui/Bits";
+import { DeskPage, Loaded, Nothing, State, StatTile, Stats } from "./parts";
 import { useToast } from "~/state/toast";
-import { DeskPage, Loaded, Nothing, Stat } from "./parts";
 
 /**
- * Reviews, and the restaurant's replies to them.
+ * Guest reviews, and replying to them as the restaurant.
  *
- * A reply from here is signed as the restaurant and shown under the review to
- * everybody, which is worth saying on the screen: staff write differently when
- * they know the whole town reads it.
+ * Replying is the point of this screen. A public reply from the owner is worth
+ * more than the review it answers, especially on a bad one, and it is the thing
+ * most restaurants never get round to. So the unanswered ones come first and the
+ * reply box is one tap away.
  *
- * Deleting is available but sits behind a confirmation that says plainly it is
- * someone's honest opinion.
+ * Deleting is deliberately last and asks twice over. A review is somebody's
+ * account of their evening, and deleting one because it stings is how a review
+ * page stops being worth reading.
  */
-export function ReviewsAdmin() {
-  const reviews = useResource(() => api.desk.reviews.list(), []);
-  const toast = useToast();
-  const { confirm, confirmElement } = useConfirm();
 
-  const [replying, setReplying] = useState<number | null>(null);
+type Tab = "unanswered" | "all";
+
+export function ReviewsAdmin() {
+  const toast = useToast();
+  const { confirm, element } = useConfirm();
+  const [tab, setTab] = useState<Tab>("unanswered");
+  const [replying, setReplying] = useState<Review | null>(null);
   const [text, setText] = useState("");
 
-  const rows = reviews.data ?? [];
-  const average = rows.length > 0 ? rows.reduce((sum, review) => sum + review.rating, 0) / rows.length : 0;
-  const unanswered = rows.filter((review) => !review.admin_reply).length;
+  const reviews = useQuery(K.desk.reviews, () => api.desk.reviews.list(), { staleMs: 60_000 });
+
+  function refresh() {
+    invalidate("desk.reviews*");
+    invalidate(K.reviews);
+    invalidate(K.highlights);
+    reviews.reload();
+  }
+
+  const reply = useMutation(async () => {
+    if (!replying) return;
+    await api.desk.reviews.reply(replying.id, text.trim());
+    setReplying(null);
+    setText("");
+    refresh();
+    toast.done("Replied.");
+  });
+
+  const dropReply = useMutation(async (id: number) => {
+    await api.desk.reviews.removeReply(id);
+    refresh();
+    toast.done("Reply removed.");
+  });
+
+  const remove = useMutation(async (id: number) => {
+    await api.desk.reviews.remove(id);
+    refresh();
+    toast.done("Deleted.");
+  });
+
+  const all = reviews.data ?? [];
+  const unanswered = all.filter((review) => !review.admin_reply);
+  const shown = tab === "unanswered" ? unanswered : all;
+
+  const average = all.length > 0 ? all.reduce((total, review) => total + review.rating, 0) / all.length : 0;
 
   return (
-    <DeskPage title="Reviews">
-      {confirmElement}
+    <DeskPage title="Reviews" hint="Answering one is worth more than the review itself.">
+      <Stats>
+        <StatTile label="Reviews" value={all.length} />
+        <StatTile label="Average" value={average.toFixed(1)} />
+        <StatTile label="Unanswered" value={unanswered.length} />
+      </Stats>
 
-      <div className="stat-grid">
-        <Stat label="Reviews" value={rows.length} icon="message" />
-        <Stat label="Average" value={rows.length ? average.toFixed(1) : "No reviews"} icon="star" />
-        <Stat label="Without a reply" value={unanswered} icon="alert" />
-      </div>
+      <Segmented
+        value={tab}
+        onChange={setTab}
+        label="Which reviews"
+        options={[
+          { value: "unanswered", label: unanswered.length > 0 ? `Unanswered (${unanswered.length})` : "Unanswered" },
+          { value: "all", label: "All" },
+        ]}
+      />
 
-      <Loaded resource={reviews} skeletonHeight="8rem">
-        {(list) =>
-          list.length === 0 ? (
-            <Nothing>Nobody has left a review yet.</Nothing>
+      <Loaded query={reviews}>
+        {() =>
+          shown.length === 0 ? (
+            <Nothing icon="star">
+              {tab === "unanswered" ? "Every review has an answer. Well done." : "No reviews yet."}
+            </Nothing>
           ) : (
-            <div className="stack">
-              {list.map((review) => (
-                <article key={review.id} className="card stack">
-                  <div className="row">
-                    <Avatar name={review.author} />
-                    <div>
-                      <p className="row" style={{ gap: "var(--s-2)" }}>
-                        <strong>{review.author}</strong>
-                        {review.is_verified_diner ? <Badge tone="good">Ate here</Badge> : null}
-                      </p>
-                      <p className="fine faint">{timeAgo(review.updated_at || review.created_at)}</p>
+            <div className="rows">
+              {shown.map((review) => (
+                <article key={review.id} className="row row--top row--tall">
+                  <Avatar name={review.author} size={30} />
+
+                  <div className="grow stack stack--tight">
+                    <div className="bar bar--tight bar--wrap">
+                      <span className="small strong">{review.author}</span>
+                      <Stars value={review.rating} size={13} showValue={false} />
+                      {review.is_verified_diner ? <State tone="good">Ate here</State> : null}
+                      <span className="fine faint push">{timeAgo(review.updated_at || review.created_at)}</span>
                     </div>
-                    <span className="push">
-                      <Stars value={review.rating} showValue={false} />
-                    </span>
-                  </div>
 
-                  <p className="muted">{review.text}</p>
-
-                  {review.media_urls.length > 0 ? (
-                    <div className="review__photos">
-                      {review.media_urls.map((url) => (
-                        <Photo key={url} src={url} alt="" />
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {review.admin_reply ? (
-                    <div className="review__owner">
-                      <p className="label">Your reply</p>
-                      <p>{review.admin_reply}</p>
-                    </div>
-                  ) : null}
-
-                  <div className="row row--wrap">
-                    <Button
-                      size="sm"
-                      tone={review.admin_reply ? "ghost" : "primary"}
-                      icon="message"
-                      onClick={() => {
-                        setText(review.admin_reply ?? "");
-                        setReplying(review.id);
-                      }}
-                    >
-                      {review.admin_reply ? "Change the reply" : "Reply"}
-                    </Button>
+                    <p className="fine">{review.text}</p>
 
                     {review.admin_reply ? (
-                      <Button
-                        size="sm"
-                        tone="quiet"
-                        onClick={async () => {
-                          try {
-                            await api.desk.reviews.removeReply(review.id);
-                            reviews.reload();
-                            toast.done("Reply removed.");
-                          } catch (err) {
-                            toast.failed(err);
-                          }
-                        }}
-                      >
-                        Remove the reply
-                      </Button>
-                    ) : null}
-
-                    <Button
-                      size="sm"
-                      tone="danger"
-                      className="push"
-                      onClick={async () => {
-                        const ok = await confirm({
-                          title: "Delete this review?",
-                          body: "It is somebody's honest opinion and deleting it cannot be undone. Replying is usually the better answer.",
-                          confirmLabel: "Delete it",
-                        });
-                        if (!ok) return;
-                        try {
-                          await api.desk.reviews.remove(review.id);
-                          reviews.reload();
-                          toast.done("Review deleted.");
-                        } catch (err) {
-                          toast.failed(err);
-                        }
-                      }}
-                    >
-                      Delete
-                    </Button>
+                      <div className="dk-reply">
+                        <p className="label hot">Your reply</p>
+                        <p className="fine">{review.admin_reply}</p>
+                        <Action
+                          size="sm"
+                          tone="quiet"
+                          pending={dropReply.pending}
+                          pendingLabel="Removing"
+                          onClick={() => void dropReply.run(review.id)}
+                        >
+                          Remove reply
+                        </Action>
+                      </div>
+                    ) : (
+                      <div className="bar bar--tight">
+                        <Button
+                          size="sm"
+                          tone="primary"
+                          onClick={() => {
+                            setReplying(review);
+                            setText("");
+                          }}
+                        >
+                          Reply
+                        </Button>
+                        <Button
+                          size="sm"
+                          tone="quiet"
+                          onClick={async () => {
+                            const sure = await confirm({
+                              title: "Delete this review?",
+                              body: "Only if it breaks the rules. Deleting a review because it stings is how a review page stops being worth reading.",
+                              confirmLabel: "Delete it",
+                            });
+                            if (!sure) return;
+                            await remove.run(review.id);
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </article>
               ))}
@@ -146,39 +164,48 @@ export function ReviewsAdmin() {
         open={replying !== null}
         onClose={() => setReplying(null)}
         title="Reply as the restaurant"
-        description="Shown publicly under the review, signed as Cam Chop Meat."
         footer={
-          <>
-            <Button tone="ghost" onClick={() => setReplying(null)}>
-              Cancel
-            </Button>
-            <Button
-              tone="primary"
-              onClick={async () => {
-                if (replying === null) return;
-                try {
-                  await api.desk.reviews.reply(replying, text.trim());
-                  setReplying(null);
-                  reviews.reload();
-                  toast.done("Reply posted.");
-                } catch (err) {
-                  toast.failed(err);
-                }
-              }}
-            >
-              Post the reply
-            </Button>
-          </>
+          <Action
+            tone="primary"
+            block
+            pending={reply.pending}
+            pendingLabel="Posting"
+            disabled={text.trim().length < 4}
+            onClick={async () => {
+              await reply.run();
+              const error = reply.readError();
+              if (error) toast.failed(error, "desk");
+            }}
+          >
+            Post the reply
+          </Action>
         }
       >
-        <TextAreaField
-          label="Your reply"
-          value={text}
-          maxLength={1000}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Thank them, or explain what happened and what you have changed."
-        />
+        {replying ? (
+          <div className="stack">
+            <div className="rows">
+              <div className="row row--top">
+                <Avatar name={replying.author} size={28} />
+                <div className="grow stack stack--tight">
+                  <Stars value={replying.rating} size={13} showValue={false} />
+                  <p className="fine">{replying.text}</p>
+                </div>
+              </div>
+            </div>
+
+            <TextAreaField
+              label="Your reply"
+              hint="This shows publicly under their review, signed as Cam Chop Meat."
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              rows={4}
+              maxLength={600}
+            />
+          </div>
+        ) : null}
       </Sheet>
+
+      {element}
     </DeskPage>
   );
 }

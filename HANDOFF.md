@@ -1,11 +1,29 @@
-# Cam Chop Meat website: owner's guide (v3)
+# Cam Chop Meat website: owner's guide (v5)
 
 The site is two programs that talk to each other:
 
-- **frontend/** — what people see. Rebuilt from scratch in July 2026 and
-  redesigned in August 2026: black, white and one red, built phone first.
+- **frontend/** — what people see. Rebuilt from scratch in July 2026 and again,
+  end to end, in August 2026: black, white and one red, built phone first, and
+  built to open fast on a phone on a Buea mobile connection.
 - **backend/** — the engine: accounts, bookings, orders, payments, messages.
-  Unchanged by the rebuild. Its data lives in a Postgres database at Supabase.
+  Its data lives in a Postgres database at Supabase.
+
+## What changed in August 2026
+Every page was rebuilt. The differences you will notice:
+
+- **It opens fast.** The first photograph starts downloading in about a third
+  of a second instead of after six. Come back a second time and the page is
+  already drawn before anything is fetched.
+- **Buttons answer you.** Every button dips when your finger lands on it, and
+  anything that takes a moment says what it is doing: "Signing you in",
+  "Holding your table". Pressing twice does not order twice.
+- **Nothing floats in a box.** Lines on a page, separated by hairlines. The
+  only thing that looks like a card is a thing you carry: a booking pass, an
+  order receipt.
+- **It reads like a person wrote it.** Including when something goes wrong: a
+  customer is never shown a server's own words.
+- **Three new things:** sold out tonight, cash on collection, and reminders.
+  All three are below.
 
 ## The two halves of the site
 
@@ -38,10 +56,45 @@ to ask a developer for is in there.
 | Insights | The last thirty days against the thirty before. |
 | Details | Your phone number, address, hours and social links. These feed the whole site. Also what a loyalty point is worth. |
 | Terms and privacy | Your own wording, edited here. |
+| Reminders | Every message the site sent a guest, who it went to, and what failed. |
 | Audit log | Who did what. Owner only. |
 
 **Set your details first.** Phone, address and hours are read from there by the
 footer, the help page and the contact links. Nothing is hard-coded any more.
+
+If a developer is looking after the site for you, they get five screens of
+their own under Desk that you will never need: how the server is doing, recent
+faults by their reference code, the settings behind the settings, the size of
+the database, and the ability to see the site as one of your guests sees it.
+That last one is written into the audit log every single time it is used.
+
+## The three new things
+
+**Sold out tonight.** In **Menu**, one tap marks a dish sold out. It strikes
+through on the customer's menu and cannot be added to an order. You do not have
+to remember to switch it back: it clears itself by the time you open the next
+day.
+
+**Cash on collection.** A guest can now order without paying on their phone and
+settle at the counter. The order arrives on the kitchen board marked as owing
+money, with the amount, and a **Mark paid** button for whoever takes it. Mobile
+Money still works exactly as before, and there is still no card payment
+anywhere on this site.
+
+**Reminders.** Guests are messaged the day before their table and again three
+hours ahead. Each reminder carries a cancel link, which is the whole point of
+it: a table cancelled at four in the afternoon can be sold again, a no-show at
+eight cannot. **Reminders** in the console shows every message the site has
+sent, including the ones that failed and why.
+
+Reminders run off a scheduled job rather than from inside the server, so they
+need two things set up once: `CRON_SECRET` in the server's settings, and a cron
+job that calls `/api/cron/reminders` with that secret at least once an hour.
+Every fifteen minutes is safer and costs nothing, because a reminder already
+sent is never sent twice.
+
+Telling somebody their order is ready is separate and needs no setup: it goes
+the moment the kitchen marks the order ready on the board.
 
 ## What customers can do
 - Create an account, with two-step sign in if they want it.
@@ -49,7 +102,7 @@ footer, the help page and the contact links. Nothing is hard-coded any more.
   hold it with a 2,500 FCFA Mobile Money deposit that comes off the bill.
 - Get a pass with a code, and a PDF receipt carrying a signed QR.
 - Cancel themselves. More than an hour before, the deposit comes back.
-- Order for collection, pay ahead, and show a code at the counter.
+- Order for collection, pay ahead or pay cash at the counter, and show a code.
 - Join the queue from their phone when the place is full.
 - Earn a point for every 100 FCFA they pay, and spend them at the checkout on
   a deposit or an order. You set what a point is worth in **Details**, along
@@ -92,10 +145,15 @@ photographs of your own grill and plates, uploaded there.
 - `cd backend && npm run check:loyalty` checks the points sums on their own: it
   needs no database and no internet, and it fails if points could ever cover
   more of a bill than you allow, or take more off than was deducted.
-- The rebuilt frontend was driven in a real browser against a real database:
-  signing in, booking a table through all three steps, ordering from the menu,
-  paying, replying to a review from the console, and checking a code at the
-  door. Every screen was loaded as a customer and as the owner with no errors.
+- `cd frontend && npm test` and `cd backend && npm test` are the unit tests,
+  and `cd backend && npm run test:integration` runs against a real database.
+- The rebuilt frontend was driven in a real browser against a real database, on
+  a throttled phone profile: signing in, booking a table through all four
+  steps, ordering from the menu, paying by wallet and again by cash, marking a
+  dish sold out and watching the customer row strike through, replying to a
+  review, checking a code at the door, and every developer screen. Every screen
+  was loaded as a customer, an admin, the owner and a developer, with no errors
+  in the console on any of them.
 
 ## If something breaks
 Every working version is a git commit; `git log` shows them and any earlier one

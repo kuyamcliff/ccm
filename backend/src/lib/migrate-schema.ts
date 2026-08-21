@@ -32,6 +32,9 @@ const STEPS: Step[] = [
   { name: "takeaway_orders.gift_fcfa backfill", sql: "UPDATE takeaway_orders SET gift_fcfa = discount_fcfa WHERE gift_fcfa IS NULL" },
   { name: "owner bootstrap", sql: `UPDATE users SET role = 'owner' WHERE id = (SELECT id FROM users WHERE role = 'super_admin' ORDER BY created_at ASC, id ASC LIMIT 1) AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'owner')` },
   { name: "menu_items.sold_out", sql: "ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS sold_out integer NOT NULL DEFAULT 0" },
+  /* When a sold-out dish comes back by itself. Null means somebody switched it
+     off by hand and only somebody switching it back on will return it. */
+  { name: "menu_items.sold_out_until", sql: "ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS sold_out_until text" },
   { name: "legal_pages.title_fr", sql: "ALTER TABLE legal_pages ADD COLUMN IF NOT EXISTS title_fr text" },
   { name: "legal_pages.body_fr", sql: "ALTER TABLE legal_pages ADD COLUMN IF NOT EXISTS body_fr text" },
   { name: "legal_pages.title_fr backfill", sql: "UPDATE legal_pages SET title_fr = title WHERE title_fr IS NULL" },

@@ -1,6 +1,18 @@
 /* API smoke test. Run the backend first (npm run dev), then: npm run smoke */
 
 const BASE = process.env.BASE_URL ?? "http://localhost:4000";
+
+/*
+ * The origin this script pretends to be.
+ *
+ * `sameOriginOnly` rejects any unsafe method whose Origin it does not
+ * recognise, and a bare fetch from Node sends no Origin at all. Without this
+ * every write in this file came back 403 and the script fell over on the first
+ * response it tried to read a field from, which is why it has to match
+ * FRONTEND_URL rather than being any old string.
+ */
+const ORIGIN = process.env.FRONTEND_URL ?? "http://localhost:5173";
+
 let cookie = "";
 let failures = 0;
 
@@ -14,6 +26,7 @@ async function call(
     headers: {
       ...(body ? { "Content-Type": "application/json" } : {}),
       ...(cookie ? { Cookie: cookie } : {}),
+      Origin: ORIGIN,
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -124,7 +137,10 @@ const cancel = await call("DELETE", `/api/reservations/${mkRes.data.reservation.
 check("cancel reservation", cancel.status === 200, cancel);
 
 const cancelAgain = await call("DELETE", `/api/reservations/${mkRes.data.reservation.id}`);
-check("cancel twice rejected", cancelAgain.status === 404, cancelAgain);
+/* 409, not 404. The reservation is still there and the guest can still see it;
+   what is wrong is its state, not its existence. A 404 here would tell somebody
+   their booking had vanished. */
+check("cancel twice rejected", cancelAgain.status === 409, cancelAgain);
 
 const badReview = await call("POST", "/api/reviews", { rating: 9, text: "hi" });
 check("bad review rejected", badReview.status === 400, badReview);

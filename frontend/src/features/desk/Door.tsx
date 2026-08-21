@@ -1,375 +1,360 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import jsQR from "jsqr";
 import { api } from "~/lib/api";
 import type { VerifyResult } from "~/lib/api";
-import { dayLabel, phoneLabel, timeLabel } from "~/lib/format";
-import { Button } from "~/ui/Button";
-import { Money } from "~/ui/Bits";
-import { Icon } from "~/ui/Icon";
-import { Notice } from "~/ui/Feedback";
-import { useToast } from "~/state/toast";
+import { useMutation } from "~/lib/store";
+import { money, phoneLabel, timeLabel, dayLabel } from "~/lib/format";
+import { Action, Button } from "~/ui/Button";
+import { TextField } from "~/ui/Field";
+import { Icon, type IconName } from "~/ui/Icon";
+import { Code } from "~/ui/Bits";
 import { DeskPage } from "./parts";
+import { useToast } from "~/state/toast";
 
 /**
  * The door.
  *
- * Someone is standing in front of you holding a phone, so this screen is one
- * question with one answer: let them in, or do not. The verdict fills the
- * screen in a colour readable at arm's length, and every outcome that is not
- * "valid" says what to do about it rather than just refusing.
+ * Somebody holds up a phone, this reads the code, and the screen answers one
+ * question in one colour from arm's length: **let them in, or do not.**
  *
- * The camera is only opened when asked for, and is shut down on the way out —
- * leaving it running would sit on the device's camera and its battery.
+ * ── Why the verdict is enormous ────────────────────────────────────────────
+ *
+ * This is the only screen in the product read at a distance, at night, by
+ * somebody who is also holding a torch and a clipboard. Everything else on the
+ * console is dense on purpose; this is the opposite on purpose. The word and the
+ * colour carry the answer, and the detail underneath is for the cases where the
+ * answer is complicated.
+ *
+ * ── Ten outcomes, not two ──────────────────────────────────────────────────
+ *
+ * The server never returns an error for a bad code: it returns 200 with one of
+ * ten outcomes, because "expired" and "already used" and "forged" are different
+ * conversations to have with the person at the door. All ten are handled.
+ *
+ * The scanner runs entirely on the device. Nothing about the camera leaves it,
+ * and the frames are decoded with jsQR against a canvas rather than sent
+ * anywhere.
  */
 
-const SCAN_INTERVAL_MS = 220;
-
-/** Every possible verdict, with the line the door person reads. */
-const VERDICTS: Record<VerifyResult["outcome"], { tone: "good" | "bad" | "warn"; title: string }> = {
-  valid: { tone: "good", title: "Let them in" },
-  unpaid: { tone: "warn", title: "Not paid" },
-  not_yet: { tone: "warn", title: "Too early" },
-  not_ready: { tone: "warn", title: "Not ready yet" },
-  expired: { tone: "bad", title: "Expired" },
-  already_used: { tone: "warn", title: "Already used" },
-  cancelled: { tone: "bad", title: "Cancelled" },
-  not_found: { tone: "bad", title: "No such code" },
-  forged: { tone: "bad", title: "Not one of ours" },
-  unreadable: { tone: "bad", title: "Could not read that" },
+const VERDICT: Record<
+  VerifyResult["outcome"],
+  { tone: "good" | "warn" | "bad"; word: string; icon: IconName }
+> = {
+  valid: { tone: "good", word: "Let them in", icon: "check-circle" },
+  unpaid: { tone: "warn", word: "Not paid", icon: "wallet" },
+  not_yet: { tone: "warn", word: "Too early", icon: "clock" },
+  not_ready: { tone: "warn", word: "Not ready yet", icon: "clock" },
+  expired: { tone: "bad", word: "Expired", icon: "clock" },
+  already_used: { tone: "warn", word: "Already used", icon: "alert" },
+  cancelled: { tone: "bad", word: "Cancelled", icon: "ban" },
+  not_found: { tone: "bad", word: "No such code", icon: "search" },
+  forged: { tone: "bad", word: "Not genuine", icon: "shield" },
+  unreadable: { tone: "bad", word: "Could not read it", icon: "alert" },
 };
 
 export function Door() {
   const toast = useToast();
-  const video = useRef<HTMLVideoElement>(null);
-  const canvas = useRef<HTMLCanvasElement>(null);
-  const stream = useRef<MediaStream | null>(null);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
-  /** The decoder, once it has been fetched. Held so the scan loop can use it. */
-  const decoder = useRef<typeof import("jsqr").default | null>(null);
-  /** The last code decoded, so one pass held to the lens is checked once. */
-  const lastSeen = useRef<string | null>(null);
-
-  const [scanning, setScanning] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [code, setCode] = useState("");
   const [result, setResult] = useState<VerifyResult | null>(null);
-  const [cameraProblem, setCameraProblem] = useState<string | null>(null);
+  const [typed, setTyped] = useState("");
+  const [scanning, setScanning] = useState(false);
 
-  const stop = useCallback(() => {
-    if (timer.current) {
-      clearInterval(timer.current);
-      timer.current = null;
-    }
-    stream.current?.getTracks().forEach((track) => track.stop());
-    stream.current = null;
+  const check = useMutation(async (input: { token?: string; code?: string }) => {
+    const outcome = await api.desk.door.check(input);
+    setResult(outcome);
     setScanning(false);
-  }, []);
-
-  useEffect(() => stop, [stop]);
-
-  const check = useCallback(
-    async (input: { token?: string; code?: string }) => {
-      setBusy(true);
+    /* A short buzz on a good code, a longer one on a bad. Staff learn it within
+       a shift and stop needing to look at the screen for the common case. */
+    if (typeof navigator.vibrate === "function") {
       try {
-        const verdict = await api.desk.door.check(input);
-        setResult(verdict);
-        if (verdict.outcome === "valid") stop();
-      } catch (err) {
-        toast.failed(err);
-      } finally {
-        setBusy(false);
+        navigator.vibrate(outcome.outcome === "valid" ? 30 : [60, 60, 60]);
+      } catch {
+        /* Switched off at the OS level. */
       }
-    },
-    [stop, toast]
-  );
+    }
+  });
 
-  async function start() {
-    setCameraProblem(null);
+  const admit = useMutation(async (id: number) => {
+    const booking = await api.desk.door.admit(id);
+    setResult((current) => (current ? { ...current, booking } : current));
+    toast.done("In.");
+  });
+
+  const undoAdmit = useMutation(async (id: number) => {
+    await api.desk.door.undoAdmit(id);
     setResult(null);
-    lastSeen.current = null;
+    toast.done("Undone.");
+  });
 
-    /* getUserMedia only exists in a secure context. Served over plain http it
-       is simply absent, and without saying so the camera button looks broken
-       for a reason nobody could guess. */
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraProblem(
-        "This browser will not hand a web page the camera. That usually means the site was opened over http rather than https. Type the code instead."
-      );
-      return;
-    }
+  const handOver = useMutation(async (id: number) => {
+    const order = await api.desk.door.handOver(id);
+    setResult((current) => (current ? { ...current, order } : current));
+    toast.done("Handed over.");
+  });
 
-    try {
-      /* The QR decoder is a fifth of the console's weight and only this screen
-         has any use for it, so it is fetched when the camera is opened rather
-         than by everyone who signs in to the desk. */
-      const { default: jsQR } = await import("jsqr");
-      decoder.current = jsQR;
+  const undoHandOver = useMutation(async (id: number) => {
+    await api.desk.door.undoHandOver(id);
+    setResult(null);
+    toast.done("Undone.");
+  });
 
-      stream.current = await navigator.mediaDevices.getUserMedia({
-        // The back camera is the one pointing at the guest's phone.
-        video: { facingMode: "environment" },
-        audio: false,
-      });
-
-      // Everything that needs the <video> happens in the effect below, once
-      // this has actually put it on the screen.
-      setScanning(true);
-    } catch (err) {
-      const name = err instanceof DOMException ? err.name : "";
-      setCameraProblem(
-        name === "NotAllowedError"
-          ? "The camera was blocked. Allow it for this site in your browser settings, then try again."
-          : name === "NotFoundError"
-            ? "No camera was found on this device. Type the code instead."
-            : "The camera could not be opened. Type the code instead."
-      );
-    }
-  }
-
-  /*
-   * Attach the stream and run the scan loop.
-   *
-   * This cannot happen inside `start`: the <video> is only rendered while
-   * `scanning` is true, so at the moment the stream arrives the element does
-   * not exist yet and the ref is still null. Doing it here means the element is
-   * on the page by the time we reach for it.
-   */
-  useEffect(() => {
-    if (!scanning) return;
-
-    const element = video.current;
-    const surface = canvas.current;
-    const media = stream.current;
-    const decode = decoder.current;
-    if (!element || !surface || !media || !decode) return;
-
-    element.srcObject = media;
-    void element.play().catch(() => {
-      setCameraProblem("The camera opened but the preview would not start. Type the code instead.");
-    });
-
-    const id = setInterval(() => {
-      // A frame before the first one has decoded has no pixels to read.
-      if (element.readyState !== element.HAVE_ENOUGH_DATA) return;
-
-      surface.width = element.videoWidth;
-      surface.height = element.videoHeight;
-      const context = surface.getContext("2d", { willReadFrequently: true });
-      if (!context) return;
-
-      context.drawImage(element, 0, 0, surface.width, surface.height);
-      const frame = context.getImageData(0, 0, surface.width, surface.height);
-
-      /* Receipts print black on white, but a phone screen at an angle can
-         invert what the camera sees, so both polarities are tried. */
-      const found = decode(frame.data, frame.width, frame.height, { inversionAttempts: "attemptBoth" });
-      if (!found?.data) return;
-
-      /* The camera keeps seeing the same code four times a second. Without
-         this, a pass that comes back anything other than valid — unpaid, too
-         early — would be posted again every frame for as long as it is held
-         up, which is a request storm the server would start rate-limiting. */
-      if (found.data === lastSeen.current) return;
-      lastSeen.current = found.data;
-      void check({ token: found.data });
-    }, SCAN_INTERVAL_MS);
-
-    timer.current = id;
-    return () => clearInterval(id);
-  }, [scanning, check]);
-
-  const verdict = result ? VERDICTS[result.outcome] : null;
+  const verdict = result ? VERDICT[result.outcome] : null;
 
   return (
-    <DeskPage title="Door" lead="Scan the pass on the guest's phone, or type the code from it.">
-      <div className="door">
-        <div className="door__scanner">
-          {scanning ? (
-            <>
-              <video ref={video} className="door__video" playsInline muted />
-              <canvas ref={canvas} className="sr-only" />
-              <div className="door__reticle" aria-hidden="true" />
-              <Button className="door__stop" tone="ghost" onClick={stop}>
-                Stop the camera
-              </Button>
-            </>
-          ) : (
-            <div className="door__idle">
-              <Icon name="scan" size={40} />
-              <Button tone="primary" size="lg" icon="camera" onClick={start}>
-                Open the camera
-              </Button>
-              {cameraProblem ? <Notice tone="warn">{cameraProblem}</Notice> : null}
-            </div>
-          )}
-        </div>
-
+    <DeskPage title="Door" hint="Scan the code on a guest's phone, or type it.">
+      {scanning ? (
+        <Scanner
+          onCode={(token) => void check.run({ token })}
+          onGiveUp={() => setScanning(false)}
+          onTrouble={(message) => {
+            setScanning(false);
+            toast.say(message);
+          }}
+        />
+      ) : (
         <div className="stack">
+          <Button tone="primary" size="lg" block icon="scan" onClick={() => setScanning(true)}>
+            Scan a code
+          </Button>
+
           <form
-            className="card stack"
-            onSubmit={(event) => {
+            className="dk-door__manual"
+            onSubmit={async (event) => {
               event.preventDefault();
-              if (code.trim()) void check({ code: code.trim().toUpperCase() });
+              await check.run({ code: typed.trim().toUpperCase() });
+              setTyped("");
             }}
           >
-            <label className="field">
-              <span className="field__label">Type a code</span>
-              <input
-                className="input mono"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="CCM-XXXX"
-                autoCapitalize="characters"
-                autoComplete="off"
-              />
-            </label>
-            <Button type="submit" busy={busy} disabled={!code.trim()}>
-              Check it
-            </Button>
+            <TextField
+              label="Or type the code"
+              value={typed}
+              onChange={(event) => setTyped(event.target.value.toUpperCase())}
+              autoCapitalize="characters"
+              autoComplete="off"
+              placeholder="CCM-1234"
+            />
+            <Action
+              type="submit"
+              tone="default"
+              pending={check.pending}
+              pendingLabel="Checking"
+              disabled={typed.trim().length < 3}
+            >
+              Check
+            </Action>
           </form>
+        </div>
+      )}
 
-          {result && verdict ? (
-            <div className={`verdict verdict--${verdict.tone}`} role="status" aria-live="assertive">
-              <p className="verdict__title display display--lg">{verdict.title}</p>
-              <p>{result.message}</p>
+      {result && verdict ? (
+        <section className="dk-verdict" data-tone={verdict.tone}>
+          <Icon name={verdict.icon} size={34} />
+          <p className="dk-verdict__word">{verdict.word}</p>
+          <p className="lead center">{result.message}</p>
 
-              {result.booking ? (
-                <dl className="verdict__facts">
-                  <div>
-                    <dt className="label">Guest</dt>
-                    <dd>{result.booking.guest_name}</dd>
-                  </div>
-                  <div>
-                    <dt className="label">When</dt>
-                    <dd>
-                      {dayLabel(result.booking.date)} {timeLabel(result.booking.time)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="label">People</dt>
-                    <dd>{result.booking.party_size}</dd>
-                  </div>
-                  <div>
-                    <dt className="label">Table</dt>
-                    <dd>{result.booking.table_label ?? "Any"}</dd>
-                  </div>
-                  <div>
-                    <dt className="label">Phone</dt>
-                    <dd>{phoneLabel(result.booking.phone)}</dd>
-                  </div>
-                </dl>
+          {result.booking ? (
+            <div className="rows dk-verdict__facts">
+              <div className="row">
+                <span className="grow label">Guest</span>
+                <span>{result.booking.guest_name}</span>
+              </div>
+              <div className="row">
+                <span className="grow label">When</span>
+                <span>
+                  {dayLabel(result.booking.date)}, {timeLabel(result.booking.time)}
+                </span>
+              </div>
+              <div className="row">
+                <span className="grow label">Covers</span>
+                <span>{result.booking.party_size}</span>
+              </div>
+              {result.booking.table_label ? (
+                <div className="row">
+                  <span className="grow label">Table</span>
+                  <span>{result.booking.table_label}</span>
+                </div>
               ) : null}
-
-              {result.order ? (
-                <>
-                  <ul className="lines">
-                    {result.order.items.map((line, index) => (
-                      <li key={index}>
-                        <span className="mono lines__qty">{line.qty}</span>
-                        <span>{line.name}</span>
-                        <Money value={line.price * line.qty} className="push" />
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="row row--between">
-                    <span>{result.order.customer_name}</span>
-                    <strong>
-                      <Money value={result.order.total_fcfa} />
-                    </strong>
-                  </p>
-                </>
+              <div className="row">
+                <span className="grow label">Phone</span>
+                <span>{phoneLabel(result.booking.phone)}</span>
+              </div>
+              {result.booking.amount_fcfa ? (
+                <div className="row">
+                  <span className="grow label">Paid</span>
+                  <span>{money(result.booking.amount_fcfa)} FCFA</span>
+                </div>
               ) : null}
+              {result.booking.note ? (
+                <div className="row row--top">
+                  <span className="grow label">Note</span>
+                  <span className="right">{result.booking.note}</span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
-              <div className="row row--wrap">
-                {result.outcome === "valid" && result.booking && !result.booking.checked_in_at ? (
-                  <Button
-                    tone="primary"
-                    busy={busy}
-                    onClick={async () => {
-                      const id = result.booking!.id;
-                      try {
-                        const updated = await api.desk.door.admit(id);
-                        setResult({ ...result, booking: updated });
-                        toast.done("Checked in.");
-                      } catch (err) {
-                        toast.failed(err);
-                      }
-                    }}
-                  >
-                    Check them in
-                  </Button>
-                ) : null}
-
-                {result.booking?.checked_in_at ? (
-                  <Button
-                    tone="ghost"
-                    icon="undo"
-                    onClick={async () => {
-                      try {
-                        await api.desk.door.undoAdmit(result.booking!.id);
-                        toast.done("Check in undone.");
-                        void check({ code: result.booking!.code });
-                      } catch (err) {
-                        toast.failed(err);
-                      }
-                    }}
-                  >
-                    Undo check in
-                  </Button>
-                ) : null}
-
-                {result.outcome === "valid" && result.order && !result.order.collected_at ? (
-                  <Button
-                    tone="primary"
-                    busy={busy}
-                    onClick={async () => {
-                      try {
-                        const updated = await api.desk.door.handOver(result.order!.id);
-                        setResult({ ...result, order: updated });
-                        toast.done("Handed over.");
-                      } catch (err) {
-                        toast.failed(err);
-                      }
-                    }}
-                  >
-                    Hand it over
-                  </Button>
-                ) : null}
-
-                {result.order?.collected_at ? (
-                  <Button
-                    tone="ghost"
-                    icon="undo"
-                    onClick={async () => {
-                      try {
-                        await api.desk.door.undoHandOver(result.order!.id);
-                        toast.done("Hand over undone.");
-                        void check({ code: result.order!.code });
-                      } catch (err) {
-                        toast.failed(err);
-                      }
-                    }}
-                  >
-                    Undo
-                  </Button>
-                ) : null}
-
-                <Button
-                  tone="quiet"
-                  onClick={() => {
-                    setResult(null);
-                    setCode("");
-                    // Clearing this lets the same pass be scanned again, which
-                    // is what happens when a guest pays and comes back.
-                    lastSeen.current = null;
-                  }}
-                >
-                  Next guest
-                </Button>
+          {result.order ? (
+            <div className="rows dk-verdict__facts">
+              <div className="row">
+                <span className="grow label">Customer</span>
+                <span>{result.order.customer_name}</span>
+              </div>
+              <div className="row">
+                <span className="grow label">Code</span>
+                <Code value={result.order.code} size="sm" />
+              </div>
+              <div className="row row--top">
+                <span className="grow label">Order</span>
+                <span className="right">
+                  {result.order.items.map((line) => `${line.qty} ${line.name}`).join(", ")}
+                </span>
+              </div>
+              <div className="row">
+                <span className="grow label">Total</span>
+                <span>{money(result.order.total_fcfa)} FCFA</span>
               </div>
             </div>
           ) : null}
-        </div>
-      </div>
+
+          <div className="bar bar--tight bar--wrap dk-verdict__actions">
+            {result.booking && result.outcome === "valid" && !result.booking.checked_in_at ? (
+              <Action
+                tone="primary"
+                pending={admit.pending}
+                pendingLabel="Saving"
+                onClick={() => void admit.run(result.booking!.id)}
+              >
+                Check them in
+              </Action>
+            ) : null}
+
+            {result.booking?.checked_in_at ? (
+              <Action
+                tone="quiet"
+                pending={undoAdmit.pending}
+                pendingLabel="Undoing"
+                onClick={() => void undoAdmit.run(result.booking!.id)}
+              >
+                Undo check in
+              </Action>
+            ) : null}
+
+            {result.order && result.outcome === "valid" && !result.order.collected_at ? (
+              <Action
+                tone="primary"
+                pending={handOver.pending}
+                pendingLabel="Saving"
+                onClick={() => void handOver.run(result.order!.id)}
+              >
+                Hand it over
+              </Action>
+            ) : null}
+
+            {result.order?.collected_at ? (
+              <Action
+                tone="quiet"
+                pending={undoHandOver.pending}
+                pendingLabel="Undoing"
+                onClick={() => void undoHandOver.run(result.order!.id)}
+              >
+                Undo
+              </Action>
+            ) : null}
+
+            <Button tone="ghost" onClick={() => setResult(null)}>
+              Next guest
+            </Button>
+          </div>
+        </section>
+      ) : null}
     </DeskPage>
+  );
+}
+
+/* ── The camera ─────────────────────────────────────────────────────────────*/
+
+/**
+ * Reads QR codes from the back camera, entirely on the device.
+ *
+ * Frames are drawn to an offscreen canvas and decoded by jsQR. Nothing about the
+ * camera leaves the phone, and the stream's tracks are stopped explicitly on the
+ * way out: leaving them running is what keeps the camera light on after somebody
+ * has navigated away, which reads as a phone that is spying on the room.
+ */
+function Scanner({
+  onCode,
+  onGiveUp,
+  onTrouble,
+}: {
+  onCode: (token: string) => void;
+  onGiveUp: () => void;
+  onTrouble: (message: string) => void;
+}) {
+  const video = useRef<HTMLVideoElement | null>(null);
+  const [ready, setReady] = useState(false);
+  const found = useRef(false);
+
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    let frame = 0;
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+
+    async function begin() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+          audio: false,
+        });
+      } catch {
+        onTrouble("We could not open the camera. Type the code instead.");
+        return;
+      }
+
+      const node = video.current;
+      if (!node) return;
+      node.srcObject = stream;
+      await node.play().catch(() => {});
+      setReady(true);
+      tick();
+    }
+
+    function tick() {
+      frame = requestAnimationFrame(tick);
+      const node = video.current;
+      if (!node || !context || found.current) return;
+      if (node.readyState !== node.HAVE_ENOUGH_DATA) return;
+
+      canvas.width = node.videoWidth;
+      canvas.height = node.videoHeight;
+      if (canvas.width === 0 || canvas.height === 0) return;
+
+      context.drawImage(node, 0, 0, canvas.width, canvas.height);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(pixels.data, pixels.width, pixels.height, { inversionAttempts: "dontInvert" });
+      if (!code?.data) return;
+
+      /* One read per mount. Without this the same code fires forty times a
+         second for as long as it is in shot. */
+      found.current = true;
+      onCode(code.data);
+    }
+
+    void begin();
+
+    return () => {
+      cancelAnimationFrame(frame);
+      stream?.getTracks().forEach((track) => track.stop());
+    };
+  }, [onCode, onTrouble]);
+
+  return (
+    <div className="dk-scan">
+      <video ref={video} className="dk-scan__video" playsInline muted />
+      <div className="dk-scan__frame" aria-hidden="true" />
+      <p className="fine faint center">{ready ? "Point it at the code." : "Opening the camera"}</p>
+      <Button tone="quiet" block onClick={onGiveUp}>
+        Type it instead
+      </Button>
+    </div>
   );
 }

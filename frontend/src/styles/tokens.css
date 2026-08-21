@@ -2,17 +2,27 @@
  * The design language for Cam Chop Meat.
  *
  * The picture this describes is a phone held at arm's length outside the place
- * on Clerks Quarters at eight in the evening: black ground, white type, and one
- * red that only ever appears where you are meant to press. Black is not a mode
- * here, it is the brand, so there is no light theme to keep in step and no
- * second set of surfaces to check.
+ * on Razel Street at eight in the evening: black ground, white type, and one red
+ * that only ever appears where you are meant to press. Black is not a mode here,
+ * it is the brand, so there is no light theme to keep in step.
  *
- * Three rules hold the whole thing together.
+ * Four rules hold the whole thing together.
+ *
  *   1. Red is an instruction. If it is not a button, an active tab or a price
  *      you are about to pay, it is not red.
- *   2. Boxes are earned. Space and a hairline separate most things. A raised
- *      surface is for something you can pick up and carry: a pass, a receipt.
- *   3. Nothing animates a property that costs layout. Transform and opacity
+ *
+ *   2. Boxes are earned. Space and a hairline separate almost everything. A
+ *      raised surface is reserved for something you can pick up and carry: a
+ *      booking pass, an order receipt, a sheet you dragged up yourself. Those
+ *      three, and nothing else, may use `--carry`.
+ *
+ *   3. Small. This is read on a 360px screen in one hand, so the ramp starts
+ *      where a phone starts, not where a laptop screenshot looks good. Body copy
+ *      is the single exception and never moves off 16px: anything under that
+ *      makes iOS zoom the page the moment an input takes focus, and the layout
+ *      never recovers.
+ *
+ *   4. Nothing animates a property that costs layout. Transform and opacity
  *      only, so a four year old Android stays at sixty frames.
  *
  * Nothing outside this file may invent a colour, a radius or a duration.
@@ -21,101 +31,121 @@
 :root {
   color-scheme: dark;
 
-  /* ── Ground. Pure blacks, not warmed: on an OLED phone in daylight the
-     deepest step is the one that makes white type carry, and every panel
-     above it is a measured amount of white mixed back in. */
-  --black: #050505;
-  --ink-1000: #0a0a0a;
-  --ink-900: #111111;
-  --ink-850: #161616;
-  --ink-800: #1c1c1c;
-  --ink-700: #262626;
-  --ink-600: #333333;
+  /* ── Ground ────────────────────────────────────────────────────────────────
+     Pure blacks, not warmed. On an OLED phone in daylight the deepest step is
+     the one that makes white type carry, and every surface above it is a
+     measured amount of white mixed back in. Six steps is more than the design
+     needs, which is deliberate: it means a new surface never has to be
+     invented halfway up. */
+  --black: #000000;
+  --ink-1000: #070707;
+  --ink-950: #0c0c0c;
+  --ink-900: #121212;
+  --ink-850: #171717;
+  --ink-800: #1e1e1e;
+  --ink-700: #292929;
+  --ink-600: #383838;
 
-  /* ── Type ramp. Pure white for the thing you read first, then two steps
-     down. Nothing below --text-3 is used for words a customer must read. */
+  /* ── Type ramp ─────────────────────────────────────────────────────────────
+     Pure white for the thing you read first, then three steps down. Nothing
+     below --text-3 carries a word a customer has to read; it is for rules,
+     disabled glyphs and the odd watermark. */
   --white: #ffffff;
-  --text: #f6f6f6;
-  --text-2: #a6a6a6;
-  --text-3: #767676;
+  --text: #f4f4f4;
+  --text-2: #a3a3a3;
+  --text-3: #6f6f6f;
+  --text-4: #4a4a4a;
 
-  /* ── Red. One colour, three weights: the button, its lit state, and the
-     shadow under it. The wash is for a tinted background, never for text. */
+  /* ── Red ───────────────────────────────────────────────────────────────────
+     One colour, three weights: the button, its lit state, and the pressed
+     state under it. The wash is for a tinted ground, never for text. */
   --red: #e31c23;
-  --red-hi: #ff333b;
-  --red-lo: #a8121a;
+  --red-hi: #ff353d;
+  --red-lo: #b0131a;
   --red-wash: rgba(227, 28, 35, 0.12);
-  --red-line: rgba(227, 28, 35, 0.38);
+  --red-line: rgba(227, 28, 35, 0.36);
   --on-red: #ffffff;
 
-  /* ── Signals. Kept away from the brand red so "paid" and "pay" never look
-     alike. Each is always paired with an icon or a word. */
-  --good: #2fbf6b;
-  --good-wash: rgba(47, 191, 107, 0.13);
-  --warn: #f0a927;
-  --warn-wash: rgba(240, 169, 39, 0.13);
-  --bad: #ff5a5f;
-  --bad-wash: rgba(255, 90, 95, 0.13);
+  /* ── Signals ───────────────────────────────────────────────────────────────
+     Kept well away from the brand red so "paid" and "pay" never look alike.
+     Each is always paired with an icon or a word, never colour alone. */
+  --good: #2ec26b;
+  --good-wash: rgba(46, 194, 107, 0.13);
+  --warn: #eda42a;
+  --warn-wash: rgba(237, 164, 42, 0.13);
+  --bad: #ff5b60;
+  --bad-wash: rgba(255, 91, 96, 0.13);
 
-  /* ── Roles. Components read these, never the ramps above. */
+  /* ── Roles ─────────────────────────────────────────────────────────────────
+     Components read these. Nothing outside this file reads the ramps above. */
   --bg: var(--ink-1000);
   --bg-sunk: var(--black);
   --surface: var(--ink-900);
   --surface-2: var(--ink-850);
-  --raised: var(--ink-800);
+
+  /* The only raised surface in the product. See rule 2. */
+  --carry: var(--ink-850);
+  --carry-edge: rgba(255, 255, 255, 0.09);
+
   --accent: var(--red);
   --on-accent: var(--on-red);
 
-  --line: rgba(255, 255, 255, 0.08);
-  --line-2: rgba(255, 255, 255, 0.14);
+  --line: rgba(255, 255, 255, 0.07);
+  --line-2: rgba(255, 255, 255, 0.13);
   --line-hot: var(--red-line);
 
-  /* ── Type. Plus Jakarta Sans carries the headings: it has the tight, wide
-     shoulders a food sign wants and stays readable set small. Inter runs the
-     interface and every figure in it, with tabular numerals switched on for
-     anything a person reads out loud: a price, a time, a booking code. */
+  /* ── Type faces ────────────────────────────────────────────────────────────
+     Plus Jakarta Sans carries the headings: it has the tight, wide shoulders a
+     food sign wants and stays readable set small. Inter runs the interface and
+     every figure in it, with tabular numerals switched on for anything a person
+     reads out loud: a price, a time, a booking code. Both are variable, self
+     hosted, and subset by unicode range, so there is no font CDN to warm up. */
   --font-display: "Plus Jakarta Sans Variable", "SF Pro Display", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
-  --font-num: var(--font-sans);
 
-  /*
-   * The ramp was too big on a real phone.
-   *
-   * Every size below came down by roughly a fifth in 2026-08 after the site was
-   * read on the device it is actually for. Headings had been sized for a
-   * screenshot rather than for a hand, and a booking pass was taking most of a
-   * screen to say four things.
-   *
-   * Body copy is the one thing that does not move. It stays at 16px because
-   * anything under that makes iOS zoom the page the moment an input takes
-   * focus, and the layout never recovers.
-   */
-  --t-hero: clamp(2.125rem, 9vw, 4rem);
-  --t-display: clamp(1.5rem, 5.2vw, 2.25rem);
-  --t-title: clamp(1.1875rem, 3.8vw, 1.5rem);
-  --t-head: clamp(1rem, 2.4vw, 1.125rem);
-  --t-lead: clamp(0.9375rem, 0.9rem + 0.25vw, 1rem);
+  /* ── Size ramp ─────────────────────────────────────────────────────────────
+     Every step below is the size it renders at on a 360px phone, opening out
+     only where there is room. The previous ramp topped out at 64px, which is a
+     size chosen for a screenshot: on the device it took most of a screen to say
+     three words. */
+  --t-hero: clamp(1.875rem, 7.2vw, 3rem);
+  --t-display: clamp(1.375rem, 4.6vw, 1.875rem);
+  --t-title: 1.0625rem;
+  --t-head: 0.9375rem;
+
+  /* Never smaller. See rule 3. */
   --t-body: 1rem;
+
   --t-small: 0.875rem;
-  /* 14px, not 13px. This size carries dish descriptions and every helper line
-     in the product, and at 13px it is the one thing people squint at. */
   --t-fine: 0.8125rem;
   --t-label: 0.6875rem;
+
   /* The floor. Seat counts, tab labels, badge digits. Nothing goes under it. */
   --t-micro: 0.625rem;
 
   --lh-tight: 1;
-  --lh-head: 1.12;
-  --lh-body: 1.6;
+  --lh-head: 1.14;
+  --lh-body: 1.55;
 
-  /* Big display type wants to be pulled in; small caps want to be opened up. */
-  --track-hero: -0.04em;
-  --track-display: -0.025em;
-  --track-head: -0.015em;
-  --track-label: 0.1em;
+  /* Big display type wants pulling in; small caps want opening up. */
+  --track-hero: -0.038em;
+  --track-display: -0.026em;
+  --track-head: -0.014em;
+  --track-label: 0.09em;
 
-  /* ── Space. A 4px rhythm, named by use so a section gap never gets typed in
-     as a row's padding. */
+  /* ── Weight ────────────────────────────────────────────────────────────────
+     Named rather than numbered, so a heading never gets a body weight by
+     someone typing 600 out of habit. */
+  --w-body: 400;
+  --w-mid: 500;
+  --w-strong: 600;
+  --w-display: 700;
+  --w-shout: 800;
+
+  /* ── Space ─────────────────────────────────────────────────────────────────
+     A 4px rhythm, named by use so a section gap never gets typed in as a row's
+     padding. Every step from --s-5 up came down against the previous ramp: the
+     complaint was that everything was big, and most of "big" was air. */
   --s-1: 0.25rem;
   --s-2: 0.5rem;
   --s-3: 0.75rem;
@@ -124,50 +154,76 @@
   --s-6: 1.75rem;
   --s-7: 2.25rem;
   --s-8: 3rem;
-  --s-9: 4rem;
 
-  /* 20px on the smallest phone we design for, opening out on a desk. Wider
-     than it looks: the breathing room is most of what stops the page reading
-     as a template. */
-  --gutter: clamp(1rem, 4vw, 2.5rem);
-  --page-max: 75rem;
-  --prose-max: 36rem;
+  /* 16px on the smallest phone we design for, opening out on a desk. */
+  --gutter: clamp(1rem, 4.5vw, 2rem);
+  --page-max: 72rem;
+  --prose-max: 34rem;
 
   /* The smallest a control may be and still be hit with a thumb on a moving
-     bike taxi. Controls read this rather than each picking a height. */
+     bike taxi. Controls read this rather than each picking a height. The ink
+     inside may be much smaller: padding does the work, not the border. */
   --tap: 2.75rem;
+  --tap-sm: 2.25rem;
+
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
 
-  /* ── Shape. Pills for anything you press, soft rectangles for anything that
-     holds a photograph, and nothing in between. */
-  --r-xs: 6px;
-  --r-sm: 10px;
-  --r-md: 14px;
+  /* ── Shape ─────────────────────────────────────────────────────────────────
+     Pills for anything you press, soft rectangles for anything holding a
+     photograph, and nothing in between. */
+  --r-xs: 5px;
+  --r-sm: 8px;
+  --r-md: 12px;
   --r-lg: 16px;
   --r-xl: 22px;
   --r-full: 999px;
 
   /* On black a black shadow is invisible, so depth is carried by the surface
-     step and a lit top edge. These are for things that genuinely float. */
+     step and a lit top edge. These are for the three things that genuinely
+     float. */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.6);
-  --shadow-2: 0 10px 30px -14px rgba(0, 0, 0, 0.9);
-  --shadow-3: 0 30px 70px -24px rgba(0, 0, 0, 0.95);
-  --shadow-red: 0 10px 30px -12px rgba(227, 28, 35, 0.55);
+  --shadow-2: 0 8px 24px -12px rgba(0, 0, 0, 0.9);
+  --shadow-3: 0 24px 60px -20px rgba(0, 0, 0, 0.95);
 
-  /* ── Motion. One curve for everything that arrives, which is the decelerating
-     one every native platform uses; a symmetrical one for anything that moves
-     from A to B and stays. Durations are short: on a phone, anything over a
-     third of a second reads as the network being slow. */
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-soft: cubic-bezier(0.32, 0.72, 0, 1);
-  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
-  --dur-1: 120ms;
+  /* ── Motion ────────────────────────────────────────────────────────────────
+     One curve for anything arriving, which is the decelerating one every native
+     platform uses and the one iOS sheets ride. One symmetrical curve for
+     anything moving from A to B and staying. One spring for the release of a
+     press, because a press that eases back reads as software and a press that
+     springs back reads as a button. */
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+  /* A real spring, sampled. Overshoots ~4% and settles: the amount a physical
+     key travels past its rest position when you let it go. */
+  --ease-spring: linear(
+    0, 0.2178 2.1%, 0.7156 6.2%, 0.9098 8.5%, 1.0136 10.9%, 1.0424 12.4%,
+    1.0533 14.2%, 1.0393 16.9%, 1.0004 21.1%, 0.9904 23.3%, 0.9968 26.9%,
+    1.0018 33.9%, 1
+  );
+
+  /* On a phone, anything over about a third of a second reads as the network
+     being slow rather than as motion. */
+  --dur-0: 90ms;
+  --dur-1: 140ms;
   --dur-2: 200ms;
-  --dur-3: 320ms;
-  --dur-4: 480ms;
+  --dur-3: 280ms;
+  --dur-4: 400ms;
 
-  /* ── Layers. Anything with a z-index takes it from here. */
+  /* ── Press ─────────────────────────────────────────────────────────────────
+     The single most complained-about gap in the last version: controls that
+     gave no sign of having been touched. Every interactive element in this
+     product reads these, and the press fires on pointerdown rather than on
+     click, so the answer arrives while the finger is still on the glass. */
+  --press-scale: 0.97;
+  --press-scale-lg: 0.985;
+  --press-dur: 90ms;
+  --press-lift: 1.09;
+
+  /* ── Layers ────────────────────────────────────────────────────────────────
+     Anything with a z-index takes it from here. */
   --z-base: 1;
   --z-sticky: 20;
   --z-nav: 40;
@@ -175,19 +231,27 @@
   --z-modal: 70;
   --z-toast: 90;
 
-  /* The tab bar's height. Page padding and every sticky offset read it, so
-     they cannot drift apart. */
-  --tabbar-h: 3.875rem;
-  --topbar-h: 3.25rem;
+  /* Chrome heights. Page padding and every sticky offset read these, so they
+     cannot drift apart. Both came down: the bar was taller than it needed to
+     be to hold a 22px icon and a 10px label. */
+  --tabbar-h: 3.5rem;
+  --topbar-h: 3rem;
 }
 
-/* When somebody has asked their phone for less movement, they get none of it:
-   every duration collapses and the transitions become instant swaps. */
+/*
+ * When somebody has asked their phone for less movement, they get none of it.
+ * Every duration collapses, transitions become instant swaps, and the press
+ * scale goes to 1 so a control still confirms itself through colour alone.
+ */
 @media (prefers-reduced-motion: reduce) {
   :root {
+    --dur-0: 0ms;
     --dur-1: 0ms;
     --dur-2: 0ms;
     --dur-3: 0ms;
     --dur-4: 0ms;
+    --press-dur: 0ms;
+    --press-scale: 1;
+    --press-scale-lg: 1;
   }
 }
