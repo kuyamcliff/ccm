@@ -14,69 +14,137 @@ import { usePress } from "~/ui/press";
  * **It fits the screen and never scrolls sideways.** A floor plan you have to
  * pan around on a phone is worse than a list. The whole room is scaled into the
  * viewBox, so the plan gets smaller on a small screen rather than getting cut
- * off, and the labels stay legible because they are drawn at a fixed size
- * outside the scaling.
+ * off.
+ *
+ * ── Everything is sized from the room, not from the database ───────────────
+ *
+ * This is the part that was wrong before, and badly. A table was drawn at a
+ * fixed radius of 6 and labelled at a fixed 5px — both in the room's own
+ * coordinate units, which are whatever the console's floor editor happened to
+ * use. The editor's canvas is 640 units wide, so a table came out at about two
+ * percent of the plan's width: roughly seven pixels on a phone. Too small to
+ * read and far too small to hit.
+ *
+ * So nothing here is a constant in room units. `unit` is derived from the
+ * bounding box, every mark is a multiple of it, and a table is the same
+ * comfortable size whether the room was drawn across 200 units or 2000.
  *
  * ── Why SVG and not divs ───────────────────────────────────────────────────
  *
- * The coordinates in the database are arbitrary units from the console's floor
- * editor. SVG's viewBox does the scaling arithmetic for free and keeps the
- * proportions of the room correct at any width, which absolutely positioned divs
- * would need a resize observer and a lot of maths to match.
+ * SVG's viewBox does the scaling arithmetic for free and keeps the proportions
+ * of the room correct at any width, which absolutely positioned divs would need
+ * a resize observer and a lot of maths to match.
  */
 
-/** Padding around the extremes of the room, in the room's own units. */
-const MARGIN = 14;
+/** Padding around the extremes of the room, as a multiple of `unit`. Enough
+    that a table on the edge is not flush against the border, and no more:
+    margin is width the tables do not get. */
+const MARGIN_UNITS = 1.1;
 
-export type TableState = "free" | "taken" | "too-small" | "chosen";
+/**
+ * How many tables wide the room is treated as being.
+ *
+ * The divisor that turns a room of any size into marks of a usable one.
+ *
+ * Measured rather than guessed. At twelve a table came out about 31px wide on a
+ * 390px phone: legible, but under the 44px this design uses for everything else
+ * you are meant to hit. Nine puts it around 45px and the room still reads as a
+ * room rather than as eight rectangles filling the screen.
+ */
+const TABLES_ACROSS = 9;
 
-export function tableState(table: DiningTable, party: number, chosenId: number | null): TableState {
-  if (table.id === chosenId) return "chosen";
+export type TableState = "free" | "taken" | "too-small" | "chosen" | "in-use";
+
+export function tableState(
+  table: DiningTable,
+  party: number,
+  chosenIds: number[],
+  showInUse: boolean
+): TableState {
+  if (chosenIds.includes(table.id)) return "chosen";
+  /*
+   * "Somebody is sitting there now" is a fact about this minute, and the guest
+   * is choosing a table for nine o'clock. Showing it to them would grey out a
+   * table that is going to be free by the time they arrive, so it is only ever
+   * drawn for the console, which is reading the room mid-service.
+   */
+  if (showInUse && table.in_use) return "in-use";
   if (table.available === false) return "taken";
-  if (table.capacity < party) return "too-small";
+  /*
+   * Too small for the party — but only when the party is being sat at one
+   * table. Once a second table is in play the capacities add up, so a four-top
+   * is a perfectly good half of a party of eight and greying it out would make
+   * booking for eight impossible.
+   */
+  if (chosenIds.length === 0 && table.capacity < party) return "too-small";
   return "free";
+}
+
+export interface PlanLabels {
+  free: string;
+  taken: string;
+  tooSmall: string;
+  inUse: string;
+  yours: string;
+  seats: (n: number) => string;
 }
 
 export function FloorPlan({
   tables,
   fixtures,
   party,
-  chosenId,
+  chosenIds,
   onChoose,
   labels,
+  showInUse = false,
 }: {
   tables: DiningTable[];
   fixtures: FloorFixture[];
   party: number;
-  chosenId: number | null;
+  chosenIds: number[];
   onChoose: (table: DiningTable) => void;
-  labels: { free: string; taken: string; tooSmall: string; seats: (n: number) => string };
+  labels: PlanLabels;
+  /** The console cares which tables have somebody at them. A guest does not. */
+  showInUse?: boolean;
 }) {
-  /* The bounding box of everything in the room, so the plan is framed to its
-     contents rather than to whatever coordinate space the editor happened to
-     use. A room drawn in the top left corner of a 1000-unit canvas would
-     otherwise render as a tiny cluster with three quarters of the plan empty. */
-  const box = useMemo(() => {
+  /*
+   * The room, and the size of everything drawn in it.
+   *
+   * Two passes, because the margin depends on `unit` and `unit` depends on how
+   * far apart the tables are. The first pass frames the furniture; the second
+   * derives the mark size from that frame and pads the frame by it.
+   */
+  const plan = useMemo(() => {
     const xs: number[] = [];
     const ys: number[] = [];
 
     for (const table of tables) {
-      xs.push(table.pos_x - 6, table.pos_x + 6);
-      ys.push(table.pos_y - 6, table.pos_y + 6);
+      xs.push(table.pos_x);
+      ys.push(table.pos_y);
     }
     for (const fixture of fixtures) {
       xs.push(fixture.pos_x, fixture.pos_x + fixture.width);
       ys.push(fixture.pos_y, fixture.pos_y + fixture.height);
     }
-    if (xs.length === 0) return { x: 0, y: 0, w: 100, h: 100 };
+    if (xs.length === 0) return { x: 0, y: 0, w: 100, h: 100, unit: 100 / TABLES_ACROSS };
 
-    const minX = Math.min(...xs) - MARGIN;
-    const minY = Math.min(...ys) - MARGIN;
+    const rawW = Math.max(1, Math.max(...xs) - Math.min(...xs));
+    const rawH = Math.max(1, Math.max(...ys) - Math.min(...ys));
+
+    /* Off the wider side, so a long thin room does not end up with marks that
+       are enormous relative to its short axis. */
+    const unit = Math.max(rawW, rawH) / TABLES_ACROSS;
+    const margin = unit * MARGIN_UNITS;
+
+    const minX = Math.min(...xs) - margin;
+    const minY = Math.min(...ys) - margin;
+
     return {
       x: minX,
       y: minY,
-      w: Math.max(1, Math.max(...xs) + MARGIN - minX),
-      h: Math.max(1, Math.max(...ys) + MARGIN - minY),
+      w: Math.max(...xs) + margin - minX,
+      h: Math.max(...ys) + margin - minY,
+      unit,
     };
   }, [tables, fixtures]);
 
@@ -84,7 +152,11 @@ export function FloorPlan({
     <div className="plan">
       <svg
         className="plan__svg"
-        viewBox={`${box.x} ${box.y} ${box.w} ${box.h}`}
+        viewBox={`${plan.x} ${plan.y} ${plan.w} ${plan.h}`}
+        /* The element takes its height from the room's own proportions, so the
+           plan fills the width it is given and is never letterboxed inside a
+           box of the wrong shape. The CSS caps it on very tall rooms. */
+        style={{ aspectRatio: `${plan.w} / ${plan.h}` }}
         role="group"
         aria-label="Floor plan"
         preserveAspectRatio="xMidYMid meet"
@@ -97,13 +169,16 @@ export function FloorPlan({
               y={fixture.pos_y}
               width={fixture.width}
               height={fixture.height}
-              rx={2}
+              rx={plan.unit * 0.25}
+              strokeWidth={plan.unit * 0.06}
+              strokeDasharray={`${plan.unit * 0.3} ${plan.unit * 0.2}`}
             />
             {fixture.label ? (
               <text
                 x={fixture.pos_x + fixture.width / 2}
                 y={fixture.pos_y + fixture.height / 2}
                 className="plan__fixturelabel"
+                fontSize={plan.unit * 0.34}
                 textAnchor="middle"
                 dominantBaseline="central"
               >
@@ -117,7 +192,10 @@ export function FloorPlan({
           <TableMark
             key={table.id}
             table={table}
-            state={tableState(table, party, chosenId)}
+            unit={plan.unit}
+            state={tableState(table, party, chosenIds, showInUse)}
+            order={chosenIds.indexOf(table.id)}
+            multiple={chosenIds.length > 1}
             onChoose={() => onChoose(table)}
             labels={labels}
           />
@@ -129,11 +207,16 @@ export function FloorPlan({
           <span className="plan__swatch" data-state="free" /> {labels.free}
         </li>
         <li>
-          <span className="plan__swatch" data-state="chosen" /> Yours
+          <span className="plan__swatch" data-state="chosen" /> {labels.yours}
         </li>
         <li>
           <span className="plan__swatch" data-state="taken" /> {labels.taken}
         </li>
+        {showInUse ? (
+          <li>
+            <span className="plan__swatch" data-state="in-use" /> {labels.inUse}
+          </li>
+        ) : null}
       </ul>
     </div>
   );
@@ -141,19 +224,46 @@ export function FloorPlan({
 
 function TableMark({
   table,
+  unit,
   state,
+  order,
+  multiple,
   onChoose,
   labels,
 }: {
   table: DiningTable;
+  unit: number;
   state: TableState;
+  /** Where this table came in the selection, or -1. Only shown when there is
+      more than one, since "1" beside a single table says nothing. */
+  order: number;
+  multiple: boolean;
   onChoose: () => void;
-  labels: { free: string; taken: string; tooSmall: string; seats: (n: number) => string };
+  labels: PlanLabels;
 }) {
-  const disabled = state === "taken" || state === "too-small";
+  const disabled = state === "taken" || state === "too-small" || state === "in-use";
   const press = usePress({ disabled });
 
-  const why = state === "taken" ? labels.taken : state === "too-small" ? labels.tooSmall : labels.free;
+  const why =
+    state === "taken"
+      ? labels.taken
+      : state === "in-use"
+        ? labels.inUse
+        : state === "too-small"
+          ? labels.tooSmall
+          : state === "chosen"
+            ? labels.yours
+            : labels.free;
+
+  /* A round table for four or fewer, a rectangle above that, which is what the
+     room actually looks like and makes the plan readable at a glance. */
+  const round = table.capacity <= 4;
+  /* Sized so both shapes land near the 44px tap target on a phone showing the
+     whole room. A circle is measured across, a rectangle along its longer
+     side, which is why the two numbers are not the same. */
+  const r = unit * 0.7;
+  const rectW = unit * 1.6;
+  const rectH = unit * 1.0;
 
   return (
     <g
@@ -174,16 +284,52 @@ function TableMark({
       }}
       {...press.pressProps}
     >
-      {/* A round table for four or fewer, a rectangle above that, which is what
-          the room actually looks like and makes the plan readable at a glance. */}
-      {table.capacity <= 4 ? (
-        <circle cx={table.pos_x} cy={table.pos_y} r={6} />
+      {round ? (
+        <circle cx={table.pos_x} cy={table.pos_y} r={r} strokeWidth={unit * 0.07} />
       ) : (
-        <rect x={table.pos_x - 8} y={table.pos_y - 5} width={16} height={10} rx={2} />
+        <rect
+          x={table.pos_x - rectW / 2}
+          y={table.pos_y - rectH / 2}
+          width={rectW}
+          height={rectH}
+          rx={unit * 0.18}
+          strokeWidth={unit * 0.07}
+        />
       )}
-      <text x={table.pos_x} y={table.pos_y} textAnchor="middle" dominantBaseline="central" className="plan__label">
+      <text
+        x={table.pos_x}
+        y={table.pos_y}
+        textAnchor="middle"
+        dominantBaseline="central"
+        className="plan__label"
+        fontSize={unit * 0.42}
+      >
         {table.label}
       </text>
+
+      {/* Which one this was in the order they were picked. Only drawn for a
+          party across several tables, where knowing the order is the difference
+          between "these three" and "three separate mistakes". */}
+      {multiple && order >= 0 ? (
+        <>
+          <circle
+            className="plan__order"
+            cx={table.pos_x + (round ? r : rectW / 2) * 0.85}
+            cy={table.pos_y - (round ? r : rectH / 2) * 0.85}
+            r={unit * 0.28}
+          />
+          <text
+            className="plan__ordernum"
+            x={table.pos_x + (round ? r : rectW / 2) * 0.85}
+            y={table.pos_y - (round ? r : rectH / 2) * 0.85}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize={unit * 0.3}
+          >
+            {order + 1}
+          </text>
+        </>
+      ) : null}
     </g>
   );
 }

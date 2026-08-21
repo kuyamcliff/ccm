@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { MenuItem } from "~/lib/api";
+import { priceBasket } from "~/lib/basketPricing";
+import type { BasketLine, PricedBasket } from "~/lib/basketPricing";
 import { useSession } from "~/state/session";
 
 /**
@@ -34,21 +36,13 @@ const STORAGE_KEY = "ccm.basket.v2";
    be an orphan nobody reads and nobody clears, so it goes on first sight. */
 const LEGACY_KEY = "ccm.basket.v1";
 
-export interface BasketLine {
-  id: number;
-  qty: number;
-}
+export type { BasketLine, PricedLine } from "~/lib/basketPricing";
 
 /** What is actually written down: the lines, and whose they are. */
 interface StoredBasket {
   /** The account that filled it, or null for a guest. */
   owner: number | null;
   lines: BasketLine[];
-}
-
-export interface PricedLine extends BasketLine {
-  item: MenuItem;
-  lineTotal: number;
 }
 
 interface BasketValue {
@@ -59,7 +53,7 @@ interface BasketValue {
   remove: (id: number) => void;
   clear: () => void;
   /** Joins the basket to a menu, dropping anything no longer on sale. */
-  price: (menu: MenuItem[]) => { lines: PricedLine[]; subtotal: number; dropped: number };
+  price: (menu: MenuItem[]) => PricedBasket;
 }
 
 const BasketContext = createContext<BasketValue | null>(null);
@@ -166,29 +160,9 @@ export function BasketProvider({ children }: { children: ReactNode }) {
 
   const clear = useCallback(() => setLines([]), []);
 
-  const price = useCallback(
-    (menu: MenuItem[]) => {
-      const byId = new Map(menu.map((item) => [item.id, item]));
-      const priced: PricedLine[] = [];
-      let dropped = 0;
-
-      for (const line of lines) {
-        const item = byId.get(line.id);
-        /* A dish taken off the menu, sold out since it was added, or priced by
-           the market rather than by the plate, cannot be ordered ahead. The
-           server refuses these too; dropping them here is so the total on
-           screen matches the one that will be charged. */
-        if (!item || item.is_active !== 1 || item.sold_out === 1 || item.price_fcfa == null) {
-          dropped += 1;
-          continue;
-        }
-        priced.push({ ...line, item, lineTotal: item.price_fcfa * line.qty });
-      }
-
-      return { lines: priced, subtotal: priced.reduce((sum, line) => sum + line.lineTotal, 0), dropped };
-    },
-    [lines]
-  );
+  /* The arithmetic itself lives in `lib/basketPricing`, where it can be tested
+     without a React tree. See the note there about `is_active`. */
+  const price = useCallback((menu: MenuItem[]) => priceBasket(lines, menu), [lines]);
 
   const value = useMemo<BasketValue>(
     () => ({

@@ -208,17 +208,22 @@ function Footer() {
           <p className="fine faint">{hours}</p>
         </div>
 
+        {/*
+          * Only what is not somewhere else.
+          *
+          * Menu, Book and Find us all came out: every one of them is a tab at
+          * the bottom of the screen at all times, so putting them here again is
+          * asking somebody to scroll to the end of a page to reach something
+          * already under their thumb. What is left is what genuinely lives
+          * nowhere else — the legal pages, a way to reach a person, and the
+          * socials people actually arrive from.
+          */}
         <nav className="footer__links" aria-label="Footer">
-          <Link to="/menu" viewTransition>
-            {c.nav.menu}
+          <Link to="/terms" viewTransition>
+            {c.nav.terms}
           </Link>
-          {siteConfig.features.booking ? (
-            <Link to="/book" viewTransition>
-              {c.nav.book}
-            </Link>
-          ) : null}
-          <Link to="/find" viewTransition>
-            {c.nav.find}
+          <Link to="/privacy" viewTransition>
+            {c.nav.privacy}
           </Link>
           {siteConfig.features.supportChat && siteConfig.support.enabled ? (
             <Link to="/help" viewTransition>
@@ -241,14 +246,6 @@ function Footer() {
         <div className="footer__bottom fine faint">
           <span>
             &copy; {year} {c.footer.rights}
-          </span>
-          <span className="bar bar--tight">
-            <Link to="/terms" viewTransition>
-              {c.nav.terms}
-            </Link>
-            <Link to="/privacy" viewTransition>
-              {c.nav.privacy}
-            </Link>
           </span>
         </div>
       </div>

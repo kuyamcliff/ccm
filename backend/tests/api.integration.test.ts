@@ -127,6 +127,43 @@ describe("service health", () => {
   });
 });
 
+describe("the bootstrap payload", () => {
+  /*
+   * This response carries `user`, and it is the first thing the browser asks
+   * for on every visit. It used to be sent with `private, max-age=5`, which
+   * meant that for five seconds after anyone asked, the browser answered the
+   * next question out of its own cache. Signing in and immediately landing on
+   * another screen read a copy taken while signed out: the app decided nobody
+   * was signed in, and the basket, which empties itself when its owner changes,
+   * threw away the food somebody had just chosen.
+   *
+   * There is no header that both caches this and keeps it correct, so it is not
+   * cached at all. The two assertions below are the whole rule.
+   */
+  it("is never stored by any cache", async () => {
+    const res = await fetch(`${BASE}/api/bootstrap`);
+    assert.equal(res.status, 200);
+
+    const cache = res.headers.get("cache-control") ?? "";
+    assert.match(cache, /no-store/, "a body carrying `user` must not be stored");
+    assert.doesNotMatch(cache, /max-age=[1-9]/, "any positive max-age serves one visitor's session to the next");
+  });
+
+  it("answers a visitor with a page rather than a 401", async () => {
+    const res = await fetch(`${BASE}/api/bootstrap`);
+    const body = (await res.json()) as { user: unknown; settings: unknown };
+    assert.equal(body.user, null);
+    assert.ok(body.settings, "a signed-out visitor still needs the site's settings to draw anything");
+  });
+
+  it("knows who is signed in", async () => {
+    const cookie = await signedInGuest("bootstrap");
+    const res = await fetch(`${BASE}/api/bootstrap`, { headers: { Cookie: cookie } });
+    const body = (await res.json()) as { user: { email: string } | null };
+    assert.ok(body.user, "the session cookie must be resolved here, not only on /api/auth/me");
+  });
+});
+
 describe("public endpoints answer without a server error", () => {
   // Each of these hid a missing column or SQL function at some point.
   const today = new Date().toISOString().slice(0, 10);

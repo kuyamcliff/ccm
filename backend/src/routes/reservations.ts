@@ -7,6 +7,7 @@ import { priceChosenItems } from "../lib/orderItems.js";
 import { alternativesForDoubleBooking, alternativesForTakenTable } from "../lib/bookingAlternatives.js";
 import { buildCalendarEvent } from "../lib/ics.js";
 import { VENUE_NAME } from "../config.js";
+import { audit } from "../lib/audit.js";
 
 export const reservationsRouter = Router();
 reservationsRouter.use(requireAuth);
@@ -45,6 +46,40 @@ function slotLockKey(tableId: number | null, date: string, time: string): number
   // Postgres takes a signed 32-bit integer here.
   return hash | 0;
 }
+/**
+ * The most tables one booking may take.
+ *
+ * A ceiling rather than a rule about the room: without one, a request naming
+ * every table in the place would empty the floor for an evening in a single
+ * call, and there is no deposit large enough to make that somebody else's
+ * problem. Twelve is well past any real party and well short of the room.
+ */
+const MAX_TABLES_PER_BOOKING = 12;
+
+/**
+ * The tables named in a request body, de-duplicated and in the order given.
+ *
+ * Accepts both shapes: `tableIds` as an array, and the older single `tableId`.
+ * Anything that is not a positive integer is dropped rather than rejected,
+ * because the checks that matter happen against the database a moment later
+ * and a `null` in the array is not worth its own error message.
+ */
+function readTableIds(body: unknown): number[] {
+  const record = (body ?? {}) as Record<string, unknown>;
+  const raw = Array.isArray(record.tableIds)
+    ? record.tableIds
+    : record.tableId
+      ? [record.tableId]
+      : [];
+
+  const out: number[] = [];
+  for (const entry of raw) {
+    const id = Number(entry);
+    if (Number.isInteger(id) && id > 0 && !out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
 const SLOTS: string[] = [];
 for (let h = 9; h <= 22; h++) {
   SLOTS.push(`${String(h).padStart(2, "0")}:00`);
@@ -72,9 +107,16 @@ reservationsRouter.get("/", async (req, res) => {
       `SELECT r.id, r.date, r.time, r.party_size, r.phone, r.note, r.status,
               r.payment_status, r.cancellation_fee_fcfa, r.ccm_code, r.created_at,
               r.items_json, r.items_total_fcfa, r.deposit_fcfa,
-              r.cancelled_at, r.cancel_reason, r.checked_in_at,
+              r.cancelled_at, r.cancel_reason, r.checked_in_at, r.arrived_by_guest,
               t.label as table_label, t.zone as table_zone,
-              p.amount_fcfa, p.discount_fcfa, p.method as pay_method, p.reference as pay_reference
+              p.amount_fcfa, p.discount_fcfa, p.method as pay_method, p.reference as pay_reference,
+              /* Every table the booking holds, in the order they were chosen.
+                 A lateral rather than a join so one booking across three tables
+                 stays one row and the payment join above cannot multiply. */
+              (SELECT string_agg(t2.label, ', ' ORDER BY t2.id)
+                 FROM reservation_tables rt
+                 JOIN restaurant_tables t2 ON t2.id = rt.table_id
+                WHERE rt.reservation_id = r.id) AS table_labels
        FROM reservations r
        LEFT JOIN restaurant_tables t ON r.table_id = t.id
        LEFT JOIN payments p ON p.reservation_id = r.id AND p.status = 'completed' AND p.type = 'reservation'
@@ -170,7 +212,7 @@ reservationsRouter.get("/:id/calendar.ics", async (req, res) => {
       date: row.date,
       time: row.time,
       durationMinutes: SITTING_MINUTES,
-      summary: `${VENUE_NAME} — ${table}`,
+      summary: `${VENUE_NAME}, ${table}`,
       description: `${table}, ${seats}. Show ${code} at the door.${note}${unpaid}`,
       location: where,
       /* A table whose deposit has not arrived is not held, and the calendar
@@ -196,7 +238,16 @@ reservationsRouter.post("/", async (req, res) => {
   const partySize = Number(req.body?.partySize);
   const phone = String(req.body?.phone ?? "").trim();
   const note = String(req.body?.note ?? "").trim().slice(0, 300);
-  const tableId = req.body?.tableId ? Number(req.body.tableId) : null;
+  /*
+   * Which tables the guest picked.
+   *
+   * `tableIds` is the current shape and holds one or more; `tableId` is the
+   * single-table shape every client before this used and is still accepted, so
+   * an old tab left open over a deploy does not start failing. The first entry
+   * is the lead table and is what goes in `reservations.table_id`.
+   */
+  const tableIds = readTableIds(req.body);
+  const tableId = tableIds[0] ?? null;
 
   if (!DATE_RE.test(date) || Number.isNaN(new Date(date).getTime())) {
     res.status(400).json({ error: "Pick a valid date." });
@@ -219,10 +270,26 @@ reservationsRouter.post("/", async (req, res) => {
     return;
   }
 
-  if (tableId !== null) {
-    const table = (await db.prepare("SELECT id, capacity FROM restaurant_tables WHERE id = ? AND active = 1").get(tableId)) as { id: number; capacity: number } | undefined;
-    if (!table) {
-      res.status(400).json({ error: "That table is not available." });
+  if (tableIds.length > MAX_TABLES_PER_BOOKING) {
+    res.status(400).json({ error: `A booking can hold at most ${MAX_TABLES_PER_BOOKING} tables. Call us for anything larger.` });
+    return;
+  }
+
+  if (tableIds.length > 0) {
+    /* One placeholder per id rather than `= ANY(?)`: the query layer binds
+       scalars only, and every value in this file is bound. The count comes
+       from `readTableIds`, which yields integers and nothing else. */
+    const found = (await db
+      .prepare(
+        `SELECT id, capacity FROM restaurant_tables
+          WHERE id IN (${tableIds.map(() => "?").join(", ")}) AND active = 1`
+      )
+      .all(...tableIds)) as { id: number; capacity: number }[];
+    /* Every one of them, not just the first. A request naming one real table
+       and one that was retired an hour ago must fail rather than quietly book
+       half of what was asked for. */
+    if (found.length !== tableIds.length) {
+      res.status(400).json({ error: "One of those tables is not available." });
       return;
     }
   }
@@ -256,19 +323,44 @@ reservationsRouter.post("/", async (req, res) => {
    * answer; see the note in sql/schema.sql for why the booking lifecycle
    * cannot carry one yet.
    */
-  const outcome = await transaction<{ id: number } | { status: number; error: string; clash?: "table" | "guest" }>(async () => {
-    await db.prepare("SELECT pg_advisory_xact_lock(?, ?)").get(BOOKING_LOCK_NAMESPACE, slotLockKey(tableId, date, time));
+  const outcome = await transaction<{ id: number } | { status: number; error: string; clash?: "table" | "guest"; takenId?: number }>(async () => {
+    /* One lock per table, taken in ascending id order. The order is the whole
+       point: two guests picking tables 4 and 7 in opposite orders would
+       otherwise each hold one and wait forever for the other. Sorting the keys
+       means every request in the database takes them in the same sequence, so
+       one of the two simply waits. */
+    for (const id of [...tableIds].sort((a, b) => a - b)) {
+      await db.prepare("SELECT pg_advisory_xact_lock(?, ?)").get(BOOKING_LOCK_NAMESPACE, slotLockKey(id, date, time));
+    }
+    if (tableIds.length === 0) {
+      await db.prepare("SELECT pg_advisory_xact_lock(?, ?)").get(BOOKING_LOCK_NAMESPACE, slotLockKey(null, date, time));
+    }
 
-    if (tableId !== null) {
-      const clash = await db
+    if (tableIds.length > 0) {
+      /* Asked of the join table, so a table held as the second or third of
+         somebody else's party counts as taken. Reading `reservations.table_id`
+         alone would see only their lead table and hand the rest out twice. */
+      const clash = (await db
         .prepare(
-          `SELECT id FROM reservations
-           WHERE table_id = ? AND date = ? AND time = ? AND table_id IS NOT NULL
-             AND (status = 'confirmed'
-               OR (status = 'pending_payment' AND created_at > now_text_offset(interval '-30 minutes')))`
+          `SELECT rt.table_id FROM reservation_tables rt
+             JOIN reservations r ON r.id = rt.reservation_id
+            WHERE rt.table_id IN (${tableIds.map(() => "?").join(", ")}) AND r.date = ? AND r.time = ?
+              AND (r.status = 'confirmed'
+                OR (r.status = 'pending_payment' AND r.created_at > now_text_offset(interval '-30 minutes')))
+            LIMIT 1`
         )
-        .get(tableId, date, time);
-      if (clash) return { status: 409, error: "That table was taken while you were booking.", clash: "table" };
+        .get(...tableIds, date, time)) as { table_id: number } | undefined;
+      if (clash) {
+        return {
+          status: 409,
+          error:
+            tableIds.length === 1
+              ? "That table was taken while you were booking."
+              : "One of those tables was taken while you were booking.",
+          clash: "table",
+          takenId: clash.table_id,
+        };
+      }
     }
 
     const userClash = await db
@@ -299,6 +391,15 @@ reservationsRouter.post("/", async (req, res) => {
       );
 
     const newId = Number(inserted.lastInsertRowid);
+
+    /* Inside the same transaction as the clash check above, so the hold and the
+       check that nothing else holds it cannot be separated by another request. */
+    for (const id of tableIds) {
+      await db
+        .prepare("INSERT INTO reservation_tables (reservation_id, table_id) VALUES (?, ?) ON CONFLICT DO NOTHING")
+        .run(newId, id);
+    }
+
     await db.prepare("UPDATE reservations SET ccm_code = ? WHERE id = ?").run(await generateBookingCode(), newId);
     return { id: newId };
   });
@@ -308,8 +409,8 @@ reservationsRouter.post("/", async (req, res) => {
        are suggestions, and no other guest should queue behind them. */
     const earliest = earliestSuggestableSlot(date);
     const alternatives =
-      outcome.clash === "table" && tableId !== null
-        ? await alternativesForTakenTable(tableId, date, time, partySize, SLOTS, earliest)
+      outcome.clash === "table" && outcome.takenId !== undefined
+        ? await alternativesForTakenTable(outcome.takenId, date, time, partySize, SLOTS, earliest)
         : outcome.clash === "guest"
           ? await alternativesForDoubleBooking(req.user!.id, date, time, SLOTS, earliest)
           : null;
@@ -332,13 +433,92 @@ reservationsRouter.post("/", async (req, res) => {
       `SELECT r.id, r.date, r.time, r.party_size, r.phone, r.note, r.status,
               r.payment_status, r.cancellation_fee_fcfa, r.ccm_code, r.created_at,
               r.items_json, r.items_total_fcfa, r.deposit_fcfa,
-              t.label as table_label, t.zone as table_zone
+              t.label as table_label, t.zone as table_zone,
+              (SELECT string_agg(t2.label, ', ' ORDER BY t2.id)
+                 FROM reservation_tables rt
+                 JOIN restaurant_tables t2 ON t2.id = rt.table_id
+                WHERE rt.reservation_id = r.id) AS table_labels
        FROM reservations r
        LEFT JOIN restaurant_tables t ON r.table_id = t.id
        WHERE r.id = ?`
     )
     .get(id);
   res.status(201).json({ reservation: row });
+});
+
+/**
+ * The guest says they have arrived.
+ *
+ * Until now the only way a booking became "arrived" was somebody on the door
+ * scanning a code, which is fine at the door and useless everywhere else: a
+ * party that walks in past a busy doorway sits down and nobody upstairs knows
+ * the table is live. The console reads `checked_in_at` on every screen that
+ * matters and all of them poll, so writing it here is what puts the table in
+ * front of staff within the minute.
+ *
+ * Three fences, all of them the obvious ones:
+ *
+ *   - only the guest whose booking it is;
+ *   - only a booking that is actually held, so an unpaid hold cannot be walked
+ *     in on;
+ *   - only inside a window around the sitting, so nobody arrives for Friday on
+ *     Tuesday afternoon.
+ *
+ * `arrived_by_guest` records that it was the guest and not the door, because
+ * the two mean different things to whoever is reading the floor: one is
+ * checked, the other is claimed.
+ */
+const ARRIVE_EARLY_MINUTES = 90;
+const ARRIVE_LATE_MINUTES = 180;
+
+reservationsRouter.post("/:id/arrived", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad reservation id." }); return; }
+
+  const row = (await db
+    .prepare("SELECT id, user_id, date, time, status, checked_in_at, ccm_code FROM reservations WHERE id = ?")
+    .get(id)) as
+    | { id: number; user_id: number | null; date: string; time: string; status: string; checked_in_at: string | null; ccm_code: string | null }
+    | undefined;
+
+  if (!row || row.user_id !== req.user!.id) {
+    res.status(404).json({ error: "Reservation not found." });
+    return;
+  }
+  if (row.status !== "confirmed") {
+    res.status(409).json({ error: "That table is not held yet." });
+    return;
+  }
+
+  /* Already arrived is a success, not a failure. The button is on a phone in
+     somebody's hand outside a restaurant and it is going to get pressed twice. */
+  if (row.checked_in_at) {
+    res.json({ ok: true, already: true, checked_in_at: row.checked_in_at });
+    return;
+  }
+
+  const minutesUntil = (new Date(`${row.date}T${row.time}:00`).getTime() - Date.now()) / 60000;
+  if (minutesUntil > ARRIVE_EARLY_MINUTES) {
+    res.status(409).json({ error: "That is not for a while yet. Let us know when you get here." });
+    return;
+  }
+  if (minutesUntil < -ARRIVE_LATE_MINUTES) {
+    res.status(409).json({ error: "That sitting is over. Talk to somebody at the counter." });
+    return;
+  }
+
+  await db
+    .prepare("UPDATE reservations SET checked_in_at = now_text(), checked_in_by = 'guest', arrived_by_guest = 1 WHERE id = ?")
+    .run(id);
+
+  audit(req, {
+    action: "booking.arrived",
+    targetType: "reservation",
+    targetId: id,
+    detail: `Guest said they had arrived for ${row.date} ${row.time}`,
+  });
+
+  res.json({ ok: true, already: false });
 });
 
 reservationsRouter.delete("/:id", async (req, res) => {

@@ -134,12 +134,41 @@ hr {
   outline: none;
 }
 
-/* A real ring, for the keyboard. Two colours so it is visible on both the black
-   ground and on red. */
+/*
+ * A real ring, for the keyboard.
+ *
+ * No `border-radius` of its own. It used to force `--r-xs` here, which
+ * overrode whatever radius the focused element actually had: on a field
+ * rounded to `--r-md` the ring's corners stuck out past the field's own, and
+ * what you saw was four white corner marks rather than a ring.
+ *
+ * Modern browsers follow the element's border-radius on their own, so saying
+ * nothing is both correct and what looks right.
+ */
 :focus-visible {
   outline: 2px solid var(--white);
   outline-offset: 2px;
-  border-radius: var(--r-xs);
+}
+
+/*
+ * Text entry is the exception, everywhere in the product.
+ *
+ * `:focus-visible` matches a text input on *any* focus, including a tap and a
+ * click, because the browser knows the next thing to arrive will be typing.
+ * That is right for the platform and wrong for us: tapping into a box to type
+ * your name was drawing a white ring around it every single time.
+ *
+ * The ring is dropped for anything you type into. Focus is still shown, by the
+ * container: `.field__wrap:focus-within` and `.dk-search:focus-within` lift the
+ * border and the ground, which is visible to a keyboard user and quiet enough
+ * for a tap. Buttons, links, chips and checkboxes keep the ring, because for
+ * those the ring is the only thing that says where you are.
+ */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[contenteditable]:focus-visible {
+  outline: none;
 }
 
 ::selection {

@@ -52,7 +52,7 @@ function methodLabel(method: string | null): string {
   if (method === "mtn_momo") return "MTN Mobile Money";
   if (method === "orange_money") return "Orange Money";
   if (method === "free") return "Covered by promo / gift card";
-  return method || "—";
+  return method || "Not recorded";
 }
 
 /**

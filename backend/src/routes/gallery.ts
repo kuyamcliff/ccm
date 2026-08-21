@@ -44,7 +44,7 @@ galleryRouter.post("/", requireAuth, uploadLimit, async (req, res) => {
     "INSERT INTO gallery_photos (user_id, submitter_name, caption, image_url, is_approved) VALUES (?, ?, ?, ?, 0)"
   ).run(req.user!.id, req.user!.name, caption, image_url);
 
-  res.status(201).json({ ok: true, message: "Photo submitted — it will appear after approval." });
+  res.status(201).json({ ok: true, message: "Photo submitted. It will appear once we have had a look." });
 });
 
 // ── Admin ────────────────────────────────────────────────

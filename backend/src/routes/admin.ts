@@ -192,7 +192,8 @@ adminRouter.get("/tables", async (_req, res) => {
   const today = new Date().toISOString().slice(0, 10);
   const tables = await db.prepare(`
     SELECT t.*,
-      (SELECT COUNT(*) FROM reservations r WHERE r.table_id = t.id AND r.date = ? AND r.status = 'confirmed') as today_count,
+      (SELECT COUNT(*) FROM reservation_tables rt JOIN reservations r ON r.id = rt.reservation_id
+        WHERE rt.table_id = t.id AND r.date = ? AND r.status = 'confirmed') as today_count,
       b.id AS booking_id,
       b.time AS booking_time,
       b.party_size AS booking_party,
@@ -201,12 +202,17 @@ adminRouter.get("/tables", async (_req, res) => {
       b.phone AS booking_phone,
       b.note AS booking_note,
       b.checked_in_at AS booking_checked_in,
+      b.arrived_by_guest AS booking_arrived_by_guest,
       bu.name AS booking_name
     FROM restaurant_tables t
     LEFT JOIN LATERAL (
-      SELECT r.id, r.time, r.party_size, r.status, r.ccm_code, r.phone, r.note, r.checked_in_at, r.user_id
-      FROM reservations r
-      WHERE r.table_id = t.id AND r.date = ? AND r.status IN ('confirmed', 'pending_payment')
+      /* Through the join table, so a table taken as the second or third of a
+         large party shows that party rather than showing as free. */
+      SELECT r.id, r.time, r.party_size, r.status, r.ccm_code, r.phone, r.note,
+             r.checked_in_at, r.arrived_by_guest, r.user_id
+      FROM reservation_tables rt
+      JOIN reservations r ON r.id = rt.reservation_id
+      WHERE rt.table_id = t.id AND r.date = ? AND r.status IN ('confirmed', 'pending_payment')
       ORDER BY r.time ASC
       LIMIT 1
     ) b ON true

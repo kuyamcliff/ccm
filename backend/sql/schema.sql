@@ -243,12 +243,27 @@ CREATE TABLE IF NOT EXISTS reservations (
   cancel_reason         text,
   checked_in_at         text,
   checked_in_by         text,
+  arrived_by_guest      integer NOT NULL DEFAULT 0,
   hidden_at             text,
   items_json            text,
   items_total_fcfa      integer NOT NULL DEFAULT 0,
   deposit_fcfa          integer,
   created_at            text NOT NULL DEFAULT now_text()
 );
+/*
+ * The tables a booking holds.
+ *
+ * `reservations.table_id` is the first one chosen and stays the answer to
+ * "which table is this booking's" for the door, the floor and the alternatives
+ * queries. This holds every table it took, that one included, so a party of
+ * twelve can be sat across three. See migrate-schema.ts for why both exist.
+ */
+CREATE TABLE IF NOT EXISTS reservation_tables (
+  reservation_id integer NOT NULL REFERENCES reservations (id) ON DELETE CASCADE,
+  table_id       integer NOT NULL REFERENCES restaurant_tables (id) ON DELETE CASCADE,
+  PRIMARY KEY (reservation_id, table_id)
+);
+CREATE INDEX IF NOT EXISTS reservation_tables_table_idx ON reservation_tables (table_id);
 CREATE INDEX IF NOT EXISTS reservations_date_idx ON reservations (date, time);
 CREATE INDEX IF NOT EXISTS reservations_user_idx ON reservations (user_id, created_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS reservations_ccm_code_idx ON reservations (ccm_code) WHERE ccm_code IS NOT NULL;
@@ -308,6 +323,7 @@ CREATE TABLE IF NOT EXISTS takeaway_orders (
   paid_at          text,
   collected_at     text,
   collected_by     text,
+  collected_by_guest integer NOT NULL DEFAULT 0,
   created_at       text NOT NULL DEFAULT now_text()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS takeaway_orders_order_no_idx ON takeaway_orders (order_no);

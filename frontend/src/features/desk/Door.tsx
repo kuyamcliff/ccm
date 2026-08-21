@@ -291,6 +291,16 @@ function Scanner({
 }) {
   const video = useRef<HTMLVideoElement | null>(null);
   const [ready, setReady] = useState(false);
+  /*
+   * The shape of the picture the camera is actually giving us.
+   *
+   * The box used to be pinned at 4:3 with `object-fit: cover`, which on a phone
+   * held upright means a portrait stream cropped down to a landscape slot: most
+   * of what the camera could see was thrown away before jsQR ever looked at it,
+   * and what was left was a tight, oddly framed strip. Taking the ratio from the
+   * stream means the preview is the picture, whichever way the phone is held.
+   */
+  const [ratio, setRatio] = useState<number | null>(null);
   const found = useRef(false);
 
   useEffect(() => {
@@ -302,7 +312,19 @@ function Scanner({
     async function begin() {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
+          /*
+           * The back camera, at a resolution worth decoding.
+           *
+           * `ideal` rather than `exact` throughout: a laptop with one webcam
+           * has no environment-facing camera at all, and `exact` would fail
+           * outright rather than falling back to the camera it does have. The
+           * door is a phone, but the console gets opened on a laptop too.
+           */
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
           audio: false,
         });
       } catch {
@@ -328,6 +350,10 @@ function Scanner({
       canvas.height = node.videoHeight;
       if (canvas.width === 0 || canvas.height === 0) return;
 
+      /* Set once, from the first frame that has real dimensions. Before this
+         the box is a placeholder, and after it the preview matches the camera. */
+      setRatio((current) => current ?? canvas.width / canvas.height);
+
       context.drawImage(node, 0, 0, canvas.width, canvas.height);
       const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsQR(pixels.data, pixels.width, pixels.height, { inversionAttempts: "dontInvert" });
@@ -349,8 +375,14 @@ function Scanner({
 
   return (
     <div className="dk-scan">
-      <video ref={video} className="dk-scan__video" playsInline muted />
-      <div className="dk-scan__frame" aria-hidden="true" />
+      {/* The reticle is a child of this box, not a sibling of the video with a
+          negative margin guessing where the middle is. That guess was a fixed
+          -14rem, so on anything but one screen size the frame sat off the
+          picture entirely. */}
+      <div className="dk-scan__view" style={ratio ? { aspectRatio: String(ratio) } : undefined}>
+        <video ref={video} className="dk-scan__video" playsInline muted autoPlay />
+        <div className="dk-scan__frame" aria-hidden="true" />
+      </div>
       <p className="fine faint center">{ready ? "Point it at the code." : "Opening the camera"}</p>
       <Button tone="quiet" block onClick={onGiveUp}>
         Type it instead

@@ -24,6 +24,12 @@ Every page was rebuilt. The differences you will notice:
   customer is never shown a server's own words.
 - **Three new things:** sold out tonight, cash on collection, and reminders.
   All three are below.
+- **A booking can take more than one table.** A party of ten taps two tables and
+  the seats add up. On your Floor screen a table with somebody sitting at it
+  shows as in use.
+- **Guests can say they have arrived**, and can close their own collection order
+  once it is ready, so nobody behind the counter has to remember to tap it.
+- **Any receipt, any time**, viewed on the phone and downloaded only if wanted.
 
 ## The two halves of the site
 
@@ -103,6 +109,11 @@ the moment the kitchen marks the order ready on the board.
 - Get a pass with a code, and a PDF receipt carrying a signed QR.
 - Cancel themselves. More than an hour before, the deposit comes back.
 - Order for collection, pay ahead or pay cash at the counter, and show a code.
+  Once it is ready they can tap "I have it" themselves.
+- Book more than one table at once for a big party.
+- Tap "I am here" when they arrive, which shows up on your screens within the
+  minute.
+- Look at any receipt they have ever had, and download it if they want a copy.
 - Join the queue from their phone when the place is full.
 - Earn a point for every 100 FCFA they pay, and spend them at the checkout on
   a deposit or an order. You set what a point is worth in **Details**, along

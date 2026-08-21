@@ -334,34 +334,35 @@ export function PaySheet({ open, onClose, onPaid, amountFcfa, title, what, drive
                 <span className="fine faint">{what}</span>
               </div>
 
+              {/*
+                * MTN and Orange, side by side, before anything else.
+                *
+                * Shown whenever there is more than one, which in practice is
+                * always: choosing who you are paying with is the first thing
+                * anybody does at a till, and it used to be buried below the
+                * amount with a sentence under each explaining how mobile money
+                * works. Everybody here already knows how mobile money works.
+                * The logo and the name are the whole choice.
+                */}
               {available.length > 1 ? (
-                <div className="stack stack--tight">
-                  <span className="field__label">{c.pay.wallet}</span>
-                  <div className="wallets" role="radiogroup" aria-label={c.pay.wallet}>
-                    {available.map((item) => (
-                      <WalletChoice
-                        key={item.id}
-                        id={item.id}
-                        selected={wallet === item.id}
-                        onSelect={() => {
-                          setWallet(item.id);
-                          setProblem(null);
-                        }}
-                        label={item.id === "mtn_momo" ? c.order.payMtn : c.order.payOrange}
-                        hint={
-                          item.id === "mtn_momo"
-                            ? "A PIN prompt comes to this handset."
-                            : "Opens Orange Money to approve it."
-                        }
-                      />
-                    ))}
-                  </div>
+                <div className="wallets" role="radiogroup" aria-label={c.pay.wallet}>
+                  {available.map((item) => (
+                    <WalletChoice
+                      key={item.id}
+                      id={item.id}
+                      selected={wallet === item.id}
+                      onSelect={() => {
+                        setWallet(item.id);
+                        setProblem(null);
+                      }}
+                      label={item.id === "mtn_momo" ? c.order.payMtn : c.order.payOrange}
+                    />
+                  ))}
                 </div>
               ) : null}
 
               <PhoneField
                 label={c.pay.momoPhone}
-                hint={wallet === "orange_money" ? c.pay.orangeHint : c.pay.mtnHint}
                 value={phone}
                 onChange={(value) => {
                   setPhone(value);
@@ -397,12 +398,6 @@ export function PaySheet({ open, onClose, onPaid, amountFcfa, title, what, drive
                   />
                 </>
               ) : null}
-
-              <p className="fine faint">
-                {wallet === "orange_money"
-                  ? "Orange Money opens in a new page. Your order stays safe while you approve it."
-                  : "Nothing leaves your MTN account until you approve the prompt with your PIN."}
-              </p>
 
               {problem ? <Notice tone="bad">{problem}</Notice> : null}
             </>
@@ -454,18 +449,23 @@ export function PaySheet({ open, onClose, onPaid, amountFcfa, title, what, drive
   );
 }
 
+/**
+ * One wallet, as a thing to tap.
+ *
+ * The name and a tick, and nothing under it. The explanatory line that used to
+ * sit here told a Cameroonian customer that mobile money sends a PIN prompt to
+ * their phone, which is a sentence about something they do several times a week.
+ */
 function WalletChoice({
   id,
   selected,
   onSelect,
   label,
-  hint,
 }: {
   id: WalletId;
   selected: boolean;
   onSelect: () => void;
   label: string;
-  hint: string;
 }) {
   const press = usePress();
   return (
@@ -474,6 +474,7 @@ function WalletChoice({
       role="radio"
       aria-checked={selected}
       className="wallet"
+      data-wallet={id}
       data-on={selected ? "true" : undefined}
       onClick={onSelect}
       {...press.pressProps}
@@ -481,11 +482,7 @@ function WalletChoice({
       <span className="wallet__mark" aria-hidden="true">
         {selected ? <Icon name="check" size={13} /> : null}
       </span>
-      <span className="wallet__text">
-        <span className="head">{label}</span>
-        <span className="fine muted">{hint}</span>
-      </span>
-      <span className="sr-only">{id}</span>
+      <span className="wallet__text head">{label}</span>
     </button>
   );
 }
