@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "~/lib/api";
 import { useMutation, useQuery, invalidate } from "~/lib/store";
 import { K } from "~/lib/keys";
-import { money, normalisePhone } from "~/lib/format";
+import { normalisePhone } from "~/lib/format";
 import { say } from "~/lib/say";
 import { Icon } from "~/ui/Icon";
 import { Img } from "~/ui/Img";
@@ -57,7 +57,7 @@ function pickupSlots(): string[] {
 type Method = "mtn_momo" | "orange_money" | "cash";
 
 export function OrderPage() {
-  const { c, fill } = useCopy();
+  const { c } = useCopy();
   const { siteConfig } = useVenue();
   const { user } = useSession();
   const basket = useBasket();
@@ -272,6 +272,15 @@ export function OrderPage() {
 
         {/* ── How to pay ─────────────────────────────────────────────────────*/}
         <h2 className="head">{c.order.payHow}</h2>
+        {/*
+          * Three names and nothing under them.
+          *
+          * Each row used to carry a line explaining what would happen: a PIN
+          * prompt arriving on the handset, Orange Money opening to approve it.
+          * Everybody choosing between these two does this several times a week,
+          * and describing it back to them is three lines of the screen spent
+          * saying nothing they did not know before they arrived.
+          */}
         <div className="rows rows--inset methods" role="radiogroup" aria-label={c.order.payHow}>
           {siteConfig.payments.mtn ? (
             <MethodRow
@@ -279,7 +288,6 @@ export function OrderPage() {
               onSelect={() => setMethod("mtn_momo")}
               icon="wallet"
               label={c.order.payMtn}
-              hint="A PIN prompt comes to your handset."
             />
           ) : null}
           {siteConfig.payments.orange ? (
@@ -288,7 +296,6 @@ export function OrderPage() {
               onSelect={() => setMethod("orange_money")}
               icon="wallet"
               label={c.order.payOrange}
-              hint="Opens Orange Money to approve it."
             />
           ) : null}
           {cashAllowed ? (
@@ -297,7 +304,6 @@ export function OrderPage() {
               onSelect={() => setMethod("cash")}
               icon="cash"
               label={c.order.payCash}
-              hint={c.order.payCashNote}
             />
           ) : null}
         </div>
@@ -326,14 +332,10 @@ export function OrderPage() {
           >
             {method === "cash" ? c.order.placeOrder : c.order.payNow}
           </Action>
-          {method !== "cash" ? (
-            <p className="fine faint center">
-              {fill(c.book.depositBody, { amount: money(priced.subtotal) }).replace(
-                "holds the table and comes off your bill",
-                "is what you will be asked to approve"
-              )}
-            </p>
-          ) : null}
+          {/* The total is on the line above this one, in the largest figure on
+              the screen. Saying it again in words underneath the button, as a
+              sentence about approving a prompt, was the amount twice and the
+              explanation nobody needed. */}
         </div>
       </form>
 
@@ -363,13 +365,11 @@ function MethodRow({
   onSelect,
   icon,
   label,
-  hint,
 }: {
   on: boolean;
   onSelect: () => void;
   icon: "wallet" | "cash";
   label: string;
-  hint: string;
 }) {
   const press = usePress();
   return (
@@ -386,10 +386,7 @@ function MethodRow({
         {on ? <Icon name="check" size={13} /> : null}
       </span>
       <Icon name={icon} size={18} className="row__lead" />
-      <span className="grow stack stack--tight">
-        <span className="head">{label}</span>
-        <span className="fine muted">{hint}</span>
-      </span>
+      <span className="grow head">{label}</span>
     </button>
   );
 }

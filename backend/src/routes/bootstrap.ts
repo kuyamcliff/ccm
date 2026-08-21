@@ -73,10 +73,32 @@ bootstrapRouter.get("/", async (req, res) => {
     ? { id: req.user.id, name: req.user.name, email: req.user.email, role: req.user.role }
     : null;
 
-  /* Cached for a few seconds at most. Long enough to absorb a burst of tabs
-     opening from one TikTok link, short enough that flipping the site to
-     maintenance mode reaches everybody almost at once. `private` because the
-     body carries who is signed in and must never sit in a shared cache. */
-  res.setHeader("Cache-Control", "private, max-age=5");
+  /*
+   * Never stored. Not by a proxy, not by the browser's own cache.
+   *
+   * This used to be `private, max-age=5`, reasoning that five seconds was long
+   * enough to absorb a burst of tabs from one TikTok link and short enough that
+   * maintenance mode still reached everybody quickly. Both of those are true and
+   * neither survives what it actually did: this body carries `user`, so for five
+   * seconds after any request the browser served its own copy to whoever asked
+   * next.
+   *
+   * What that looked like in the product: sign in, land on the next screen, and
+   * the app reads a bootstrap cached moments earlier while signed out. The tab
+   * bar drops back to the signed-out set, and `state/basket.tsx` sees the owner
+   * of the basket change from an account to nobody and empties it, which is
+   * exactly what it is supposed to do when one person signs out and another
+   * signs in on the same phone. The food somebody had just chosen disappeared
+   * between the menu and the checkout.
+   *
+   * The same reasoning already keeps this route out of the service worker's
+   * cache list. It applies with just as much force to the cache built into the
+   * browser, which is the one nothing in this codebase can reach into and clear.
+   *
+   * The burst this was meant to absorb is handled where it should be: the app
+   * keeps its own copy of the payload in localStorage (`lib/boot.ts`), which it
+   * can and does clear on sign-out.
+   */
+  res.setHeader("Cache-Control", "no-store");
   res.json({ user, settings, topItems, topReview: topReview ?? null });
 });

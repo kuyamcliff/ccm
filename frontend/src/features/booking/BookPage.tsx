@@ -50,7 +50,22 @@ export function BookPage() {
   const [date, setDate] = useState(todayISO());
   const [time, setTime] = useState("");
   const [party, setParty] = useState(2);
-  const [table, setTable] = useState<DiningTable | null>(null);
+  /*
+   * The tables this party is taking, in the order they were tapped.
+   *
+   * A list rather than one table, because a party of ten does not fit on a
+   * four-top and the room is mostly four-tops. The first is the lead table and
+   * is the one the server records on the booking itself.
+   */
+  const [chosen, setChosen] = useState<DiningTable[]>([]);
+
+  /** Adds a table, or takes it back out if it was already picked. */
+  const toggleTable = (table: DiningTable) =>
+    setChosen((current) =>
+      current.some((entry) => entry.id === table.id)
+        ? current.filter((entry) => entry.id !== table.id)
+        : [...current, table]
+    );
   const [phone, setPhone] = useState("");
   const [note, setNote] = useState("");
 
@@ -77,10 +92,20 @@ export function BookPage() {
   /* A table that was free when it was chosen and is not any more must not stay
      selected while the person fills in their phone number. */
   useEffect(() => {
-    if (!table || !floor.data) return;
-    const live = floor.data.tables.find((entry) => entry.id === table.id);
-    if (!live || live.available === false || live.capacity < party) setTable(null);
-  }, [floor.data, table, party]);
+    if (chosen.length === 0 || !floor.data) return;
+    const tables = floor.data.tables;
+    /* Only the ones that went, rather than clearing the lot. Losing one table
+       of three to somebody quicker should not undo the other two. */
+    const stillFree = chosen.filter((entry) => {
+      const live = tables.find((candidate) => candidate.id === entry.id);
+      return live !== undefined && live.available !== false;
+    });
+    if (stillFree.length !== chosen.length) setChosen(stillFree);
+  }, [floor.data, chosen]);
+
+  /* Seats across everything picked. What decides whether the party fits, and
+     the only place multi-table booking says anything out loud. */
+  const seatsChosen = chosen.reduce((sum, entry) => sum + entry.capacity, 0);
 
   const hold = useMutation(async () => {
     setProblem(null);
@@ -91,7 +116,7 @@ export function BookPage() {
       partySize: party,
       phone: normalisePhone(phone),
       note: note.trim(),
-      tableId: table?.id ?? null,
+      tableIds: chosen.map((entry) => entry.id),
     });
     invalidate(K.myBookings);
     invalidate("book.tables*");
@@ -164,7 +189,7 @@ export function BookPage() {
                       label={slot}
                       onSelect={() => {
                         setTime(slot);
-                        setTable(null);
+                        setChosen([]);
                         setClash(null);
                         go("where");
                       }}
@@ -182,15 +207,17 @@ export function BookPage() {
                       key={entry.id}
                       label={`${entry.label} (${entry.capacity})`}
                       onSelect={() => {
-                        setTable({
-                          id: entry.id,
-                          label: entry.label,
-                          zone: entry.zone,
-                          capacity: entry.capacity,
-                          pos_x: 0,
-                          pos_y: 0,
-                          active: 1,
-                        });
+                        setChosen([
+                          {
+                            id: entry.id,
+                            label: entry.label,
+                            zone: entry.zone,
+                            capacity: entry.capacity,
+                            pos_x: 0,
+                            pos_y: 0,
+                            active: 1,
+                          },
+                        ]);
                         setClash(null);
                         go("confirm");
                       }}
@@ -231,7 +258,7 @@ export function BookPage() {
                       disabled={past}
                       onSelect={() => {
                         setTime(slot);
-                        setTable(null);
+                        setChosen([]);
                       }}
                     />
                   );
@@ -255,7 +282,7 @@ export function BookPage() {
                 value={party}
                 onChange={(next) => {
                   setParty(next);
-                  setTable(null);
+                  setChosen([]);
                 }}
                 min={1}
                 max={MAX_PARTY}
@@ -287,21 +314,39 @@ export function BookPage() {
               tables={floor.data?.tables ?? []}
               fixtures={floor.data?.fixtures ?? []}
               party={party}
-              chosenId={table?.id ?? null}
-              onChoose={setTable}
+              chosenIds={chosen.map((entry) => entry.id)}
+              onChoose={toggleTable}
               labels={{
                 free: c.book.tableFree,
                 taken: c.book.tableTaken,
                 tooSmall: c.book.tableTooSmall,
+                inUse: c.book.tableInUse,
+                yours: c.book.tableYours,
                 seats: (n) => fill(c.book.seats, { n }),
               }}
             />
           )}
 
-          {table ? (
-            <Notice tone="good">
-              Table {table.label}
-              {table.zone ? `, ${table.zone}` : ""}. {fill(c.book.seats, { n: table.capacity })}.
+          {/*
+            * What is picked, and whether it seats the party.
+            *
+            * No instruction anywhere saying "you can choose more than one".
+            * Tapping a second table just works, and the moment somebody does,
+            * this line adds up the seats and starts counting. A sentence
+            * telling people about a feature is a sentence admitting the
+            * feature is not obvious.
+            */}
+          {chosen.length > 0 ? (
+            <Notice tone={seatsChosen >= party ? "good" : "warn"}>
+              <div className="stack stack--tight">
+                <span>
+                  {chosen.map((entry) => `Table ${entry.label}`).join(" + ")}.{" "}
+                  {fill(c.book.seats, { n: seatsChosen })}.
+                </span>
+                {seatsChosen < party ? (
+                  <span className="fine">{fill(c.book.seatsShort, { n: party - seatsChosen })}</span>
+                ) : null}
+              </div>
             </Notice>
           ) : null}
 
@@ -309,7 +354,13 @@ export function BookPage() {
             <Button tone="quiet" block icon="arrow-left" onClick={() => go("who")}>
               {c.common.back}
             </Button>
-            <Button tone="primary" block iconEnd="arrow-right" disabled={!table} onClick={() => go("confirm")}>
+            <Button
+              tone="primary"
+              block
+              iconEnd="arrow-right"
+              disabled={chosen.length === 0 || seatsChosen < party}
+              onClick={() => go("confirm")}
+            >
               {c.common.next}
             </Button>
           </div>
@@ -346,7 +397,9 @@ export function BookPage() {
             </div>
             <div className="row">
               <span className="grow label">{c.book.stepWhere}</span>
-              <span>{table ? `Table ${table.label}` : "Any free table"}</span>
+              <span>
+                {chosen.length > 0 ? chosen.map((entry) => `Table ${entry.label}`).join(" + ") : "Any free table"}
+              </span>
             </div>
             <div className="row">
               <span className="grow label">{c.book.deposit}</span>
@@ -411,7 +464,9 @@ export function BookPage() {
           }}
           amountFcfa={depositFcfa}
           title={c.book.deposit}
-          what={`${dayLabel(date)}, ${time}${table ? `, table ${table.label}` : ""}`}
+          what={`${dayLabel(date)}, ${time}${
+            chosen.length > 0 ? `, ${chosen.map((entry) => `table ${entry.label}`).join(" and ")}` : ""
+          }`}
           driver={driver}
         />
       ) : null}

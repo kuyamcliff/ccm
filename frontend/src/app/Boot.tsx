@@ -36,19 +36,36 @@ export function Boot() {
   const started = useRef(false);
 
   useEffect(() => {
-    /* StrictMode mounts effects twice in development. The request is harmless to
-       repeat but there is no reason to, and doubling it hides the real network
-       waterfall when we are looking at one. */
+    /*
+     * Once per mounted app, and no cancellation.
+     *
+     * These two guards used to be three lines apart and cancelled each other
+     * out. `started` stops a second request; a `cancelled` flag in the cleanup
+     * stopped a late response being used. Under StrictMode, which mounts every
+     * effect twice in development, that combination meant:
+     *
+     *   1. first mount fires the request,
+     *   2. StrictMode unmounts, and the cleanup sets `cancelled`,
+     *   3. the remount finds `started` already true and does nothing,
+     *   4. the response arrives to a closure that has been told to ignore it.
+     *
+     * So the payload was fetched, and then thrown away. Nothing settled the
+     * session, nothing wrote the boot cache, and the whole app rendered as if
+     * nobody was signed in however many times you signed in. Anything watching
+     * the session for a change of hands — `state/basket.tsx` watches it to empty
+     * one person's basket when another signs in — saw the account it knew about
+     * replaced by nobody, and did what it is supposed to do.
+     *
+     * There is nothing to cancel. Everything below writes to caches and to a
+     * provider that outlives this component, so a late response is not a leak,
+     * it is just late. `started` alone is the whole guard.
+     */
     if (started.current) return;
     started.current = true;
-
-    let cancelled = false;
 
     api.site
       .boot()
       .then((payload) => {
-        if (cancelled) return;
-
         writeBoot(payload);
         /* For this visit rather than the next one: if the cached payload was
            empty or its first photograph has since changed, this is the earliest
@@ -65,7 +82,6 @@ export function Boot() {
         settle(payload.user);
       })
       .catch(() => {
-        if (cancelled) return;
         /*
          * The network is down, or the API is.
          *
@@ -77,10 +93,6 @@ export function Boot() {
          */
         if (readBoot() === null) settle(null);
       });
-
-    return () => {
-      cancelled = true;
-    };
   }, [settle]);
 
   return null;

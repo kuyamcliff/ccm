@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { api } from "~/lib/api";
 import type { Booking } from "~/lib/api";
 import { dayLabel, timeLabel } from "~/lib/format";
 import { Code, Badge } from "~/ui/Bits";
-import { AnchorButton, Button } from "~/ui/Button";
+import { AnchorButton } from "~/ui/Button";
 import { Icon } from "~/ui/Icon";
 import { useCopy } from "~/state/locale";
 
@@ -68,7 +68,6 @@ export function readPasses(): CachedPass[] {
 
 export function BookingPass({ booking }: { booking: Booking }) {
   const { c, fill } = useCopy();
-  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     cachePass(booking);
@@ -85,7 +84,7 @@ export function BookingPass({ booking }: { booking: Booking }) {
         </Badge>
       </div>
 
-      <p className="display display--lg pass__when">
+      <p className="display pass__when">
         {dayLabel(booking.date)}, {timeLabel(booking.time)}
       </p>
 
@@ -96,12 +95,17 @@ export function BookingPass({ booking }: { booking: Booking }) {
             {booking.party_size === 1 ? c.book.partyOne : fill(c.book.partyMany, { n: booking.party_size })}
           </span>
         </div>
-        {booking.table_label ? (
+        {/* Every table the booking holds. A party of ten sat across two tables
+            that saw only the first one on their pass would arrive thinking half
+            of them had nowhere to sit. The zone is only worth the width when
+            there is one table to place. */}
+        {booking.table_labels || booking.table_label ? (
           <div className="row">
             <span className="grow label">{c.book.stepWhere}</span>
             <span className="fine">
-              Table {booking.table_label}
-              {booking.table_zone ? `, ${booking.table_zone}` : ""}
+              {booking.table_labels && booking.table_labels.includes(",")
+                ? booking.table_labels
+                : `Table ${booking.table_label}${booking.table_zone ? `, ${booking.table_zone}` : ""}`}
             </span>
           </div>
         ) : null}
@@ -121,37 +125,18 @@ export function BookingPass({ booking }: { booking: Booking }) {
 
       <div className="bar bar--tight bar--wrap">
         {held ? (
-          <>
-            <AnchorButton href={api.booking.calendarUrl(booking.id)} tone="ghost" size="sm" icon="calendar">
-              {c.mine.addToCalendar}
-            </AnchorButton>
-            <Button
-              tone="quiet"
-              size="sm"
-              icon="download"
-              onClick={async () => {
-                setDownloading(true);
-                try {
-                  const blob = await api.me.bookingReceiptFile(booking.id);
-                  const url = URL.createObjectURL(blob);
-                  const link = document.createElement("a");
-                  link.href = url;
-                  link.download = `cam-chop-meat-${booking.ccm_code ?? booking.id}.pdf`;
-                  document.body.appendChild(link);
-                  link.click();
-                  link.remove();
-                  URL.revokeObjectURL(url);
-                } catch {
-                  /* The receipt is a nicety; the code above is the thing that
-                     actually gets somebody through the door. */
-                } finally {
-                  setDownloading(false);
-                }
-              }}
-            >
-              {downloading ? c.pending.saving : c.mine.receipt}
-            </Button>
-          </>
+          /*
+           * The calendar link, and nothing else.
+           *
+           * There used to be a Download button here too, which put the whole
+           * receipt behind a PDF the phone opens somewhere else. Looking at a
+           * receipt is now a sheet on this page (`ReceiptSheet`) and saving the
+           * file is a button inside it, so the pass is left to be the one thing
+           * it is for: the code you hold up at the door.
+           */
+          <AnchorButton href={api.booking.calendarUrl(booking.id)} tone="ghost" size="sm" icon="calendar">
+            {c.mine.addToCalendar}
+          </AnchorButton>
         ) : (
           <span className="fine faint bar bar--tight">
             <Icon name="alert" size={14} />

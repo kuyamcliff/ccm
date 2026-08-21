@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "~/lib/api";
 import type { DeskTable, FixtureKind } from "~/lib/api";
 import { useMutation, useQuery, invalidate } from "~/lib/store";
@@ -41,6 +41,10 @@ import { useToast } from "~/state/toast";
 const CANVAS = { width: 640, height: 560 };
 const NUDGE = 4;
 
+/** Below this the tables are too small to grab, and scrolling is the better of
+    two bad options. A 320px phone lands right about here. */
+const MIN_SCALE = 0.5;
+
 const FIXTURE_KINDS: FixtureKind[] = ["grill", "tv", "bar", "door", "toilets", "kitchen", "speaker", "plant"];
 
 const FIXTURE_LABEL: Record<FixtureKind, string> = {
@@ -65,7 +69,57 @@ export function Floor() {
   const [adding, setAdding] = useState(false);
 
   const canvas = useRef<HTMLDivElement | null>(null);
+  const wrap = useRef<HTMLDivElement | null>(null);
   const dragging = useRef<{ kind: "table" | "fixture"; id: number; dx: number; dy: number } | null>(null);
+
+  /*
+   * How much the room is shrunk to fit the screen it is being edited on.
+   *
+   * The canvas is a fixed 640 by 560 because those are the coordinates saved in
+   * the database, and it used to be shown at exactly that size with the wrapper
+   * scrolling in both directions. On the phone most staff actually carry, that
+   * meant seeing about half a room at a time and dragging a table towards an
+   * edge you could not see.
+   *
+   * So it is scaled to whatever width there is, down to a floor below which the
+   * tables stop being touchable at all. 1 on a laptop, and nothing changes
+   * there. Coordinates are still stored unscaled: only the picture shrinks.
+   */
+  const [scale, setScale] = useState(1);
+
+  /*
+   * Measured through a callback ref rather than an effect.
+   *
+   * The canvas is inside `<Loaded>`, which renders nothing at all until the
+   * tables have arrived. An effect with an empty dependency list runs once, on
+   * mount, while `wrap.current` is still null, and never again: the observer
+   * was never attached and the scale sat at 1 forever, which is exactly the
+   * fixed-size canvas this was written to replace. A callback ref fires when
+   * the node actually appears, whenever that is.
+   */
+  const observer = useRef<ResizeObserver | null>(null);
+
+  const attachWrap = useCallback((node: HTMLDivElement | null) => {
+    observer.current?.disconnect();
+    observer.current = null;
+    wrap.current = node;
+    if (!node) return;
+
+    const measure = () => {
+      /* clientWidth rather than the bounding box: it excludes the scrollbar a
+         desktop browser may be drawing, which would otherwise make the canvas
+         fractionally too wide and put the scrollbar back permanently. */
+      const available = node.clientWidth;
+      if (available <= 0) return;
+      setScale(Math.min(1, Math.max(MIN_SCALE, available / CANVAS.width)));
+    };
+
+    measure();
+    observer.current = new ResizeObserver(measure);
+    observer.current.observe(node);
+  }, []);
+
+  useEffect(() => () => observer.current?.disconnect(), []);
 
   const tables = useQuery(K.desk.tables, () => api.desk.tables.list(), { staleMs: 60_000 });
   const fixtures = useQuery(K.desk.fixtures, () => api.desk.fixtures.list(), { staleMs: 60_000 });
@@ -151,8 +205,8 @@ export function Floor() {
       id,
       /* The grab offset, so the object does not jump so its corner sits under
          the finger the moment a drag starts. */
-      dx: event.clientX - box.left - x,
-      dy: event.clientY - box.top - y,
+      dx: (event.clientX - box.left) / scale - x,
+      dy: (event.clientY - box.top) / scale - y,
     };
     (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
   }
@@ -162,8 +216,11 @@ export function Floor() {
     const box = canvas.current?.getBoundingClientRect();
     if (!drag || !box) return;
 
-    const x = Math.round(Math.min(Math.max(event.clientX - box.left - drag.dx, 0), CANVAS.width));
-    const y = Math.round(Math.min(Math.max(event.clientY - box.top - drag.dy, 0), CANVAS.height));
+    /* `box` is the scaled rectangle on screen, so the offset inside it is in
+       screen pixels. Dividing by the scale puts it back into the room's own
+       coordinates, which are what gets saved. */
+    const x = Math.round(Math.min(Math.max((event.clientX - box.left) / scale - drag.dx, 0), CANVAS.width));
+    const y = Math.round(Math.min(Math.max((event.clientY - box.top) / scale - drag.dy, 0), CANVAS.height));
     setMoved((current) => ({ ...current, [`${drag.kind}-${drag.id}`]: { x, y } }));
   }
 
@@ -221,11 +278,31 @@ export function Floor() {
       <Loaded query={tables}>
         {() => (
           <>
-            <div className="dk-canvaswrap" data-scroller="">
+            <div ref={attachWrap} className="dk-canvaswrap" data-scroller="">
+              {/*
+                * A sizing box between the scroller and the canvas.
+                *
+                * `transform` is drawn, not laid out: the scaled canvas still
+                * occupies its full 640 by 560 as far as the scroller is
+                * concerned, so without this the wrapper kept a horizontal
+                * scrollbar for content that visibly fitted. This box carries
+                * the scaled dimensions, so the scroller measures what is
+                * actually on screen and only scrolls when the room genuinely
+                * cannot shrink any further.
+                */}
+              <div
+                className="dk-canvassizer"
+                style={{ width: CANVAS.width * scale, height: CANVAS.height * scale }}
+              >
               <div
                 ref={canvas}
                 className="dk-canvas"
-                style={{ width: CANVAS.width, height: CANVAS.height }}
+                style={{
+                  width: CANVAS.width,
+                  height: CANVAS.height,
+                  transform: `scale(${scale})`,
+                  transformOrigin: "top left",
+                }}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
                 onPointerCancel={onPointerUp}
@@ -256,15 +333,22 @@ export function Floor() {
                       data-on={on ? "true" : undefined}
                       data-off={table.active === 0 ? "true" : undefined}
                       data-big={table.capacity > 4 ? "true" : undefined}
+                      /* Somebody is sitting there now. The editor is also the
+                         screen staff glance at mid-service, and a room where
+                         the occupied tables are marked is the difference
+                         between reading it and counting it. */
+                      data-inuse={table.booking_checked_in ? "true" : undefined}
                       style={{ left: at.x, top: at.y }}
                       onPointerDown={(event) => onPointerDown(event, "table", table.id, at.x, at.y)}
                       onDoubleClick={() => setEditing(table)}
+                      title={table.booking_checked_in ? `In use${table.booking_name ? `: ${table.booking_name}` : ""}` : undefined}
                     >
                       <span className="dk-tablemark__label">{table.label}</span>
                       <span className="dk-tablemark__seats micro">{table.capacity}</span>
                     </div>
                   );
                 })}
+              </div>
               </div>
             </div>
 

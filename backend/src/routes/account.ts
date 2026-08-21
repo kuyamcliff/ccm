@@ -152,7 +152,7 @@ accountRouter.patch("/email", credentialLimit, async (req, res) => {
     text:
       `Someone asked to change the email on your ${VENUE_NAME} account to this address.\n\n` +
       `Your confirmation code is:\n\n    ${code}\n\n` +
-      `It expires in ${CODE_TTL_MINUTES} minutes. If this was not you, ignore this message — ` +
+      `It expires in ${CODE_TTL_MINUTES} minutes. If this was not you, ignore this message. ` +
       `your account keeps its current email and nothing changes.`,
   });
   if (!result.sent) console.error(`[account] email-change code to user ${user.id} FAILED: ${result.reason}`);

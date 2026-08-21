@@ -566,27 +566,58 @@
   align-items: center;
 }
 
-.dk-scan__video {
+/*
+ * The camera box.
+ *
+ * Positioned, so the aiming frame inside it can be centred on the picture
+ * rather than guessed at with a negative margin. Its aspect ratio comes from
+ * the stream itself (set inline once the first frame arrives); 3/4 is only the
+ * placeholder for the moment before that, chosen portrait because the thing
+ * holding it is a phone held upright.
+ */
+.dk-scan__view {
+  position: relative;
   width: 100%;
   max-width: 26rem;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
+  aspect-ratio: 3 / 4;
   border-radius: var(--r-md);
+  overflow: hidden;
   background: var(--black);
+  /* So the aiming frame below can size itself against both of this box's
+     dimensions rather than only its width. */
+  container-type: size;
+}
+
+.dk-scan__video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* `contain`, not `cover`: cropping the picture crops what jsQR is given, and
+     a code just outside the crop is a code the door cannot read while it is
+     plainly visible to the person holding the phone. */
+  object-fit: contain;
 }
 
 .dk-scan__frame {
   position: absolute;
-  width: 60%;
-  max-width: 14rem;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  /*
+   * A square, always inside the picture.
+   *
+   * Sized off whichever of the two dimensions is smaller. `62%` alone is a
+   * percentage of the width, so on a landscape stream the square came out
+   * taller than the picture it was supposed to be sitting inside: 222px of
+   * frame over 201px of video. `cqi` is the box's width and `cqb` its height,
+   * so the smaller of the two wins whichever way round the camera is.
+   */
+  width: 62%;
+  width: min(62cqi, 72cqb);
   aspect-ratio: 1;
   border: 2px solid var(--white);
   border-radius: var(--r-md);
   opacity: 0.55;
   pointer-events: none;
-  /* Centred over the video without a wrapper, since the column is centred. */
-  align-self: center;
-  margin-top: -14rem;
 }
 
 /* ══ Menu, photos, reviews ═════════════════════════════════════════════════*/
@@ -671,12 +702,30 @@
  * canvas is fixed and the wrapper scrolls both ways.
  */
 
+/*
+ * The editor's canvas.
+ *
+ * Still scrolls, because below MIN_SCALE the room is shrunk as far as it can
+ * be and still be draggable. Above it the canvas is scaled to the width and
+ * there is nothing to scroll, which is the case on every phone from about
+ * 320px up. The height is set inline, from the same scale.
+ */
 .dk-canvaswrap {
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--bg-sunk);
   max-height: 70vh;
+  /* Never wider than the column it is in, so a room that cannot shrink any
+     further scrolls inside this box rather than pushing the console sideways. */
+  max-width: 100%;
+}
+
+/* Carries the scaled size so the scroller measures what is on screen. See the
+   note in Floor.tsx. */
+.dk-canvassizer {
+  position: relative;
+  overflow: hidden;
 }
 
 .dk-canvas {
@@ -718,6 +767,14 @@
   border-color: var(--red);
   background: var(--red-lo);
   z-index: 2;
+}
+
+/* Occupied right now: a guest checked in at the door, or said so from their
+   own phone. Filled rather than outlined, so a full room reads at a glance. */
+.dk-tablemark[data-inuse="true"] {
+  background: var(--red-wash);
+  border-color: var(--red-line);
+  color: var(--text);
 }
 
 .dk-tablemark[data-off="true"] {

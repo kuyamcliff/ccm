@@ -110,7 +110,7 @@ function assess(booking: BookingRow) {
     return { outcome: "expired" as const, message: `This booking was for ${booking.date}.` };
   }
   if (booking.payment_status !== "paid") {
-    return { outcome: "unpaid" as const, message: "Deposit not paid — take payment at the door." };
+    return { outcome: "unpaid" as const, message: "Deposit not paid. Take payment at the door." };
   }
   return { outcome: "valid" as const, message: "Valid booking for today." };
 }

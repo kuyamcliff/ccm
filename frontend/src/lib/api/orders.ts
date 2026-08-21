@@ -51,4 +51,12 @@ export const orderApi = {
   paymentStatus: (reference: string) => http.get<MomoStatus>(`/api/takeaway/pay/${encodeURIComponent(reference)}/status`),
   abandonPayment: (reference: string) => http.post<{ ok: true }>(`/api/takeaway/pay/${encodeURIComponent(reference)}/cancel`),
   mine: () => http.get<{ orders: TakeawayOrder[] }>("/api/takeaway/my-orders").then((r) => r.orders),
+
+  /**
+   * The guest confirms they have their food, so nobody behind the counter has
+   * to remember to close the order. Only works from "ready", and answers
+   * `already: true` on a second press rather than failing.
+   */
+  collected: (id: number) =>
+    http.post<{ ok: true; already: boolean }>(`/api/takeaway/${id}/collected`, {}),
 };

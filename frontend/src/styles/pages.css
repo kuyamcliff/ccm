@@ -285,10 +285,18 @@
   scroll-snap-align: start;
 }
 
-/* The chip rails inside the menu and the booking flow already sit inside a
-   .page, so they do not need the gutter again. */
+/* A chip rail that already sits inside a .page does not need the gutter again. */
 .rail--chips .rail__track {
   padding-inline: 0;
+}
+
+/* One that does not — the menu's category rail is a direct child of the sticky
+   filter bar so it can scroll edge to edge — has to put the gutter back, or the
+   first chip starts hard against the screen border with half of "All" cut off
+   and the last one runs off the other side with nothing to say it is scrollable.
+   The scroller stays full width; only its contents are inset. */
+.rail--chips.rail--bleed .rail__track {
+  padding-inline: var(--gutter);
 }
 
 /* ══ Why an account ════════════════════════════════════════════════════════*/
@@ -418,6 +426,13 @@
   border: 1px solid var(--line);
   border-radius: var(--r-full);
   color: var(--text-3);
+}
+
+/* The one focus cue this box gets, now that a text field draws no ring. Same
+   treatment as `.field__wrap`, so focus reads the same wherever you type. */
+.menu__search:focus-within {
+  border-color: var(--text-3);
+  background: var(--surface-2);
 }
 
 .menu__search input {
@@ -626,9 +641,12 @@
   border-bottom: 1px solid var(--line);
 }
 
+/* Side by side, because it is a choice between two and a choice between two
+   should look like one. Two columns fit a phone comfortably now that there is
+   no explanatory line under each name. */
 .wallets {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: var(--s-2);
 }
 
@@ -650,9 +668,6 @@
 }
 
 .wallet__text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
   min-width: 0;
 }
 
@@ -807,13 +822,28 @@
 }
 
 .plan__svg {
+  /*
+   * Fills the width it is given, and takes its height from the room's own
+   * proportions (the aspect-ratio is set inline from the viewBox).
+   *
+   * It used to be `width: 100%` with `max-height: 55dvh` and nothing tying the
+   * two together, so on any room wider than it is tall the cap won and the
+   * plan was letterboxed into a strip with the tables shrunk to fit. Filling
+   * the width is what makes a table big enough to hit.
+   */
+  display: block;
   width: 100%;
-  /* Bounded so a wide room does not become a letterbox two centimetres tall. */
-  max-height: 55dvh;
+  /* Only a guard for a very tall room, well clear of ordinary ones. */
+  max-height: 78dvh;
+  margin-inline: auto;
   background: var(--bg-sunk);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   padding: var(--s-2);
+  /* The plan is inside the page gutter already; this stops a wide room from
+     pushing the page sideways on a narrow phone under any circumstance. */
+  max-width: 100%;
+  touch-action: manipulation;
 }
 
 .plan__table {
@@ -825,11 +855,12 @@
   transform-origin: center;
 }
 
+/* No stroke-width here: it is set per mark, in room units, so the outline
+   scales with the plan instead of thickening as the room gets smaller. */
 .plan__table circle,
 .plan__table rect {
   fill: var(--ink-700);
   stroke: var(--ink-600);
-  stroke-width: 1;
   transition:
     fill var(--dur-1) var(--ease-out),
     stroke var(--dur-1) var(--ease-out);
@@ -847,9 +878,35 @@
 }
 
 .plan__table[data-state="taken"],
-.plan__table[data-state="too-small"] {
+.plan__table[data-state="too-small"],
+.plan__table[data-state="in-use"] {
   opacity: 0.32;
   cursor: not-allowed;
+}
+
+/* Somebody is sitting there now. Only the console asks for this state, and it
+   is drawn rather than greyed flat so a full room reads at a glance. */
+.plan__table[data-state="in-use"] {
+  opacity: 0.75;
+}
+
+.plan__table[data-state="in-use"] circle,
+.plan__table[data-state="in-use"] rect {
+  fill: var(--ink-600);
+  stroke: var(--warn, var(--text-3));
+}
+
+/* The number showing where a table came in a multi-table booking. */
+.plan__order {
+  fill: var(--red-hi);
+  stroke: none;
+}
+
+.plan__ordernum {
+  fill: var(--black);
+  font-weight: 800;
+  font-family: var(--font-display);
+  pointer-events: none;
 }
 
 .plan__table[data-pressed="true"] {
@@ -858,7 +915,6 @@
 
 .plan__label {
   fill: var(--text);
-  font-size: 5px;
   font-weight: 700;
   font-family: var(--font-display);
   pointer-events: none;
@@ -867,8 +923,6 @@
 .plan__fixture rect {
   fill: var(--ink-850);
   stroke: var(--ink-700);
-  stroke-width: 1;
-  stroke-dasharray: 3 2;
 }
 
 .plan__fixture--grill rect {
@@ -878,7 +932,6 @@
 
 .plan__fixturelabel {
   fill: var(--text-3);
-  font-size: 4px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   pointer-events: none;
@@ -912,6 +965,38 @@
 
 .plan__swatch[data-state="taken"] {
   opacity: 0.32;
+}
+
+.plan__swatch[data-state="in-use"] {
+  background: var(--ink-600);
+  border-color: var(--warn, var(--text-3));
+}
+
+/* ══ The receipt sheet ═════════════════════════════════════════════════════
+ *
+ * The whole receipt, in a sheet, so the list behind it can stay as rows. Every
+ * figure here is already in the booking or the order the list is holding, so
+ * opening one costs nothing and works with no signal.
+ */
+
+.receipt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+/* Stacked. The name, the address and the phone are three separate facts and
+   ran together into one line while this rule did not exist. */
+.receipt__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.receipt__code {
+  display: flex;
+  justify-content: center;
+  padding-block: var(--s-1);
 }
 
 /* ══ My visits ═════════════════════════════════════════════════════════════*/

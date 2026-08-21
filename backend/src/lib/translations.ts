@@ -136,8 +136,8 @@ export function assessOwnerContent(
   });
 
   const legalEntries = legalPages.flatMap((page) => [
-    assessPair(`legal.${page.slug}.title`, `${page.slug} — title`, LEGAL, page.title, page.title_fr),
-    assessPair(`legal.${page.slug}.body`, `${page.slug} — page text`, LEGAL, page.body, page.body_fr),
+    assessPair(`legal.${page.slug}.title`, `${page.slug} title`, LEGAL, page.title, page.title_fr),
+    assessPair(`legal.${page.slug}.body`, `${page.slug} page text`, LEGAL, page.body, page.body_fr),
   ]);
 
   return buildReport([

@@ -1,6 +1,11 @@
 # Project context (living file)
 
 ## State
+v5.1, 2026-08-21. A round of fixes on top of v5, listed in `tasks.md`. Three of
+them were real defects rather than polish, and all three had the same symptom
+from the outside: **the basket emptied itself**. See "The basket that emptied
+itself" below, because the way those three stacked up is worth remembering.
+
 v5, 2026-08-21. The whole frontend was rebuilt from nothing: every customer
 screen, all 23 console screens, and a new developer tier. Unlike v4, this one
 went below the paint. The boot sequence, the data layer, the motion system and
@@ -35,6 +40,24 @@ mobile-money credentials. New in v5:
   opening-time arithmetic can be tested without a Postgres.
 - `src/lib/bootstrapDeveloper.ts` — promotes `DEVELOPER_EMAIL` at boot. It
   never demotes, so removing the variable cannot lock the tier away mid-flight.
+
+New in v5.1:
+
+- `reservation_tables` — a booking may hold more than one table, so a party of
+  ten can be sat across three. `reservations.table_id` stays and stays the lead
+  table, which is what the door, the floor and the alternatives queries read; the
+  join table holds every table including that one. A deliberate denormalisation:
+  making every query join through a second table to answer the common case would
+  be paying for the exception on every request. Everything that asks "is this
+  table free" now asks the join table, because a table held as somebody's second
+  or third was invisible to `table_id` and was being handed out twice.
+- `POST /api/reservations/:id/arrived` — the guest says they are here. Until now
+  the only way a booking became "arrived" was somebody scanning a code at the
+  door, which misses every party that walks past a busy doorway and sits down.
+- `POST /api/takeaway/:id/collected` — the guest closes their own order. Only
+  from "ready", and it does not touch the money: a cash order collected but not
+  yet paid stays unpaid, because a tap on a phone must not tell the till it has
+  been paid.
 
 ## Frontend file map (frontend/)
 Vite + React 19 + TypeScript. Path alias `~/` points at `src/`.
@@ -100,6 +123,40 @@ payload itself, in localStorage, where `clearBoot()` can wipe it.
 It is also in `ALWAYS_OPEN` in `lib/maintenance.ts`. Gating it would mean a
 closed site answering 503 to the one request that could explain the 503,
 leaving the visitor on a blank screen.
+
+## The basket that emptied itself
+Somebody added food to their basket, went to the checkout, and it was gone.
+Three separate bugs, any one of which was enough on its own, and they were
+found in the opposite order to their importance.
+
+**1. Every line was dropped at the checkout.** `price()` refused anything whose
+`is_active !== 1`, and the public menu does not return `is_active` at all: the
+endpoint already filters on it, so the column is not in `PUBLIC_COLUMNS`. Every
+dish a customer could see had `undefined`, every line was dropped, and the order
+page said the food was no longer on the menu. Now in `lib/basketPricing.ts`,
+where it is a pure function with a test that builds a dish exactly as the public
+endpoint returns one.
+
+**2. `/api/bootstrap` was cacheable.** It was sent with
+`Cache-Control: private, max-age=5`, reasoning that five seconds absorbs a burst
+of tabs from one TikTok link. It also meant that for five seconds after anyone
+asked, the browser answered the next question out of its own cache, and that
+body carries `user`. Sign in, land on the next screen, read a bootstrap taken
+while signed out. The app decided nobody was signed in, and `state/basket.tsx`,
+which empties a basket when its owner changes, did exactly what it is supposed
+to do. It is `no-store` now, and an integration test asserts it.
+
+**3. `app/Boot.tsx` threw its own response away.** A `started` ref stopped a
+second request; a `cancelled` flag in the cleanup stopped a late response being
+used. Under StrictMode the first mount fires the request, the cleanup sets
+`cancelled`, the remount finds `started` already true and does nothing, and the
+response arrives to a closure that has been told to ignore it. Fetched, then
+discarded. Nothing settled the session and the boot cache was never written.
+
+The lesson that generalises: **anything that reads the session is a thing that
+can empty the basket.** The basket deliberately forgets itself when the account
+holding it changes, which is right, and it makes every bug that makes the app
+briefly think nobody is signed in look like a basket bug.
 
 ## Design
 Black, white and one red. Committed to dark rather than offering a light mode:

@@ -162,7 +162,7 @@ reviewsRouter.post("/:id/replies", requireAuth, writeLimit, async (req, res) => 
   if (!Number.isInteger(reviewId)) { res.status(400).json({ error: "Bad review id." }); return; }
   const text = String(req.body?.text ?? "").trim();
   if (text.length < 1 || text.length > 500) {
-    res.status(400).json({ error: "Reply must be 1–500 characters." });
+    res.status(400).json({ error: "Reply must be between 1 and 500 characters." });
     return;
   }
   const exists = await db.prepare("SELECT id FROM reviews WHERE id = ?").get(reviewId);

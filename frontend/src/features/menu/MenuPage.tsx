@@ -97,7 +97,6 @@ export function MenuPage() {
     <div className="menu">
       <header className="page section--tight menu__head">
         <h1 className="display display--xl">{c.menu.title}</h1>
-        <p className="lead">{c.menu.lead}</p>
       </header>
 
       {/* Search and the category rail travel together and stick to the top, so
@@ -122,7 +121,7 @@ export function MenuPage() {
         </div>
 
         {categories.length > 1 ? (
-          <div className="rail rail--chips" data-scroller="">
+          <div className="rail rail--chips rail--bleed" data-scroller="">
             <div className="rail__track">
               <CategoryChip label={c.menu.all} on={category === ALL} onSelect={() => setCategory(ALL)} />
               {categories.map((name) => (

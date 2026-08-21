@@ -266,6 +266,74 @@ The reasoning is in `context.md`; this is the checklist.
 - [x] Passkeys can now be registered as well as listed and removed
       (`POST /api/account/passkeys/options` and `/verify`).
 
+## Done (2026-08-21, v5.1: the fixes round)
+
+**The basket emptied itself.** Three bugs, any one of them enough. Written up
+in `context.md` under "The basket that emptied itself".
+- [x] `price()` dropped every line, because it required `is_active === 1` and
+      the public menu does not return that column at all. Moved to
+      `lib/basketPricing.ts` with five tests, one of which builds a dish exactly
+      as the public endpoint returns one.
+- [x] `/api/bootstrap` was `Cache-Control: private, max-age=5` on a body that
+      carries `user`, so signing in and moving to the next screen read a copy
+      taken while signed out. Now `no-store`, with an integration test.
+- [x] `app/Boot.tsx` fetched the payload and then threw it away: a `started`
+      ref and a `cancelled` cleanup flag cancelled each other out under
+      StrictMode's double mount.
+
+**The screens.**
+- [x] Menu: "Our Menu" and nothing under it. The category rail is full bleed
+      and got the page gutter back, so "All" is no longer half off the edge.
+- [x] No focus ring on anything you type into, anywhere in the product. The
+      universal `:focus-visible` also stopped forcing its own border-radius,
+      which is what turned a ring into four white corners. Buttons and links
+      keep the ring: for those it is the only thing saying where you are.
+- [x] Footer trimmed to what is nowhere else: Terms, Privacy, Help, phone,
+      WhatsApp, socials. Menu, Book and Find us came out because all three are
+      tabs at the bottom of the screen at all times.
+- [x] Paying is three names now: MTN Mobile Money, Orange Money, Cash at the
+      counter. The lines under each explaining that a PIN prompt arrives on the
+      handset are gone, on both the order page and the payment sheet, along
+      with "nine digits, starting with 6" and the sentence under the button
+      repeating the total.
+
+**Tables.**
+- [x] A booking can hold more than one table. Tap a second and the seats add up;
+      nothing on the screen says so in words.
+- [x] The guest's floor plan was drawing tables at a fixed six units on a
+      640-unit canvas, which is about seven pixels on a phone. Everything is
+      sized off the room now: a table lands at 43 to 49px, measured.
+- [x] The console's floor editor scales to fit instead of being a fixed 640 by
+      560 with the wrapper scrolling. A sizing box carries the scaled
+      dimensions so the scroller measures what is actually on screen.
+- [x] A table with somebody at it reads as in use on the console. Not on the
+      guest's plan: they are choosing for nine o'clock and it is a fact about
+      this minute.
+
+**Visits.**
+- [x] Book a table and Order something as standing actions on the two tabs,
+      not only when the list is empty.
+- [x] View receipt on every table and every order, however old, opening the
+      whole receipt as a sheet built from data already on the page. Download is
+      a button inside it. The rows themselves are rows again.
+- [x] "I am here" on a held table, on the day. The console polls, so it reaches
+      staff within the minute.
+- [x] "I have it" on an order that is ready, so nobody behind the counter has
+      to remember to close it. It does not touch the money.
+
+**The door.**
+- [x] The camera. The aiming frame was `position: absolute` with no positioned
+      ancestor and a hard-coded `margin-top: -14rem`, so on any screen but one
+      it sat off the picture. The video was also pinned to 4:3 and cropped,
+      which on a phone held upright threw away most of what the camera could
+      see before jsQR ever looked at it.
+
+**Wording.**
+- [x] Ten em and en dashes in strings a customer or a member of staff can read,
+      including one printed on every PDF receipt. A previous check reported the
+      file clean because it scanned whole-file rather than line by line, which
+      let quotes pair across lines and hid them.
+
 ## Waiting on the owner
 - [ ] **Set FRONTEND_URL on the API to the address people actually use.**
       Passkeys are bound for life to the domain they were created under, and

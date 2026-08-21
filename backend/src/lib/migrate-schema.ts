@@ -43,5 +43,35 @@ const STEPS: Step[] = [
   { name: "user_sessions.user_id index", sql: "CREATE INDEX IF NOT EXISTS user_sessions_user_idx ON user_sessions (user_id, revoked_at)" },
   { name: "email_changes", sql: `CREATE TABLE IF NOT EXISTS email_changes (id serial PRIMARY KEY, user_id integer NOT NULL, new_email text NOT NULL, token_hash text NOT NULL, attempts integer NOT NULL DEFAULT 0, expires_at text NOT NULL, used_at text, created_at text NOT NULL DEFAULT now_text())` },
   { name: "email_changes.user_id index", sql: "CREATE INDEX IF NOT EXISTS email_changes_user_idx ON email_changes (user_id, created_at DESC)" },
+  /*
+   * A booking may hold more than one table.
+   *
+   * `reservations.table_id` stays, and stays authoritative for "which table is
+   * this booking's" — the door, the console's floor and every alternatives
+   * query read it. What it holds is the first table chosen, and this table
+   * holds every table including that one. Keeping both is a deliberate
+   * denormalisation: a party of twelve across three tables is uncommon enough
+   * that making every existing query join through a second table to answer the
+   * common case would be paying for the exception on every request.
+   *
+   * ON DELETE CASCADE on the reservation, so a cancelled booking cannot leave
+   * a table looking held. SET NULL is not an option here: a row with no table
+   * would be a hold on nothing.
+   */
+  { name: "reservation_tables", sql: `CREATE TABLE IF NOT EXISTS reservation_tables (reservation_id integer NOT NULL REFERENCES reservations (id) ON DELETE CASCADE, table_id integer NOT NULL REFERENCES restaurant_tables (id) ON DELETE CASCADE, PRIMARY KEY (reservation_id, table_id))` },
+  { name: "reservation_tables.table index", sql: "CREATE INDEX IF NOT EXISTS reservation_tables_table_idx ON reservation_tables (table_id)" },
+  /* Every booking made before the join table existed held exactly one table,
+     and that one is in `table_id`. Without this backfill those bookings would
+     read as holding no tables at all the moment anything starts asking the
+     join table instead. */
+  { name: "reservation_tables backfill", sql: `INSERT INTO reservation_tables (reservation_id, table_id) SELECT id, table_id FROM reservations WHERE table_id IS NOT NULL ON CONFLICT DO NOTHING` },
+  /* Who said the guest had arrived. 'guest' when they tapped it on their own
+     phone, a member of staff's name when it was done at the door. The column
+     it qualifies, `checked_in_by`, already exists. */
+  { name: "reservations.arrived_by_guest", sql: "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS arrived_by_guest integer NOT NULL DEFAULT 0" },
+  /* Set when the guest taps "I have it" rather than when a member of staff
+     marks the order collected. The status is the same either way; this is only
+     so the board can show which of the two happened. */
+  { name: "takeaway_orders.collected_by_guest", sql: "ALTER TABLE takeaway_orders ADD COLUMN IF NOT EXISTS collected_by_guest integer NOT NULL DEFAULT 0" },
 ];
 export async function migrateSchema(): Promise<void> { for (const step of STEPS) { try { await db.exec(step.sql); } catch (err) { console.error(`[schema] "${step.name}" did not apply:`, err instanceof Error ? err.message : err); } } }

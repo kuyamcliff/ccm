@@ -4,14 +4,15 @@ import type { Booking, TakeawayOrder } from "~/lib/api";
 import { ApiError } from "~/lib/http";
 import { useMutation, useQuery, usePoll, invalidate } from "~/lib/store";
 import { K } from "~/lib/keys";
-import { dayLabel, money, parseLines, timeLabel } from "~/lib/format";
+import { dayLabel, money, parseLines, timeLabel, todayISO } from "~/lib/format";
 import { Icon } from "~/ui/Icon";
-import { Action, LinkButton } from "~/ui/Button";
+import { Action, Button, IconButton, LinkButton } from "~/ui/Button";
 import { Segmented } from "~/ui/Field";
 import { Badge, Code, Money } from "~/ui/Bits";
 import { EmptyState, ErrorState, SkeletonRows } from "~/ui/Feedback";
 import { useConfirm } from "~/ui/Sheet";
 import { BookingPass } from "./BookingPass";
+import { ReceiptSheet } from "./ReceiptSheet";
 import { useToast } from "~/state/toast";
 import { useCopy } from "~/state/locale";
 
@@ -27,6 +28,12 @@ import { useCopy } from "~/state/locale";
  */
 
 type Tab = "tables" | "orders";
+
+/** Whether a booking is for today, which is the only day "I am here" makes
+    sense on. */
+function isToday(date: string): boolean {
+  return date === todayISO();
+}
 
 /** Statuses where the kitchen is still going to do something. */
 const LIVE = new Set(["awaiting_payment", "pending", "confirmed", "ready"]);
@@ -64,6 +71,24 @@ export function MinePage() {
         ]}
       />
 
+      {/*
+        * The way on from here, on both tabs.
+        *
+        * It used to appear only when the list was empty, which is exactly
+        * backwards: somebody with no bookings is not the person most likely to
+        * make one. The person looking at last week's table is. Quiet rather
+        * than red, because the list below is what this screen is for.
+        */}
+      {tab === "tables" ? (
+        <LinkButton to="/book" tone="quiet" size="sm" block icon="calendar">
+          {c.mine.bookAnother}
+        </LinkButton>
+      ) : (
+        <LinkButton to="/menu" tone="quiet" size="sm" block icon="list">
+          {c.mine.orderAgain}
+        </LinkButton>
+      )}
+
       {tab === "tables" ? <Tables /> : <Orders />}
     </div>
   );
@@ -78,6 +103,23 @@ function Tables() {
   const { confirm, element } = useConfirm();
 
   const { data, loading, error, reload } = useQuery(K.myBookings, () => api.booking.mine(), { staleMs: 30_000 });
+
+  const [receipt, setReceipt] = useState<Booking | null>(null);
+
+  /*
+   * Telling the restaurant you have arrived.
+   *
+   * Until now the only way a table became "arrived" was somebody on the door
+   * scanning the code, which misses every party that walks past a busy doorway
+   * and sits down. The console polls, so this puts the table in front of staff
+   * within the minute.
+   */
+  const arrive = useMutation(async (booking: Booking) => {
+    const result = await api.booking.arrived(booking.id);
+    invalidate(K.myBookings);
+    reload();
+    toast.done(result.already ? c.mine.arrivedAlready : c.mine.arrivedDone);
+  });
 
   const cancel = useMutation(async (booking: Booking) => {
     try {
@@ -147,6 +189,32 @@ function Tables() {
           {upcoming.map((booking) => (
             <div key={booking.id} className="stack stack--snug">
               <BookingPass booking={booking} />
+              <div className="bar bar--tight">
+                {/* Only once the table is actually held, and only on the day.
+                    An "I am here" button on a table booked for next Friday is
+                    a button that can only be pressed by mistake. */}
+                {booking.status === "confirmed" && !booking.checked_in_at && isToday(booking.date) ? (
+                  <Action
+                    tone="primary"
+                    size="sm"
+                    block
+                    icon="check"
+                    pending={arrive.pending}
+                    pendingLabel={c.pending.saving}
+                    onClick={async () => {
+                      await arrive.run(booking);
+                      const failure = arrive.readError();
+                      if (failure) toast.failed(failure, "load");
+                    }}
+                  >
+                    {c.mine.arrived}
+                  </Action>
+                ) : null}
+                <Button tone="quiet" size="sm" block icon="receipt" onClick={() => setReceipt(booking)}>
+                  {c.mine.viewReceipt}
+                </Button>
+              </div>
+
               {booking.status !== "cancelled" ? (
                 <Action
                   tone="quiet"
@@ -191,11 +259,23 @@ function Tables() {
                 <Badge tone={booking.status === "cancelled" ? "bad" : "neutral"}>
                   {c.mine.bookingStatus[booking.status]}
                 </Badge>
+                {/* Any booking, however old. There is no window on this: the
+                    receipt for a table somebody sat at in March is still their
+                    receipt. */}
+                <IconButton
+                  name="receipt"
+                  tone="ghost"
+                  size="sm"
+                  label={`${c.mine.viewReceipt}, ${dayLabel(booking.date)}`}
+                  onClick={() => setReceipt(booking)}
+                />
               </div>
             ))}
           </div>
         </section>
       ) : null}
+
+      <ReceiptSheet source={receipt ? { kind: "booking", booking: receipt } : null} onClose={() => setReceipt(null)} />
 
       {element}
     </div>
@@ -206,7 +286,25 @@ function Tables() {
 
 function Orders() {
   const { c } = useCopy();
+  const toast = useToast();
   const { data, loading, error, reload } = useQuery(K.myOrders, () => api.orders.mine(), { staleMs: 20_000 });
+
+  const [receipt, setReceipt] = useState<TakeawayOrder | null>(null);
+
+  /*
+   * The guest closes their own order.
+   *
+   * The last column of the kitchen board used to be somebody's job, and on a
+   * busy night it is the tap that does not happen: orders pile up on "ready"
+   * long after they have been handed over. The person who knows is the person
+   * holding the food.
+   */
+  const collect = useMutation(async (order: TakeawayOrder) => {
+    const result = await api.orders.collected(order.id);
+    invalidate(K.myOrders);
+    reload();
+    if (!result.already) toast.done(c.mine.collectedDone);
+  });
 
   const orders = data ?? [];
   const live = orders.filter((order) => LIVE.has(order.status));
@@ -242,7 +340,17 @@ function Orders() {
         <section className="stack">
           <h2 className="label">{c.mine.upcoming}</h2>
           {live.map((order) => (
-            <LiveOrder key={order.id} order={order} />
+            <LiveOrder
+              key={order.id}
+              order={order}
+              collecting={collect.pending}
+              onCollect={async () => {
+                await collect.run(order);
+                const failure = collect.readError();
+                if (failure) toast.failed(failure, "load");
+              }}
+              onReceipt={() => setReceipt(order)}
+            />
           ))}
         </section>
       ) : null}
@@ -263,11 +371,20 @@ function Orders() {
                   <span className="fine faint">{order.order_no}</span>
                 </span>
                 <Money value={order.total_fcfa} size="fine" />
+                <IconButton
+                  name="receipt"
+                  tone="ghost"
+                  size="sm"
+                  label={`${c.mine.viewReceipt}, ${order.order_no}`}
+                  onClick={() => setReceipt(order)}
+                />
               </div>
             ))}
           </div>
         </section>
       ) : null}
+
+      <ReceiptSheet source={receipt ? { kind: "order", order: receipt } : null} onClose={() => setReceipt(null)} />
     </div>
   );
 }
@@ -279,7 +396,17 @@ function Orders() {
  * and "on the fire" mean nothing on their own: what somebody wants to know is
  * how many steps are left before they can walk over.
  */
-function LiveOrder({ order }: { order: TakeawayOrder }) {
+function LiveOrder({
+  order,
+  collecting,
+  onCollect,
+  onReceipt,
+}: {
+  order: TakeawayOrder;
+  collecting: boolean;
+  onCollect: () => void;
+  onReceipt: () => void;
+}) {
   const { c } = useCopy();
   const stages: TakeawayOrder["status"][] = ["pending", "confirmed", "ready", "picked_up"];
   const reached = Math.max(0, stages.indexOf(order.status));
@@ -317,6 +444,28 @@ function LiveOrder({ order }: { order: TakeawayOrder }) {
       </div>
 
       {unpaid ? <Badge tone="warn">{c.order.payCash}</Badge> : null}
+
+      <div className="bar bar--tight">
+        {/* Only from "ready". An order cannot be collected before it has been
+            made, and skipping the board to the end would take a live order off
+            the kitchen's screen while it was still on the fire. */}
+        {order.status === "ready" ? (
+          <Action
+            tone="primary"
+            size="sm"
+            block
+            icon="check"
+            pending={collecting}
+            pendingLabel={c.pending.saving}
+            onClick={onCollect}
+          >
+            {c.mine.collected}
+          </Action>
+        ) : null}
+        <Button tone="quiet" size="sm" block icon="receipt" onClick={onReceipt}>
+          {c.mine.viewReceipt}
+        </Button>
+      </div>
     </div>
   );
 }

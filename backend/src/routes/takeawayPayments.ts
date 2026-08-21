@@ -34,7 +34,7 @@ takeawayPaymentsRouter.post("/:orderNo/pay", payLimit, async (req, res) => {
   const wallet = walletFor(walletId);
   if (!wallet || !wallet.configured()) { res.status(503).json({ error: `${walletId === "mtn_momo" ? "MTN Mobile Money" : "Orange Money"} is not available right now.` }); return; }
   const msisdn = wallet.toMsisdn(phone);
-  if (!msisdn) { res.status(400).json({ error: walletId === "orange_money" ? "Enter a valid Orange Money Cameroon number, starting with 69 or 655–659." : "Enter a valid 9 digit MTN number starting with 6." }); return; }
+  if (!msisdn) { res.status(400).json({ error: walletId === "orange_money" ? "Enter a valid Orange Money Cameroon number, starting with 69 or 655 to 659." : "Enter a valid 9 digit MTN number starting with 6." }); return; }
 
   const reference = `CCM-${randomUUID()}`;
   try { await db.prepare("UPDATE takeaway_orders SET momo_reference = ?, momo_phone = ?, payment_method = ?, payment_status = 'pending', pay_requested_at = now_text(), fail_reason = NULL, idempotency_key = ? WHERE id = ? AND user_id = ?").run(reference, `+${msisdn}`, walletId, idempotencyKey, order.id, req.user.id); }

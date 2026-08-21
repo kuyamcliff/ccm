@@ -456,13 +456,72 @@ takeawayRouter.get("/my-orders", async (req, res) => {
        * ever run, because the row it was written for never arrived.
        */
       `SELECT id, order_no, name, items_json, total_fcfa, discount_fcfa, pickup_time, status,
-              payment_status, paid_at, collected_at, created_at
+              payment_status, paid_at, collected_at, collected_by_guest, created_at
        FROM takeaway_orders
        WHERE user_id = ?
        ORDER BY created_at DESC LIMIT 20`
     )
     .all(userId);
   res.json({ orders });
+});
+
+/**
+ * The guest says they have their order.
+ *
+ * The kitchen board's last column used to be somebody's job: an order sat on
+ * "ready" until a member of staff remembered to tap it, which on a busy night
+ * is the tap that does not happen. The person who actually knows the order has
+ * been handed over is the person holding it, so let them say so.
+ *
+ * Only from "ready", and only their own order. Not from "pending": an order
+ * cannot be collected before it has been made, and letting somebody skip the
+ * board to the end would take a live order off the kitchen's screen while it
+ * was still on the fire.
+ *
+ * Paying is a separate question and is left alone here. A cash order collected
+ * but not yet marked paid stays unpaid, and the counter settles it with
+ * `mark-paid`. Letting this route close the money as well would mean a tap on a
+ * phone could tell the till it had been paid.
+ */
+takeawayRouter.post("/:id/collected", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) { res.status(400).json({ error: "Bad order id." }); return; }
+  if (!req.user) { res.status(401).json({ error: "Sign in first." }); return; }
+
+  const order = (await db
+    .prepare("SELECT id, user_id, status, collected_at FROM takeaway_orders WHERE id = ?")
+    .get(id)) as { id: number; user_id: number | null; status: string; collected_at: string | null } | undefined;
+
+  if (!order || order.user_id !== req.user.id) {
+    res.status(404).json({ error: "Order not found." });
+    return;
+  }
+
+  /* Already collected is a success. Same reason as arriving at a table: this
+     button lives on a phone at a counter and gets pressed twice. */
+  if (order.status === "picked_up") {
+    res.json({ ok: true, already: true });
+    return;
+  }
+  if (order.status !== "ready") {
+    res.status(409).json({ error: "That order is not ready yet." });
+    return;
+  }
+
+  await db
+    .prepare(
+      "UPDATE takeaway_orders SET status = 'picked_up', collected_at = now_text(), collected_by = 'guest', collected_by_guest = 1 WHERE id = ?"
+    )
+    .run(id);
+
+  audit(req, {
+    action: "takeaway.collected",
+    targetType: "takeaway_order",
+    targetId: id,
+    detail: "Guest confirmed collection",
+  });
+
+  res.json({ ok: true, already: false });
 });
 
 // ── Admin ────────────────────────────────────────────────

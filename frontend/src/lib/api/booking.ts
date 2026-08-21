@@ -128,7 +128,8 @@ export const bookingApi = {
     partySize: number;
     phone: string;
     note: string;
-    tableId: number | null;
+    /** Every table the guest picked. The first is the lead table. */
+    tableIds: number[];
     /** Food and drink to have ready. Priced by the server, never from here. */
     items?: { id: number; qty: number }[];
   }) => http.post<{ reservation: Booking }>("/api/reservations", input).then((r) => r.reservation),
@@ -147,6 +148,16 @@ export const bookingApi = {
 
   /** Clears a finished or cancelled booking off the guest's own list only. */
   hide: (id: number) => http.del<{ ok: true }>(`/api/reservations/${id}/hide`),
+
+  /**
+   * Tells the restaurant the guest is here.
+   *
+   * Answers `already: true` rather than failing when the booking was already
+   * checked in, because this button is pressed on a phone outside a door and
+   * it is going to be pressed twice.
+   */
+  arrived: (id: number) =>
+    http.post<{ ok: true; already: boolean }>(`/api/reservations/${id}/arrived`, {}),
 
   /**
    * Pushes a mobile-money PIN prompt to the guest's handset. Nothing is taken
