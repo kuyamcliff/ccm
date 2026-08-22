@@ -128,7 +128,7 @@ export function Money() {
                         <Action
                           size="sm"
                           tone="ghost"
-                          pending={setStatus.pending}
+                          pending={setStatus.pendingFor(payment.id)}
                           pendingLabel="Saving"
                           onClick={async () => {
                             const sure = await confirm({

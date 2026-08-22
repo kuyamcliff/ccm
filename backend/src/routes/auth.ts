@@ -20,6 +20,7 @@ import { generateAuthenticationOptions, verifyAuthenticationResponse } from "@si
 import type { AuthenticatorTransportFuture } from "@simplewebauthn/server";
 import { openCeremony, passkeyOrigin, passkeyRpId, sealCeremony } from "../lib/passkeys.js";
 import { openUserSession, revokeUserSession } from "../lib/userSessions.js";
+import { promoteIfDeveloper } from "../lib/bootstrapDeveloper.js";
 
 export const authRouter = Router();
 
@@ -134,9 +135,13 @@ authRouter.post("/register", registerLimit, async (req, res) => {
     .run(name, email, hash);
   const id = Number(info.lastInsertRowid);
 
+  /* If this is the account named in DEVELOPER_EMAIL, it becomes the developer
+     now rather than at the next restart. See `lib/bootstrapDeveloper.ts`. */
+  const promoted = await promoteIfDeveloper(email);
+
   const sid = await openUserSession(id, req);
   res.cookie(COOKIE_NAME, signSession(id, 1, sid), sessionCookieOptions());
-  res.status(201).json({ user: { id, name, email, role: "user" } });
+  res.status(201).json({ user: { id, name, email, role: promoted ? "developer" : "user" } });
 });
 
 authRouter.post("/login", loginIpLimit, loginEmailLimit, async (req, res) => {

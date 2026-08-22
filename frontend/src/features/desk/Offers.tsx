@@ -102,7 +102,7 @@ export function Offers() {
                     <Action
                       size="sm"
                       tone="quiet"
-                      pending={toggle.pending}
+                      pending={toggle.pendingFor(offer.id)}
                       pendingLabel="Saving"
                       onClick={() => void toggle.run(offer)}
                     >
@@ -140,7 +140,7 @@ export function Offers() {
             {draft && draft.id !== null ? (
               <Action
                 tone="quiet"
-                pending={remove.pending}
+                pending={remove.pendingFor(draft.id)}
                 pendingLabel="Deleting"
                 onClick={async () => {
                   const sure = await confirm({

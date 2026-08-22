@@ -384,7 +384,7 @@ export function Floor() {
                       <Action
                         size="sm"
                         tone="quiet"
-                        pending={removeTable.pending}
+                        pending={removeTable.pendingFor(selectedTable.id)}
                         pendingLabel="Removing"
                         onClick={async () => {
                           const sure = await confirm({
@@ -403,7 +403,7 @@ export function Floor() {
                     <Action
                       size="sm"
                       tone="quiet"
-                      pending={removeFixture.pending}
+                      pending={removeFixture.pendingFor(selected.id)}
                       pendingLabel="Removing"
                       onClick={() => void removeFixture.run(selected.id)}
                     >
@@ -425,7 +425,7 @@ export function Floor() {
                     key={kind}
                     size="sm"
                     tone="ghost"
-                    pending={addFixture.pending}
+                    pending={addFixture.pendingFor(kind)}
                     pendingLabel="Adding"
                     onClick={() => void addFixture.run(kind)}
                   >

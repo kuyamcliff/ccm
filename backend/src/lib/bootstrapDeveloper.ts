@@ -32,8 +32,9 @@ export async function bootstrapDeveloper(): Promise<void> {
       .get(email)) as { id: number; role: string } | undefined;
 
     if (!row) {
-      /* Not an error. The account is usually created after the first deploy, and
-         this runs on every boot, so it will catch up on the next restart. */
+      /* Not an error, and not a dead end either: `promoteIfDeveloper` below
+         catches the account the moment it is created, so nobody has to wait for
+         a restart that may not come for hours on a service that sleeps. */
       console.log(`[developer] no account for ${email} yet; nothing promoted`);
       return;
     }
@@ -46,5 +47,36 @@ export async function bootstrapDeveloper(): Promise<void> {
     /* Never stop the server booting over this. A missing developer is a screen
        somebody cannot open; a server that will not start is the whole site. */
     console.error("[developer] promotion failed", err);
+  }
+}
+
+/**
+ * The same promotion, at the moment an account appears.
+ *
+ * `bootstrapDeveloper` only runs at boot, and the ordinary sequence is the other
+ * way round: set the variable, deploy, *then* go and register the account. That
+ * left the new account an ordinary guest until something restarted the service,
+ * which on a plan that sleeps is whenever it happens to sleep.
+ *
+ * This grants nothing extra. The email still has to be the one in the
+ * environment, so the only way to become a developer is still to control the
+ * deployment. It only removes the wait.
+ *
+ * Deliberately quiet on failure: somebody's registration must not fail because
+ * a promotion did not, and the boot path will catch it next time either way.
+ */
+export async function promoteIfDeveloper(email: string): Promise<boolean> {
+  const wanted = DEVELOPER_EMAIL.trim().toLowerCase();
+  if (!wanted || wanted !== email.trim().toLowerCase()) return false;
+
+  try {
+    const info = await db
+      .prepare("UPDATE users SET role = 'developer' WHERE lower(email) = ? AND deleted_at IS NULL AND role <> 'developer'")
+      .run(wanted);
+    if (info.changes > 0) console.log(`[developer] promoted ${wanted} on sign up`);
+    return info.changes > 0;
+  } catch (err) {
+    console.error("[developer] promotion on sign up failed", err);
+    return false;
   }
 }

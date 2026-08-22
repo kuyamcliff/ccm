@@ -170,7 +170,7 @@ export function MenuAdmin() {
                         <Action
                           size="sm"
                           tone={item.sold_out === 1 ? "ghost" : "quiet"}
-                          pending={toggleSoldOut.pending}
+                          pending={toggleSoldOut.pendingFor(item.id)}
                           pendingLabel="Saving"
                           onClick={() => void toggleSoldOut.run(item)}
                         >
@@ -179,7 +179,7 @@ export function MenuAdmin() {
                         <Action
                           size="sm"
                           tone="quiet"
-                          pending={toggleActive.pending}
+                          pending={toggleActive.pendingFor(item.id)}
                           pendingLabel="Saving"
                           onClick={() => void toggleActive.run(item)}
                         >
@@ -222,7 +222,7 @@ export function MenuAdmin() {
             {draft?.id !== null && draft ? (
               <Action
                 tone="quiet"
-                pending={remove.pending}
+                pending={remove.pendingFor(draft.id)}
                 pendingLabel="Deleting"
                 onClick={async () => {
                   const sure = await confirm({

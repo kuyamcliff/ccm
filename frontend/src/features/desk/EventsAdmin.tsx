@@ -2,7 +2,7 @@ import { api } from "~/lib/api";
 import { useMutation, useQuery, invalidate } from "~/lib/store";
 import { K } from "~/lib/keys";
 import { dayLabel, phoneLabel, timeAgo, timeLabel } from "~/lib/format";
-import { Action, Button } from "~/ui/Button";
+import { Action } from "~/ui/Button";
 import { useConfirm } from "~/ui/Sheet";
 import { Icon } from "~/ui/Icon";
 import { DeskPage, Loaded, Nothing, State, TableWrap } from "./parts";
@@ -106,7 +106,7 @@ export function EventsAdmin() {
                           <Action
                             size="sm"
                             tone="ghost"
-                            pending={setStatus.pending}
+                            pending={setStatus.pendingFor(enquiry.id)}
                             pendingLabel="Saving"
                             onClick={() => void setStatus.run({ id: enquiry.id, status: "confirmed" })}
                           >
@@ -117,16 +117,17 @@ export function EventsAdmin() {
                           <Action
                             size="sm"
                             tone="quiet"
-                            pending={setStatus.pending}
+                            pending={setStatus.pendingFor(enquiry.id)}
                             pendingLabel="Saving"
                             onClick={() => void setStatus.run({ id: enquiry.id, status: "cancelled" })}
                           >
                             Decline
                           </Action>
                         ) : (
-                          <Button
+                          <Action
                             size="sm"
                             tone="quiet"
+                            pending={remove.pendingFor(enquiry.id)}
                             onClick={async () => {
                               const sure = await confirm({
                                 title: `Delete ${enquiry.name}'s enquiry?`,
@@ -137,7 +138,7 @@ export function EventsAdmin() {
                             }}
                           >
                             <Icon name="trash" size={14} />
-                          </Button>
+                          </Action>
                         )}
                       </div>
                     </td>

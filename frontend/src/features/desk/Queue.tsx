@@ -2,7 +2,7 @@ import { api } from "~/lib/api";
 import { useMutation, useQuery, usePoll, invalidate } from "~/lib/store";
 import { K } from "~/lib/keys";
 import { phoneLabel, timeAgo } from "~/lib/format";
-import { Action, Button } from "~/ui/Button";
+import { Action } from "~/ui/Button";
 import { useConfirm } from "~/ui/Sheet";
 import { Icon } from "~/ui/Icon";
 import { DeskPage, Loaded, Nothing, State } from "./parts";
@@ -104,7 +104,7 @@ export function Queue() {
                         <Action
                           size="sm"
                           tone="primary"
-                          pending={setStatus.pending}
+                          pending={setStatus.pendingFor(entry.id)}
                           pendingLabel="Sending"
                           onClick={() =>
                             void setStatus.run({ id: entry.id, status: "notified", said: "Told them." })
@@ -116,15 +116,17 @@ export function Queue() {
                       <Action
                         size="sm"
                         tone="ghost"
-                        pending={setStatus.pending}
+                        pending={setStatus.pendingFor(entry.id)}
                         pendingLabel="Saving"
                         onClick={() => void setStatus.run({ id: entry.id, status: "seated", said: "Seated." })}
                       >
                         Seated
                       </Action>
-                      <Button
+                      <Action
                         size="sm"
                         tone="quiet"
+                        pending={setStatus.pendingFor(entry.id)}
+                        pendingLabel="Saving"
                         onClick={async () => {
                           const sure = await confirm({
                             title: `Take ${entry.name} off the list?`,
@@ -136,7 +138,7 @@ export function Queue() {
                         }}
                       >
                         Gone
-                      </Button>
+                      </Action>
                     </div>
                   </div>
                 ))}
