@@ -70,5 +70,7 @@ export const K = {
     errors: "dev.errors",
     flags: "dev.flags",
     database: "dev.database",
+    traffic: "dev.traffic",
+    limits: "dev.limits",
   },
 } as const;

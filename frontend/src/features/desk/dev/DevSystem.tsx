@@ -1,7 +1,11 @@
+import { useState } from "react";
 import { api } from "~/lib/api";
-import { useQuery, usePoll } from "~/lib/store";
+import { useMutation, useQuery, usePoll } from "~/lib/store";
 import { K } from "~/lib/keys";
 import { Icon } from "~/ui/Icon";
+import { Action } from "~/ui/Button";
+import { Notice } from "~/ui/Feedback";
+import { useToast } from "~/state/toast";
 import { DeskPage, Loaded, Section, State, StatTile, Stats } from "../parts";
 
 /**
@@ -35,6 +39,14 @@ const INTEGRATION_LABEL: Record<string, { label: string; why: string }> = {
 
 export function DevSystem() {
   const health = useQuery(K.dev.health, () => api.desk.dev.health(), { staleMs: 10_000 });
+
+  const toast = useToast();
+  const [swept, setSwept] = useState<{ day_before: number; three_hours: number } | null>(null);
+
+  const sweep = useMutation(async () => {
+    const result = await api.desk.dev.runReminders();
+    setSwept(result.sent);
+  });
   usePoll(() => health.reload(), 30_000);
 
   return (
@@ -97,6 +109,46 @@ export function DevSystem() {
                   );
                 })}
               </div>
+            </Section>
+
+            {/*
+              * Reminders are the one thing here nobody can tell is working by
+              * looking at the site: they either go out at three in the morning
+              * or they silently do not. Proving it used to mean curl and the
+              * shared secret. This runs the same sweep the scheduler runs and
+              * reports exactly what went.
+              *
+              * Safe to press twice. The sweep drops any booking that already
+              * has a notification row for that template, so a second run in
+              * the same window sends nothing and reports zero.
+              */}
+            <Section
+              title="Reminders"
+              hint="Runs the sweep now, exactly as the scheduler would. Pressing it twice sends nothing the second time."
+            >
+              <Action
+                tone="quiet"
+                size="sm"
+                block
+                icon="send"
+                pending={sweep.pending}
+                pendingLabel="Sweeping"
+                onClick={async () => {
+                  await sweep.run();
+                  const failure = sweep.readError();
+                  if (failure) toast.failed(failure, "desk");
+                }}
+              >
+                Run the sweep now
+              </Action>
+
+              {swept ? (
+                <Notice tone={swept.day_before + swept.three_hours > 0 ? "good" : "info"}>
+                  {swept.day_before + swept.three_hours === 0
+                    ? "Nothing was due, or everybody due had already been told. Both are a working sweep."
+                    : `Sent ${swept.day_before} day-before and ${swept.three_hours} three-hour reminders. Desk > Reminders has the detail.`}
+                </Notice>
+              ) : null}
             </Section>
           </>
         )}

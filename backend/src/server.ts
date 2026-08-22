@@ -29,6 +29,7 @@ import { bootstrapRouter } from "./routes/bootstrap.js";
 import { cronRouter } from "./routes/cron.js";
 import { devRouter } from "./routes/dev.js";
 import { recordError } from "./lib/errorLog.js";
+import { recordRequest } from "./lib/traffic.js";
 import { loyaltyRouter } from "./routes/loyalty.js";
 import { promosRouter } from "./routes/promos.js";
 import { offersRouter } from "./routes/offers.js";
@@ -58,7 +59,23 @@ app.disable("x-powered-by");
 app.set("etag", "strong");
 app.use(securityHeaders);
 app.use(compression());
-app.use((req, res, next) => { const start = Date.now(); res.on("finish", () => console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`)); next(); });
+/* One timer, two readers: the platform's log, and the in-memory telemetry the
+   developer screen reads. `req.route` is only populated once a router has
+   matched, which is why it is read inside the finish handler and falls back to
+   the path: a 404 never reaches a route and still deserves counting. */
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    const ms = Date.now() - start;
+    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms`);
+    const pattern = req.route?.path;
+    const route = typeof pattern === "string" && pattern.length > 0
+      ? `${req.baseUrl}${pattern === "/" ? "" : pattern}`
+      : req.originalUrl;
+    recordRequest({ method: req.method, route, status: res.statusCode, ms });
+  });
+  next();
+});
 app.use("/uploads", express.static(UPLOAD_DIR, { immutable: true, maxAge: "365d", index: false, dotfiles: "deny", setHeaders: (res) => res.setHeader("X-Content-Type-Options", "nosniff") }));
 app.use(express.json({ limit: "12mb", verify: (req, _res, buf) => { if (req.url?.startsWith("/api/payments/webhook/")) (req as express.Request & { rawBody?: Buffer }).rawBody = buf; } }));
 app.use(cookieParser());

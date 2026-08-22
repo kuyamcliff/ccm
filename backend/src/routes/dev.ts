@@ -13,6 +13,9 @@ import { openUserSession } from "../lib/userSessions.js";
 import { messagingAvailable } from "../lib/notify.js";
 import { CRON_SECRET, FRONTEND_URL, IS_PROD } from "../config.js";
 import { walletFor } from "../lib/wallets.js";
+import { resetTraffic, trafficSnapshot } from "../lib/traffic.js";
+import { limitBuckets, limitSnapshot, resetLimit } from "../middleware/security.js";
+import { runReminderSweep } from "../lib/reminderSweep.js";
 
 export const devRouter = Router();
 
@@ -194,6 +197,168 @@ devRouter.get("/database", async (_req, res) => {
 });
 
 /* ── Becoming somebody else ─────────────────────────────────────────────────*/
+
+/* ── Traffic ────────────────────────────────────────────────────────────────*/
+
+/**
+ * What the server has been doing, and which parts of it are slow.
+ *
+ * The counterpart to `/errors`: that one answers "what broke", this one answers
+ * the question that usually comes first and is much harder to get at from a
+ * phone. See `lib/traffic.ts` for why it is in memory and what it deliberately
+ * does not keep.
+ */
+devRouter.get("/traffic", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json(trafficSnapshot());
+});
+
+/** A clean window before reproducing something. Nothing is lost that was not
+    already going to be lost at the next restart. */
+devRouter.delete("/traffic", (req, res) => {
+  resetTraffic();
+  audit(req, { action: "dev.traffic.reset", targetType: "system" });
+  res.json({ ok: true });
+});
+
+/* ── Who is throttled ───────────────────────────────────────────────────────*/
+
+devRouter.get("/limits", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ buckets: limitBuckets(), entries: limitSnapshot() });
+});
+
+/**
+ * Letting somebody back in early.
+ *
+ * The rate limiters are doing their job when they lock an account out, and the
+ * job they are doing is worth keeping; what was missing was a way to undo it
+ * for the person who mistyped their own password five times. Audited, because
+ * clearing a login limiter is genuinely a security-relevant act: it is the one
+ * thing here that makes an attack easier rather than harder, and a record of who
+ * did it and for whom is the price of having the button at all.
+ */
+devRouter.delete("/limits/:bucket", (req, res) => {
+  const bucket = String(req.params.bucket ?? "");
+  const key = String(req.query.key ?? "");
+
+  if (!bucket || !key) {
+    res.status(400).json({ error: "Name the limiter and the key to clear." });
+    return;
+  }
+  if (!limitBuckets().includes(bucket)) {
+    res.status(404).json({ error: "No limiter by that name." });
+    return;
+  }
+
+  resetLimit(bucket, key);
+  audit(req, {
+    action: "dev.limit.cleared",
+    targetType: "rate_limit",
+    targetId: bucket,
+    detail: `Cleared ${bucket} for ${key}`,
+  });
+  res.json({ ok: true });
+});
+
+/* ── The money, end to end ──────────────────────────────────────────────────*/
+
+/**
+ * One payment, and everything that ever happened to it.
+ *
+ * `payment_events` is append-only by design: a correction is another row, and
+ * `payments.status` is a cache of the last one. That is the right shape and it
+ * has been unreadable from anywhere but psql, which is a problem, because a
+ * disputed payment is the highest-stakes question this business can be asked
+ * and "the money left my account" deserves a better answer than a shrug.
+ *
+ * Looked up by the reference the customer was shown, because that is the string
+ * they will read out over the phone.
+ */
+devRouter.get("/payments/:reference", async (req, res) => {
+  const reference = String(req.params.reference ?? "").trim();
+  if (!reference) {
+    res.status(400).json({ error: "Give a payment reference." });
+    return;
+  }
+
+  const payment = (await db
+    .prepare(
+      `SELECT p.id, p.reference, p.status, p.type, p.method, p.amount_fcfa, p.discount_fcfa,
+              p.gift_fcfa, p.points_spent, p.momo_phone, p.momo_transaction_id,
+              p.idempotency_key, p.created_at, p.updated_at,
+              p.reservation_id, p.user_id,
+              u.name AS user_name, u.email AS user_email,
+              r.date AS booking_date, r.time AS booking_time, r.status AS booking_status,
+              r.ccm_code AS booking_code
+         FROM payments p
+         LEFT JOIN users u ON u.id = p.user_id
+         LEFT JOIN reservations r ON r.id = p.reservation_id
+        WHERE p.reference = ?`
+    )
+    .get(reference)) as (Record<string, unknown> & { id: number }) | undefined;
+
+  if (!payment) {
+    /* Takeaway keeps its own money on the order rather than in `payments`, so a
+       reference that is not here may still be a real one. Saying so beats a
+       flat "not found" that sends somebody looking in the wrong place. */
+    const order = (await db
+      .prepare(
+        `SELECT id, order_no, status, payment_status, payment_method, total_fcfa,
+                discount_fcfa, momo_reference, momo_transaction_id, paid_at, created_at
+           FROM takeaway_orders
+          WHERE momo_reference = ? OR order_no = ?`
+      )
+      .get(reference, reference)) as Record<string, unknown> | undefined;
+
+    if (order) {
+      res.json({ kind: "takeaway", order, events: [] });
+      return;
+    }
+
+    res.status(404).json({ error: "No payment or order with that reference." });
+    return;
+  }
+
+  const events = await db
+    .prepare(
+      `SELECT id, status, source, provider_event_id, detail, created_at
+         FROM payment_events WHERE payment_id = ? ORDER BY id ASC`
+    )
+    .all(payment.id);
+
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ kind: "payment", payment, events });
+});
+
+/* ── Running the reminder sweep by hand ─────────────────────────────────────*/
+
+/**
+ * The same sweep the scheduler runs, on demand.
+ *
+ * Reminders are the one thing in this product nobody can tell is working by
+ * looking at the site: they either go out at three in the morning or they
+ * silently do not, and the only way to find out used to be to wait a night or
+ * to reach for curl and the shared secret.
+ *
+ * Safe to press twice. The sweep drops any booking that already has a row in
+ * `notifications` for that template, so a second run inside the same window
+ * sends nothing and says so by reporting zero.
+ */
+devRouter.post("/reminders/run", async (req, res) => {
+  try {
+    const sent = await runReminderSweep();
+    audit(req, {
+      action: "dev.reminders.run",
+      targetType: "system",
+      detail: `Sent ${sent.day_before} day-before and ${sent.three_hours} three-hour reminders`,
+    });
+    res.json({ ok: true, sent });
+  } catch (err) {
+    console.error("[dev] manual reminder sweep failed", err);
+    res.status(500).json({ error: "The sweep failed. The errors screen will have the reference." });
+  }
+});
 
 /**
  * Signing in as another account, to see exactly what they see.

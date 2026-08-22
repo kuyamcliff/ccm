@@ -1,5 +1,5 @@
 import { http } from "../http";
-import type { AdminScope, AuditEntry, DevError, DevHealth, DeskNotification, User, DeskAnalytics, DeskBooking, DeskOrder, DeskPayment, DeskReceipt, DeskStats, DeskTable, DeskUser, DiningTable, EventEnquiry, EventType, FixtureKind, FloorFixture, GalleryPhoto, GiftCard, LegalPage, LoyaltyLedgerEntry, MenuItem, Offer, PromoCode, Review, ScopeInfo, SiteSettings, StaffAccess, TranslationReport, VerifiedBooking, VerifiedOrder, VerifyResult, WaitlistEntry } from "./types";
+import type { AdminScope, AuditEntry, DevError, DevHealth, DevLimit, DevPaymentTrail, DevTraffic, DeskNotification, User, DeskAnalytics, DeskBooking, DeskOrder, DeskPayment, DeskReceipt, DeskStats, DeskTable, DeskUser, DiningTable, EventEnquiry, EventType, FixtureKind, FloorFixture, GalleryPhoto, GiftCard, LegalPage, LoyaltyLedgerEntry, MenuItem, Offer, PromoCode, Review, ScopeInfo, SiteSettings, StaffAccess, TranslationReport, VerifiedBooking, VerifiedOrder, VerifyResult, WaitlistEntry } from "./types";
 
 export const deskApi = {
   stats: () => http.get<DeskStats>("/api/admin/stats"),
@@ -47,6 +47,27 @@ export const deskApi = {
         with a 403, so the role in this response is always "user". */
     impersonate: (userId: number) =>
       http.post<{ ok: true; user: User }>("/api/dev/impersonate", { user_id: userId }),
+
+    /** Per-route timings and the slowest recent requests. In memory on the
+        server, so it starts empty after a restart and says so. */
+    traffic: () => http.get<DevTraffic>("/api/dev/traffic"),
+    clearTraffic: () => http.del<{ ok: true }>("/api/dev/traffic"),
+
+    /** Who is currently being throttled, and by which limiter. */
+    limits: () => http.get<{ buckets: string[]; entries: DevLimit[] }>("/api/dev/limits"),
+    clearLimit: (bucket: string, key: string) =>
+      http.del<{ ok: true }>(`/api/dev/limits/${encodeURIComponent(bucket)}?key=${encodeURIComponent(key)}`),
+
+    /** One payment and its whole append-only event chain, by the reference the
+        customer was shown. Falls back to a takeaway order for a reference that
+        belongs to one, since those keep their money on the order. */
+    payment: (reference: string) =>
+      http.get<DevPaymentTrail>(`/api/dev/payments/${encodeURIComponent(reference)}`),
+
+    /** The reminder sweep, by hand. Safe to press twice: an already-reminded
+        booking is dropped by the sweep's own deduplication. */
+    runReminders: () =>
+      http.post<{ ok: true; sent: { day_before: number; three_hours: number } }>("/api/dev/reminders/run", {}),
   },
 
   /** What the reminder sweep has actually sent. */
