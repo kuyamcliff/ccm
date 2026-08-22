@@ -7,7 +7,7 @@ import { checkPassword, passwordScore } from "~/lib/passwordStrength";
 import { addPasskey, passkeysSupported } from "~/lib/passkey";
 import { money, stampLabel, timeAgo } from "~/lib/format";
 import { Icon, type IconName } from "~/ui/Icon";
-import { Action, Button, IconButton } from "~/ui/Button";
+import { Action, Button, IconButton, LinkButton } from "~/ui/Button";
 import { TextField, PasswordField, Segmented } from "~/ui/Field";
 import { Sheet, useConfirm } from "~/ui/Sheet";
 import { Badge, Meter, Money } from "~/ui/Bits";
@@ -53,8 +53,77 @@ export function AccountPage() {
         ]}
       />
 
+      {/* Above the tabs, because it is not one of the three jobs those tabs are
+          for and because somebody signing in to work should not have to guess
+          which tab their console is filed under. */}
+      <StaffPanel />
+
       {tab === "profile" ? <Profile /> : tab === "security" ? <Security /> : <Rewards />}
     </div>
+  );
+}
+
+/**
+ * The way into the console, for whoever has one.
+ *
+ * Staff already get a Desk button in the top bar, which is right for somebody
+ * mid-shift and useless for somebody who has just signed in on their own phone
+ * and is looking at their account. This is where a person looks when they are
+ * asking "what am I allowed to do here", so this is where it says so.
+ *
+ * The wording names the role rather than the place. "Desk" means nothing until
+ * somebody has been shown it once; "Owner panel" tells them what they are, and
+ * what they get is different enough between the tiers to be worth naming:
+ * an admin sees a service console, an owner also sees the money and the staff,
+ * a developer also sees the machinery.
+ *
+ * Nothing here is access control. Every one of these routes checks the role
+ * again on the way in and the server checks it a third time; this only stops a
+ * guest being shown a door that would not open.
+ */
+function StaffPanel() {
+  const { c } = useCopy();
+  const { isStaff, isTopOwner, isDeveloper } = useSession();
+
+  if (!isStaff) return null;
+
+  /* Ranked, so the highest role a person holds is the one named. `isTopOwner`
+     is true for a developer too, hence the order. */
+  const title = isDeveloper
+    ? c.account.panelDeveloper
+    : isTopOwner
+      ? c.account.panelOwner
+      : c.account.panelAdmin;
+
+  const body = isDeveloper
+    ? c.account.panelDeveloperBody
+    : isTopOwner
+      ? c.account.panelOwnerBody
+      : c.account.panelAdminBody;
+
+  return (
+    <section className="carry panel-in">
+      <div className="stack stack--tight">
+        <span className="label hot">{title}</span>
+        <p className="fine muted">{body}</p>
+      </div>
+
+      <div className="bar bar--tight bar--wrap">
+        <LinkButton to="/desk" tone="primary" size="sm" block iconEnd="arrow-right">
+          {c.account.panelEnter}
+        </LinkButton>
+
+        {/* Only a developer, and only as a second door: the console rail already
+            carries this group for them. It is here because the machinery is the
+            reason the role exists, and a developer signing in to look at an
+            error should not have to go through Overview to get to it. */}
+        {isDeveloper ? (
+          <LinkButton to="/desk/dev" tone="quiet" size="sm" block icon="terminal">
+            {c.account.devTools}
+          </LinkButton>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

@@ -972,6 +972,20 @@
   border-color: var(--warn, var(--text-3));
 }
 
+/* ══ The way into the console ══════════════════════════════════════════════
+ *
+ * One of the few raised surfaces in the product, and it earns it the same way
+ * the booking pass does: it is a thing that belongs to you and gets you through
+ * a door. Only staff ever see it.
+ */
+
+.panel-in {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  border-color: var(--red-line);
+}
+
 /* ══ The receipt sheet ═════════════════════════════════════════════════════
  *
  * The whole receipt, in a sheet, so the list behind it can stay as rows. Every
