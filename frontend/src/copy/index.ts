@@ -357,6 +357,17 @@ export const EN = {
     profile: "Profile",
     security: "Security",
     rewards: "Rewards",
+    /* The way into the console, for whoever has one. The word names the role
+       rather than the place, because "Desk" means nothing until you have been
+       shown it once and "Owner panel" tells somebody what they are. */
+    panelAdmin: "Admin panel",
+    panelOwner: "Owner panel",
+    panelDeveloper: "Developer panel",
+    panelEnter: "Open it",
+    panelAdminBody: "Bookings, orders, the door and the floor.",
+    panelOwnerBody: "Everything the admins have, plus the takings, the staff and the site itself.",
+    panelDeveloperBody: "Everything the owner has, plus health, errors, flags and the database.",
+    devTools: "Developer tools",
     name: "Name",
     email: "Email",
     changeEmail: "Change email",
@@ -847,6 +858,14 @@ export const FR: Copy = {
 
   account: {
     title: "Vous",
+    panelAdmin: "Panneau admin",
+    panelOwner: "Panneau propriétaire",
+    panelDeveloper: "Panneau développeur",
+    panelEnter: "Ouvrir",
+    panelAdminBody: "Réservations, commandes, l'entrée et la salle.",
+    panelOwnerBody: "Tout ce qu'ont les admins, plus les recettes, le personnel et le site.",
+    panelDeveloperBody: "Tout ce qu'a le propriétaire, plus l'état, les erreurs, les options et la base.",
+    devTools: "Outils développeur",
     profile: "Profil",
     security: "Sécurité",
     rewards: "Récompenses",
