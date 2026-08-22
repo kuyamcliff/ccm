@@ -11,6 +11,7 @@ import { Segmented } from "~/ui/Field";
 import { Badge, Code, Money } from "~/ui/Bits";
 import { EmptyState, ErrorState, SkeletonRows } from "~/ui/Feedback";
 import { useConfirm } from "~/ui/Sheet";
+import { PaySheet, type PaymentDriver } from "~/features/pay/PaySheet";
 import { BookingPass } from "./BookingPass";
 import { ReceiptSheet } from "./ReceiptSheet";
 import { useToast } from "~/state/toast";
@@ -199,7 +200,7 @@ function Tables() {
                     size="sm"
                     block
                     icon="check"
-                    pending={arrive.pending}
+                    pending={arrive.pendingFor(booking.id)}
                     pendingLabel={c.pending.saving}
                     onClick={async () => {
                       await arrive.run(booking);
@@ -220,7 +221,7 @@ function Tables() {
                   tone="quiet"
                   size="sm"
                   block
-                  pending={cancel.pending}
+                  pending={cancel.pendingFor(booking.id)}
                   pendingLabel={c.pending.cancelling}
                   onClick={async () => {
                     const sure = await confirm({
@@ -292,6 +293,29 @@ function Orders() {
   const [receipt, setReceipt] = useState<TakeawayOrder | null>(null);
 
   /*
+   * The order being paid for, if any.
+   *
+   * One sheet for the whole list rather than one per row: only one order can be
+   * being paid for at a time, and mounting a payment sheet per row would mean
+   * several idempotency keys alive at once.
+   */
+  const [paying, setPaying] = useState<TakeawayOrder | null>(null);
+
+  /* The same driver the checkout uses, pointed at whichever order is open. */
+  const driver: PaymentDriver = {
+    allowDiscounts: false,
+    start: ({ momoPhone, wallet, idempotencyKey }) =>
+      api.orders.pay(paying!.order_no, momoPhone, wallet, idempotencyKey).then((result) => ({
+        reference: result.reference,
+        amount_fcfa: result.amount_fcfa,
+        expires_in_seconds: result.expires_in_seconds,
+        payment_url: result.payment_url,
+      })),
+    poll: (reference) => api.orders.paymentStatus(reference),
+    abandon: (reference) => api.orders.abandonPayment(reference),
+  };
+
+  /*
    * The guest closes their own order.
    *
    * The last column of the kitchen board used to be somebody's job, and on a
@@ -350,6 +374,7 @@ function Orders() {
                 if (failure) toast.failed(failure, "load");
               }}
               onReceipt={() => setReceipt(order)}
+              onPay={() => setPaying(order)}
             />
           ))}
         </section>
@@ -385,6 +410,22 @@ function Orders() {
       ) : null}
 
       <ReceiptSheet source={receipt ? { kind: "order", order: receipt } : null} onClose={() => setReceipt(null)} />
+
+      {paying ? (
+        <PaySheet
+          open
+          onClose={() => setPaying(null)}
+          onPaid={() => {
+            setPaying(null);
+            invalidate(K.myOrders);
+            reload();
+          }}
+          amountFcfa={paying.total_fcfa}
+          title={c.pay.title}
+          what={paying.order_no}
+          driver={driver}
+        />
+      ) : null}
     </div>
   );
 }
@@ -401,16 +442,40 @@ function LiveOrder({
   collecting,
   onCollect,
   onReceipt,
+  onPay,
 }: {
   order: TakeawayOrder;
   collecting: boolean;
   onCollect: () => void;
   onReceipt: () => void;
+  onPay: () => void;
 }) {
   const { c } = useCopy();
   const stages: TakeawayOrder["status"][] = ["pending", "confirmed", "ready", "picked_up"];
-  const reached = Math.max(0, stages.indexOf(order.status));
-  const unpaid = order.payment_status !== "paid" && order.status !== "awaiting_payment";
+  /* -1, not 0, for a status that is not on the track at all. `awaiting_payment`
+     comes before the first step, and clamping it to zero lit "with the kitchen"
+     on an order nobody has been paid for and nobody has started cooking. */
+  const reached = stages.indexOf(order.status);
+
+  /*
+   * Money still owed on this order, whichever way it got here.
+   *
+   * Two ways an order arrives unpaid, and the screen used to handle neither.
+   *
+   * `awaiting_payment` is somebody who closed the wallet sheet halfway. The
+   * checkout's own parting message tells them to come here and settle it, and
+   * this was the row it meant, but the old `unpaid` deliberately excluded that
+   * status, so the one order that most needed a Pay button was the one that
+   * could never show one.
+   *
+   * A `cash` order is the other: chosen to pay at the counter, and perfectly
+   * entitled to change its mind and pay from the phone before collecting.
+   *
+   * Either way what matters is the same thing, so it is one question now: is
+   * there money on this order that has not been taken?
+   */
+  const owes = order.payment_status !== "paid" && order.total_fcfa > 0 && order.status !== "cancelled";
+  const cashAtCounter = owes && order.status !== "awaiting_payment";
 
   return (
     <div className="carry order-live">
@@ -443,7 +508,15 @@ function LiveOrder({
         <Money value={order.total_fcfa} size="fine" />
       </div>
 
-      {unpaid ? <Badge tone="warn">{c.order.payCash}</Badge> : null}
+      {cashAtCounter ? <Badge tone="warn">{c.order.payCash}</Badge> : null}
+
+      {/* Red, because it is the thing to press: this order is not paid for and
+          nothing else on the row moves until it is. */}
+      {owes ? (
+        <Button tone="primary" size="sm" block icon="wallet" onClick={onPay}>
+          {c.pay.send}
+        </Button>
+      ) : null}
 
       <div className="bar bar--tight">
         {/* Only from "ready". An order cannot be collected before it has been

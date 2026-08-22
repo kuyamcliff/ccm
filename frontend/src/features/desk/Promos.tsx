@@ -136,16 +136,18 @@ export function Promos() {
                         <Action
                           size="sm"
                           tone="quiet"
-                          pending={setActive.pending}
+                          pending={setActive.pendingFor(promo.id)}
                           pendingLabel="Saving"
                           onClick={() => void setActive.run({ id: promo.id, active: promo.is_active === 0 })}
                         >
                           {promo.is_active === 1 ? "Retire" : "Bring back"}
                         </Action>
                         {promo.uses_count === 0 ? (
-                          <Button
+                          <Action
                             size="sm"
                             tone="quiet"
+                            pending={remove.pendingFor(promo.id)}
+                            pendingLabel="Deleting"
                             onClick={async () => {
                               const sure = await confirm({
                                 title: `Delete ${promo.code}?`,
@@ -157,7 +159,7 @@ export function Promos() {
                             }}
                           >
                             Delete
-                          </Button>
+                          </Action>
                         ) : null}
                       </div>
                     </td>

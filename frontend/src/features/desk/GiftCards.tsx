@@ -119,7 +119,7 @@ export function GiftCards() {
                         <Action
                           size="sm"
                           tone="quiet"
-                          pending={toggle.pending}
+                          pending={toggle.pendingFor(card.id)}
                           pendingLabel="Saving"
                           onClick={() => void toggle.run(card.id)}
                         >

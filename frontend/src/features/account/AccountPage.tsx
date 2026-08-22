@@ -115,6 +115,11 @@ function Profile() {
     toast.done("Email saved.");
   });
 
+  const leaving = useMutation(async () => {
+    await signOut();
+    navigate("/", { replace: true });
+  });
+
   const close = useMutation(async () => {
     await api.me.closeAccount(closePassword);
     await signOut();
@@ -217,18 +222,25 @@ function Profile() {
       </Group>
 
       <Group title="Signing out">
-        <Button
+        {/* Signing out is a request to the server, not a local flag: the session
+            cookie has to be cleared at the other end. On a slow connection that
+            is a second or two of a button that used to look like it had not
+            been pressed. */}
+        <Action
           tone="ghost"
           size="sm"
           icon="logout"
           block
+          pending={leaving.pending}
+          pendingLabel={c.pending.signingOut}
           onClick={async () => {
-            await signOut();
-            navigate("/", { replace: true });
+            await leaving.run();
+            const error = leaving.readError();
+            if (error) toast.failed(error, "load");
           }}
         >
           {c.account.signOut}
-        </Button>
+        </Action>
       </Group>
 
       <Group title={c.account.closeAccount} hint={c.account.closeBody}>
@@ -478,7 +490,7 @@ function Security() {
                   name="trash"
                   label={`Remove ${key.display_name}`}
                   size="sm"
-                  pending={dropPasskey.pending}
+                  pending={dropPasskey.pendingFor(key.id)}
                   onClick={async () => {
                     const sure = await confirm({
                       title: "Remove this passkey?",
@@ -537,7 +549,7 @@ function Security() {
                     name="logout"
                     label={`Sign out ${entry.device_name}`}
                     size="sm"
-                    pending={endSession.pending}
+                    pending={endSession.pendingFor(entry.id)}
                     onClick={() => void endSession.run(entry.id)}
                   />
                 )}

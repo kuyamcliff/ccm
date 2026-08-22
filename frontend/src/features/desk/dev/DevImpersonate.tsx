@@ -95,7 +95,7 @@ export function DevImpersonate() {
                     <Action
                       size="sm"
                       tone="quiet"
-                      pending={become.pending}
+                      pending={become.pendingFor(guest.id)}
                       pendingLabel="Switching"
                       onClick={async () => {
                         const sure = await confirm({

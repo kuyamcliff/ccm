@@ -116,7 +116,7 @@ export function ReviewsAdmin() {
                         <Action
                           size="sm"
                           tone="quiet"
-                          pending={dropReply.pending}
+                          pending={dropReply.pendingFor(review.id)}
                           pendingLabel="Removing"
                           onClick={() => void dropReply.run(review.id)}
                         >
@@ -135,9 +135,11 @@ export function ReviewsAdmin() {
                         >
                           Reply
                         </Button>
-                        <Button
+                        <Action
                           size="sm"
                           tone="quiet"
+                          pending={remove.pendingFor(review.id)}
+                          pendingLabel="Deleting"
                           onClick={async () => {
                             const sure = await confirm({
                               title: "Delete this review?",
@@ -149,7 +151,7 @@ export function ReviewsAdmin() {
                           }}
                         >
                           Delete
-                        </Button>
+                        </Action>
                       </div>
                     )}
                   </div>

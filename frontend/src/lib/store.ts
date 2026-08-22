@@ -311,6 +311,23 @@ export interface Mutation<Args extends unknown[], Result> {
    * compile.
    */
   pending: boolean;
+  /**
+   * Whether *this row's* request is in flight.
+   *
+   * `pending` is one flag for the whole hook, which is right for a screen with
+   * one button and wrong for a list. A console table shares one `remove`
+   * mutation across forty rows, so deleting row three lit up the spinner on all
+   * forty: every Delete said "Deleting" and every row looked like it was going.
+   *
+   * Pass whatever identifies the row, usually its id:
+   *
+   *     pending={remove.pendingFor(promo.id)}
+   *
+   * The key is taken from the first argument of the call in flight, and from
+   * its `id` when that argument is an object, which covers both shapes used
+   * here: `run(id)` and `run({ id, status })`.
+   */
+  pendingFor: (key: unknown) => boolean;
   error: unknown;
   /** The same failure, readable the instant `run` resolves. Reading `error`
       straight after an await gives the value from the render already on screen,
@@ -319,10 +336,28 @@ export interface Mutation<Args extends unknown[], Result> {
   reset: () => void;
 }
 
+/**
+ * What identifies one call, for `pendingFor`.
+ *
+ * The first argument, or its `id` when it has one. Deliberately shallow: a key
+ * is for telling one row from another, and anything that needs more than an id
+ * to say which row it is has a bigger problem than a spinner.
+ */
+function callKey(args: unknown[]): unknown {
+  const first = args[0];
+  if (first !== null && typeof first === "object" && "id" in first) {
+    return (first as { id: unknown }).id;
+  }
+  return first;
+}
+
 export function useMutation<Args extends unknown[], Result>(
   action: (...args: Args) => Promise<Result>
 ): Mutation<Args, Result> {
   const [pending, setPending] = useState(false);
+  /* Which call is in flight, so one row of a list can tell itself apart from
+     the other thirty-nine sharing this mutation. */
+  const [pendingKey, setPendingKey] = useState<unknown>(undefined);
   const [error, setError] = useState<unknown>(null);
 
   const inFlight = useRef(false);
@@ -346,6 +381,7 @@ export function useMutation<Args extends unknown[], Result>(
     if (inFlight.current) return undefined;
     inFlight.current = true;
     setPending(true);
+    setPendingKey(callKey(args));
     setError(null);
     lastError.current = null;
     try {
@@ -356,7 +392,10 @@ export function useMutation<Args extends unknown[], Result>(
       return undefined;
     } finally {
       inFlight.current = false;
-      if (mounted.current) setPending(false);
+      if (mounted.current) {
+        setPending(false);
+        setPendingKey(undefined);
+      }
     }
   }, []);
 
@@ -365,7 +404,14 @@ export function useMutation<Args extends unknown[], Result>(
     setError(null);
   }, []);
 
-  return { run, pending, error, readError: useCallback(() => lastError.current, []), reset };
+  /* Reads the state, not the ref: a ref does not re-render, and this value has
+     to be right in the render that draws the row. The two are set together. */
+  const pendingFor = useCallback(
+    (key: unknown) => pending && pendingKey === key,
+    [pending, pendingKey]
+  );
+
+  return { run, pending, pendingFor, error, readError: useCallback(() => lastError.current, []), reset };
 }
 
 /**

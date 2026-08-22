@@ -106,7 +106,7 @@ export function GalleryAdmin() {
                       size="sm"
                       tone={photo.is_approved === 1 ? "quiet" : "primary"}
                       block
-                      pending={setApproved.pending}
+                      pending={setApproved.pendingFor(photo.id)}
                       pendingLabel="Saving"
                       onClick={() => void setApproved.run({ id: photo.id, approved: photo.is_approved === 0 })}
                     >
@@ -116,14 +116,14 @@ export function GalleryAdmin() {
                       name="sparkle"
                       label={photo.is_featured === 1 ? "Unfeature" : "Feature"}
                       size="sm"
-                      pending={setFeatured.pending}
+                      pending={setFeatured.pendingFor(photo.id)}
                       onClick={() => void setFeatured.run({ id: photo.id, featured: photo.is_featured === 0 })}
                     />
                     <IconButton
                       name="trash"
                       label="Delete"
                       size="sm"
-                      pending={remove.pending}
+                      pending={remove.pendingFor(photo.id)}
                       onClick={async () => {
                         const sure = await confirm({
                           title: "Delete this photo?",

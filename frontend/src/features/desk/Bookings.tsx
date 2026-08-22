@@ -156,7 +156,7 @@ export function Bookings() {
                           <Action
                             size="sm"
                             tone="ghost"
-                            pending={restore.pending}
+                            pending={restore.pendingFor(booking.id)}
                             pendingLabel="Putting back"
                             onClick={() => void restore.run(booking.id)}
                           >
@@ -168,7 +168,7 @@ export function Bookings() {
                               <Action
                                 size="sm"
                                 tone="ghost"
-                                pending={finish.pending}
+                                pending={finish.pendingFor(booking.id)}
                                 pendingLabel="Saving"
                                 onClick={() => void finish.run(booking.id)}
                               >

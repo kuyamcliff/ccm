@@ -144,7 +144,7 @@ export function Guests() {
                               <Action
                                 size="sm"
                                 tone="ghost"
-                                pending={unban.pending}
+                                pending={unban.pendingFor(guest.id)}
                                 pendingLabel="Saving"
                                 onClick={() => void unban.run(guest.id)}
                               >
@@ -157,7 +157,7 @@ export function Guests() {
                             <Action
                               size="sm"
                               tone="quiet"
-                              pending={ban.pending}
+                              pending={ban.pendingFor(guest.id)}
                               pendingLabel="Saving"
                               onClick={async () => {
                                 const sure = await confirm({
@@ -177,7 +177,7 @@ export function Guests() {
                             <Action
                               size="sm"
                               tone="quiet"
-                              pending={setRole.pending}
+                              pending={setRole.pendingFor(guest.id)}
                               pendingLabel="Saving"
                               onClick={async () => {
                                 const makingStaff = guest.role === "user";
@@ -201,7 +201,7 @@ export function Guests() {
                             <Action
                               size="sm"
                               tone="quiet"
-                              pending={close.pending}
+                              pending={close.pendingFor(guest.id)}
                               pendingLabel="Closing"
                               onClick={async () => {
                                 const sure = await confirm({
