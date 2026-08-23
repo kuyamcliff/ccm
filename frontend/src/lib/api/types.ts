@@ -123,3 +123,70 @@ export interface DeskNotification {
   sent_at: string | null;
   created_at?: string;
 }
+
+/** One route's timings, as `lib/traffic.ts` aggregates them. */
+export interface DevRouteStat {
+  route: string;
+  method: string;
+  count: number;
+  /** Every 4xx and 5xx. A 409 booking clash is in here and is not a fault. */
+  errors: number;
+  /** 5xx only: the ones that are actually ours. */
+  failures: number;
+  p50: number;
+  p95: number;
+  max: number;
+  lastAt: string;
+}
+
+export interface DevSlowRequest {
+  at: string;
+  method: string;
+  route: string;
+  status: number;
+  ms: number;
+}
+
+export interface DevTraffic {
+  /** When counting started, which is the last restart or the last manual reset. */
+  since: string;
+  total: number;
+  /** Requests not counted because the route map hit its ceiling. Non-zero means
+      path normalisation has missed a shape. */
+  dropped: number;
+  routes: DevRouteStat[];
+  slowest: DevSlowRequest[];
+}
+
+/** One throttled key, from one limiter. */
+export interface DevLimit {
+  bucket: string;
+  key: string;
+  count: number;
+  /** What this limiter allows in a window. */
+  max: number;
+  /** Whether this key is actually being turned away. A bucket exists from
+      somebody's first request; counting is not blocking. */
+  blocked: boolean;
+  resetInSeconds: number;
+}
+
+/** One row of `payment_events`. Append-only: a correction is another row. */
+export interface DevPaymentEvent {
+  id: number;
+  status: string;
+  source: string;
+  provider_event_id: string | null;
+  detail: string | null;
+  created_at: string;
+}
+
+/**
+ * A reference, resolved.
+ *
+ * `kind` says which side of the money it landed on: bookings keep theirs in
+ * `payments` with an event chain, takeaway keeps its own on the order.
+ */
+export type DevPaymentTrail =
+  | { kind: "payment"; payment: Record<string, unknown>; events: DevPaymentEvent[] }
+  | { kind: "takeaway"; order: Record<string, unknown>; events: [] };

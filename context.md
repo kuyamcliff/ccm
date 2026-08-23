@@ -234,9 +234,44 @@ fee, and the 503 that means the site is closed.
 ## The developer tier
 `developer` is a real role, ranked above owner because it exists to look at the
 machinery the owner's business runs on rather than at the business. It is in
-`UserRole`, in `STAFF_ROLES`, and in `canAccessScope`. Five screens under
-`/desk/dev`: system health, held errors by reference, feature flags as raw
-JSON, table counts, and impersonation.
+`UserRole`, in `STAFF_ROLES`, and in `canAccessScope`. Eight screens under
+`/desk/dev`:
+
+| Screen | Answers |
+|---|---|
+| System | Is the database up, is this instance healthy, which integrations have credentials. Also runs the reminder sweep by hand. |
+| Traffic | Is the site slow, and which route. Per-route p50/p95/max, error and failure counts, the worst request per route. |
+| Errors | What broke, by the reference the customer was shown. |
+| Payments | One reference, and its whole append-only event chain. |
+| Rate limits | Who is locked out, and letting them back in. |
+| Flags | `site_config_json` as raw, editable JSON. |
+| Database | Table row counts and size. |
+| Impersonate | See the site as one guest sees it. Audited before the cookie is issued. |
+
+Three of those are in-memory and say so on screen: Traffic, Errors and Rate
+limits are per-instance and do not survive a restart. That is the same trade
+`lib/errorLog.ts` documents at length and it holds for all three: writing a row
+per request or per failure would put the busiest and the most fragile paths in
+the application behind the database, and the moment you want this data is the
+moment the database is the thing struggling.
+
+**Traffic keys on route patterns, not paths.** `lib/traffic.ts` reads Express's
+own `req.route.path` where a router matched, and normalises anything else
+(`:n`, `:hex`, `:code`, `:email`). Keying on the raw path would grow a bucket
+per booking id, which is a slow memory leak with a nice screen on top of it.
+There is a ceiling on the map and a `dropped` counter, so if normalisation ever
+misses a shape the screen says so instead of the process quietly growing.
+
+**Errors and failures are counted separately**, everywhere they are shown. A 409
+from the booking clash is the product working exactly as designed; rolling it in
+with the 500s makes a busy Friday look like an outage.
+
+**The rate-limit screen distinguishes counting from blocking.** A bucket exists
+from somebody's first request; it only turns anybody away at its ceiling. The
+first version of that screen reported everyone with a live bucket as throttled,
+which said two people were locked out when neither had been refused anything.
+Clearing a limiter is audited, because it is the one control in the console that
+makes an attack easier rather than harder.
 
 Impersonation is the sharp one, so it is fenced four ways: only a developer may
 call it, it refuses any target who is not a plain guest, it writes the audit

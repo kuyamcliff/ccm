@@ -961,3 +961,105 @@
 .chat__list--desk {
   max-height: 55vh;
 }
+
+/* ══ Traffic ═══════════════════════════════════════════════════════════════
+ *
+ * A route is a block, not a table row. Four numeric columns line up nowhere on
+ * a 390px screen, so each route reads top to bottom: what it is, the figures,
+ * then the caveat. The figures themselves wrap into as many columns as fit.
+ */
+
+.dk-route {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.dk-route[data-tone="warn"] {
+  border-color: var(--warn, var(--line-2));
+}
+
+.dk-route[data-tone="bad"] {
+  border-color: var(--red-line);
+  background: var(--red-wash);
+}
+
+.dk-route__method {
+  color: var(--text-3);
+  font-weight: var(--w-strong);
+}
+
+/* auto-fit rather than a fixed count: three across on a phone, four or more
+   when the console is open on a laptop, and never a cramped fifth. */
+.dk-route__figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
+  gap: var(--s-2) var(--s-3);
+}
+
+/* ══ The payment trail ═════════════════════════════════════════════════════
+ *
+ * A vertical timeline, which is the one shape that genuinely suits a phone: it
+ * is already a list in order, and reading down is reading forwards in time.
+ */
+
+.dk-trail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding-left: var(--s-1);
+}
+
+.dk-trail__step {
+  display: flex;
+  gap: var(--s-3);
+  position: relative;
+  padding-left: var(--s-4);
+}
+
+/* The line joining one event to the next, drawn behind the dots and stopped
+   before the last one so the chain reads as finished. */
+.dk-trail__step::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1.1em;
+  bottom: calc(var(--s-3) * -1);
+  width: 1px;
+  background: var(--line-2);
+}
+
+.dk-trail__step:last-child::before {
+  display: none;
+}
+
+.dk-trail__dot {
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--ink-700);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--line-2);
+}
+
+.dk-trail__step[data-tone="good"] .dk-trail__dot {
+  background: var(--good);
+  box-shadow: 0 0 0 1px var(--good);
+}
+
+.dk-trail__step[data-tone="warn"] .dk-trail__dot {
+  background: var(--warn, var(--text-3));
+  box-shadow: 0 0 0 1px var(--warn, var(--text-3));
+}
+
+.dk-trail__step[data-tone="bad"] .dk-trail__dot {
+  background: var(--red);
+  box-shadow: 0 0 0 1px var(--red-hi);
+}

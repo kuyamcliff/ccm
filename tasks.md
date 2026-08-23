@@ -334,6 +334,31 @@ in `context.md` under "The basket that emptied itself".
       file clean because it scanned whole-file rather than line by line, which
       let quotes pair across lines and hid them.
 
+## Done (2026-08-22, more developer tools)
+- [x] **Traffic** (`/desk/dev/traffic`). Per-route p50/p95/max, call counts, and
+      errors split from failures. Sorted by p95, because the busiest route is
+      almost never the slow one and an average hides the customer who waited
+      four seconds. Keyed on Express's route pattern so fifty booking ids are
+      one row, with a ceiling and a `dropped` counter so a missed path shape is
+      visible instead of being a slow leak.
+- [x] The slow list keeps the worst **per route**. Sign-in runs bcrypt at about
+      420ms every time, so nine failed logins used to fill the whole list with
+      nine copies of one fact.
+- [x] **Payments** (`/desk/dev/payments`). A reference in, and the whole
+      append-only `payment_events` chain out, as a timeline. That chain has
+      always been the honest answer to "the money left my account" and has only
+      ever been readable from psql. Falls back to the takeaway order for a
+      reference that belongs to one.
+- [x] **Rate limits** (`/desk/dev/limits`). Who is locked out and a button to
+      let them back in, audited. Shows `8 of 8` against `3 of 8`, because a
+      bucket that is counting is not a bucket that is blocking.
+- [x] **Run the reminder sweep by hand**, from Desk > System. Reminders are the
+      one feature nobody can tell is working by looking at the site; proving it
+      used to mean curl and the shared secret. Safe to press twice: the sweep's
+      own deduplication drops anybody already told.
+- [x] The sweep moved to `lib/reminderSweep.ts` so the cron route and the
+      console share it rather than one owning the other's code.
+
 ## Waiting on the owner
 - [ ] **Set FRONTEND_URL on the API to the address people actually use.**
       Passkeys are bound for life to the domain they were created under, and
