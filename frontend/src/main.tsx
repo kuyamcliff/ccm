@@ -9,6 +9,7 @@ import { SessionProvider } from "./state/session";
 import { ToastProvider } from "./state/toast";
 import { VenueProvider } from "./state/venue";
 import { preloadHero, readBoot, BOOT_KEYS } from "./lib/boot";
+import { basenameFor, enteredViaPreview } from "./lib/launch";
 import { seed } from "./lib/store";
 
 /*
@@ -46,13 +47,15 @@ import "./styles/shell.css";
 import "./styles/pages.css";
 
 /**
- * The whole site is served under /admin while it is being finished.
+ * Where the site lives, decided before React mounts.
  *
- * Every other path shows a holding page. Kept exactly as it was: flipping it is
- * the owner's decision, and it is one line in `app/App.tsx` when they make it.
+ * A router's basename is fixed at mount, so this has to be answerable without
+ * asking anything: it is read off the address bar and nothing else. Whether the
+ * public may see the site is a separate question with a separate answer, and
+ * `App` handles it a few frames later. `lib/launch.ts` explains why keeping the
+ * two apart matters.
  */
-const basename =
-  window.location.pathname === "/admin" || window.location.pathname.startsWith("/admin/") ? "/admin" : "/";
+const basename = basenameFor(enteredViaPreview());
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root");

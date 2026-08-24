@@ -64,6 +64,15 @@ export const deskApi = {
     payment: (reference: string) =>
       http.get<DevPaymentTrail>(`/api/dev/payments/${encodeURIComponent(reference)}`),
 
+    /**
+     * Opens the public site to the world, or closes it again.
+     *
+     * Reads the config blob, changes one field and writes it back, so anything
+     * the owner is editing on another screen survives.
+     */
+    setLive: (live: boolean) =>
+      http.post<{ ok: true; live: boolean }>("/api/dev/launch", { live }),
+
     /** The reminder sweep, by hand. Safe to press twice: an already-reminded
         booking is dropped by the sweep's own deduplication. */
     runReminders: () =>

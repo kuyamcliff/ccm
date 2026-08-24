@@ -234,7 +234,7 @@ fee, and the 503 that means the site is closed.
 ## The developer tier
 `developer` is a real role, ranked above owner because it exists to look at the
 machinery the owner's business runs on rather than at the business. It is in
-`UserRole`, in `STAFF_ROLES`, and in `canAccessScope`. Eight screens under
+`UserRole`, in `STAFF_ROLES`, and in `canAccessScope`. Nine screens under
 `/desk/dev`:
 
 | Screen | Answers |
@@ -247,6 +247,7 @@ machinery the owner's business runs on rather than at the business. It is in
 | Flags | `site_config_json` as raw, editable JSON. |
 | Database | Table row counts and size. |
 | Impersonate | See the site as one guest sees it. Audited before the cookie is issued. |
+| Launch | Whether the world can see the site. |
 
 Three of those are in-memory and say so on screen: Traffic, Errors and Rate
 limits are per-instance and do not survive a restart. That is the same trade
@@ -277,6 +278,48 @@ Impersonation is the sharp one, so it is fenced four ways: only a developer may
 call it, it refuses any target who is not a plain guest, it writes the audit
 entry **before** it issues the cookie, and what it issues is an ordinary
 session that "sign out everywhere" revokes like any other.
+
+## The launch switch, and the two questions it is not
+`site_config_json.launched` decides whether the public may see the site, and
+Desk > Dev > Launch is the switch. `POST /api/dev/launch` is the only writer
+besides the raw flags editor, and both are developer-only and audited.
+
+The thing worth knowing is what it does **not** decide. There are two questions
+here that look like one, and `lib/launch.ts` keeps them apart on purpose:
+
+- **Where the site lives** is decided by how somebody arrived, and by nothing
+  else. A path under `/admin` is staff and stays under `/admin` for the visit;
+  everything else is at the root. This is read off the address bar in
+  `main.tsx` before React mounts, because a router's basename is fixed at mount.
+- **Whether the world may see it** comes from the server and is answered in
+  `App`, a few frames later.
+
+Tying the first to the second is what the first attempt did, and it produced a
+blank black page: a stranger at `/` on a site that had not launched got a router
+whose basename was `/admin`, and a router whose basename does not contain the
+current location renders **nothing at all**. No holding page, no error, no
+console warning worth the name. Reading arrival instead of liveness removed a
+top-level `await` in the entry module, a request on every first-ever visit, and
+a full page reload for staff who threw the switch, all at once.
+
+The `/admin` prefix keeps working after launch, deliberately. It costs nothing,
+`RouteMeta` already stamps everything under it `noindex, nofollow`, and it means
+the address the owner has had bookmarked since before opening night does not
+break on the morning the site goes live.
+
+`ccm.live.v1` in localStorage is a **hint for the first paint and nothing more**,
+read once at mount. Without it a live site shows a beat of "coming soon" on
+every cold load, because the default config is dark and the settings are still
+in flight. On a first-ever visit there is nothing to read and the app waits out
+the one request rather than guessing: guess live and a stranger sees the site
+before it opens, guess dark and a customer is turned away from a restaurant that
+is trading. It is a single public boolean, which is why it lives outside the
+boot payload and survives `clearBoot()` and a sign-out.
+
+A tab that is already open when the switch is thrown keeps what it has until it
+reloads. The settings query revalidates when the provider mounts, not on a
+timer, and the screen that throws the switch says so rather than claiming
+otherwise.
 
 ## Sold out, cash, and reminders
 - **Sold out tonight.** `menu_items.sold_out` already existed and takeaway

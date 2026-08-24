@@ -161,6 +161,83 @@ devRouter.put("/flags", async (req, res) => {
   res.json({ ok: true });
 });
 
+/* ── Going live ─────────────────────────────────────────────────────────────*/
+
+/**
+ * The switch that opens the site to the world.
+ *
+ * ── Why this is a route and not a deploy ───────────────────────────────────
+ *
+ * Launching used to be a line of code: the site was pinned under `/admin` and
+ * opening it meant editing `main.tsx` and shipping. That makes the single most
+ * consequential decision in the product depend on a developer being awake and a
+ * build going green, and it makes reversing it just as slow. A restaurant that
+ * discovers a wrong price on its opening night should be able to close the
+ * doors in one tap from a phone.
+ *
+ * ── Why developer and not owner ────────────────────────────────────────────
+ *
+ * The owner's Site control page already switches individual services off, which
+ * is the control they need day to day. This is different in kind: it decides
+ * whether the business has a public website at all, it is meant to be pressed
+ * about twice ever, and getting it wrong in the on direction cannot be undone
+ * by pressing it again — a search engine or a shared link has already seen it.
+ *
+ * ── Why it edits the config rather than owning a column ────────────────────
+ *
+ * `site_config_json` is already the one place the site's shape is described,
+ * already reaches the browser in the boot payload, and is already parsed by
+ * `lib/siteConfig.ts` with a default for every missing field. A separate column
+ * would be a second source of truth for the same kind of fact.
+ *
+ * Read, change one field, write back. Not a blind overwrite: anything else in
+ * the blob stays exactly as it was, which matters because the owner may be
+ * editing their own switches on another screen at the same time.
+ */
+devRouter.post("/launch", async (req, res) => {
+  if (typeof req.body?.live !== "boolean") {
+    res.status(400).json({ error: "Say whether the site should be live." });
+    return;
+  }
+  const live: boolean = req.body.live;
+
+  const row = (await db
+    .prepare("SELECT value FROM site_settings WHERE key = 'site_config_json'")
+    .get()) as { value: string } | undefined;
+
+  let config: Record<string, unknown> = {};
+  if (row?.value) {
+    try {
+      const parsed: unknown = JSON.parse(row.value);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        config = parsed as Record<string, unknown>;
+      }
+    } catch {
+      /* A blob that cannot be read is not a reason to refuse to close the site.
+         Starting from an empty object means every other field falls back to its
+         default, which is the same thing the browser already does with it. */
+    }
+  }
+
+  config.launched = live;
+
+  await db
+    .prepare(
+      "INSERT INTO site_settings (key, value) VALUES ('site_config_json', ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+    )
+    .run(JSON.stringify(config));
+
+  audit(req, {
+    action: live ? "dev.site_launched" : "dev.site_closed",
+    targetType: "site_settings",
+    targetId: "site_config_json",
+    detail: live ? "Public site opened to the world" : "Public site taken back behind the preview prefix",
+  });
+
+  console.log(`[launch] site is now ${live ? "LIVE" : "dark"} (by ${req.user?.email ?? "unknown"})`);
+  res.json({ ok: true, live });
+});
+
 /* ── What is in the database ────────────────────────────────────────────────*/
 
 /**

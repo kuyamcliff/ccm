@@ -1,4 +1,4 @@
-import { Suspense, lazy, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { Boot } from "./Boot";
@@ -10,6 +10,7 @@ import { useSession } from "~/state/session";
 import { useVenue } from "~/state/venue";
 import { FeatureGate, ServiceGate } from "~/ui/FeatureGate";
 import { PageLoading } from "~/ui/Feedback";
+import { enteredViaPreview, readLaunched, writeLaunched } from "~/lib/launch";
 
 /* The four screens somebody can land on cold, imported eagerly so they are in
    the first chunk rather than behind a second request. Everything else is split
@@ -232,10 +233,11 @@ function CustomerRoutes() {
 }
 
 /**
- * Until the site launches, everything outside /admin is a holding page.
+ * What the world sees until the restaurant throws the switch.
  *
- * One constant. When the restaurant is ready to go live, delete this and the
- * `basename` in `main.tsx`, and the site is at the root.
+ * The switch is on the developer panel, under Launch. Until it is on, the only
+ * way to the real site is through `/admin`, which is how staff work on a site
+ * that has not opened. `lib/launch.ts` holds the mechanics.
  */
 function NotYet() {
   return (
@@ -250,11 +252,53 @@ function NotYet() {
 }
 
 export function App() {
-  const gated = window.location.pathname === "/admin" || window.location.pathname.startsWith("/admin/");
+  const { siteConfig, loading } = useVenue();
+
+  /*
+   * Whether this browser is allowed to see the site.
+   *
+   * Two ways in, and they answer different questions. `launched` is the switch
+   * on the developer panel and is about the world; arriving through the staff
+   * prefix is about this person, and is how a site is worked on before it opens
+   * and how the owner reaches the switch that opens it.
+   *
+   * Note this reads the address, not the router. The router's basename already
+   * follows the same fact, and reading it back through `useLocation` would give
+   * the path with the prefix stripped off, which is exactly the information
+   * needed here and exactly the information that has been removed.
+   *
+   * A tab that is already open when the switch is thrown keeps what it has
+   * until it reloads, because the settings are revalidated when the provider
+   * mounts and not on a timer. That is the honest behaviour and the screen that
+   * throws the switch says so.
+   */
+  const preview = enteredViaPreview(window.location.pathname);
+
+  /*
+   * What was true last time, for the first paint only.
+   *
+   * Read once, at mount, and never again: this is a hint, not a source. Without
+   * it a live site shows a beat of "coming soon" on every cold load, because
+   * the default config is dark and the settings are still in flight. Read on
+   * every render it would be worse than useless, since the effect below writes
+   * the same key and the two would chase each other.
+   */
+  const [hint] = useState(readLaunched);
+
+  /* Kept in step, so the next visit paints the right thing on frame one. This
+     is the only writer: the flag follows the config, always. */
+  useEffect(() => {
+    writeLaunched(siteConfig.launched);
+  }, [siteConfig.launched]);
+
+  /* Null only on a genuinely cold first visit, where there is nothing to go on
+     and the answer is one short request away. */
+  const launched: boolean | null = loading ? hint : siteConfig.launched;
+  const open = launched === true || preview;
 
   return (
     <ErrorBoundary>
-      {gated ? (
+      {open ? (
         <>
           <Boot />
           <RouteMeta />
@@ -262,6 +306,10 @@ export function App() {
             <CustomerRoutes />
           </Suspense>
         </>
+      ) : launched === null ? (
+        /* Waiting, rather than guessing. Turning a customer away from a
+           restaurant that is trading is not a flicker anybody forgives. */
+        <PageLoading />
       ) : (
         <NotYet />
       )}

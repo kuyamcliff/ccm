@@ -68,11 +68,40 @@ to ask a developer for is in there.
 **Set your details first.** Phone, address and hours are read from there by the
 footer, the help page and the contact links. Nothing is hard-coded any more.
 
-If a developer is looking after the site for you, they get five screens of
-their own under Desk that you will never need: how the server is doing, recent
-faults by their reference code, the settings behind the settings, the size of
-the database, and the ability to see the site as one of your guests sees it.
-That last one is written into the audit log every single time it is used.
+If a developer is looking after the site for you, they get screens of their own
+under Desk that you will mostly never need: how the server is doing, which pages
+are slow, recent faults by their reference code, a payment's full history, who
+is locked out, the settings behind the settings, the size of the database, and
+the ability to see the site as one of your guests sees it. That last one is
+written into the audit log every single time it is used.
+
+One of those screens is yours, though, and it is the important one: **Launch**,
+which is what opens the site to the public. It is described below.
+
+## Opening the site to the public
+
+Right now the site is closed. Anybody who visits **clipfx.me** sees a holding
+page that says Cam Chop Meat, the best meat in Buea, and back very shortly.
+
+You and your staff work at **clipfx.me/admin** instead. That address is the
+whole site, exactly as customers will see it, plus **/admin/desk** for the
+console. Nothing there is public and search engines are told to ignore it.
+
+When you are ready, go to **Desk > Launch** and press **Go live**. It asks once,
+because it cannot really be undone: you can close the site again, but anybody
+who has already seen it, or sent the link to a friend, has seen it. Before you
+press it, check your prices and photographs in **Menu**, your room in **Floor**,
+and your phone number and hours in **Details**. Everything a customer sees comes
+from those three screens.
+
+**Your own address does not change when you go live.** clipfx.me/admin/desk
+keeps working exactly as it does today, so nothing you have bookmarked breaks.
+What changes is that clipfx.me itself stops being a holding page and becomes the
+restaurant.
+
+**Taking it down again** is the same screen. Customers get the holding page
+back. Bookings and orders already placed are untouched, and anybody who has the
+site open on their phone at that moment keeps it until they reload.
 
 ## The three new things
 

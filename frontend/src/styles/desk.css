@@ -1063,3 +1063,24 @@
   background: var(--red);
   box-shadow: 0 0 0 1px var(--red-hi);
 }
+
+/* ══ The launch switch ═════════════════════════════════════════════════════
+ *
+ * One state, stated plainly, before the button that changes it.
+ */
+
+.launch {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-3);
+}
+
+.launch[data-live="true"] {
+  border-color: var(--good);
+  color: var(--good);
+}

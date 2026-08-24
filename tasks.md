@@ -359,6 +359,25 @@ in `context.md` under "The basket that emptied itself".
 - [x] The sweep moved to `lib/reminderSweep.ts` so the cron route and the
       console share it rather than one owning the other's code.
 
+## Done (2026-08-24, the launch switch)
+- [x] **A switch that opens the site to the public.** Desk > Dev > Launch, on
+      `site_config_json.launched`, written by `POST /api/dev/launch` and audited
+      both ways. Dark, the root is a holding page and the restaurant is only at
+      `/admin`; live, the root is the restaurant. It confirms in both
+      directions, and lists what to check before going live.
+- [x] **The `/admin` prefix now follows how somebody arrived, not whether the
+      site is live.** The first attempt tied the router's basename to the
+      launch flag, which meant a stranger at `/` on a site that had not launched
+      got a basename of `/admin` at a location of `/`. A router in that state
+      renders nothing at all: the holding page was a blank black screen. Reading
+      arrival instead also removed a top-level `await` in `main.tsx`, a request
+      on every first-ever visit, and a page reload for staff who threw the
+      switch. `/admin` keeps working after launch, so nothing bookmarked breaks.
+- [x] **No flash of "coming soon" on a live site.** `ccm.live.v1` holds the last
+      known answer for the first paint only. On a first-ever visit there is
+      nothing to read, so the app waits out the one request rather than guessing
+      wrong in front of somebody.
+
 ## Waiting on the owner
 - [ ] **Set FRONTEND_URL on the API to the address people actually use.**
       Passkeys are bound for life to the domain they were created under, and
@@ -377,6 +396,9 @@ in `context.md` under "The basket that emptied itself".
       direction to fail in but is not the point of building them.
 - [ ] Set `DEVELOPER_EMAIL` if somebody is looking after the site. It only
       promotes; clearing it never demotes anybody.
+- [ ] **Press Go live when the restaurant is ready.** Desk > Dev > Launch. The
+      site is closed to the public until somebody does, which is deliberate:
+      nothing opens itself.
 - [ ] The menu data itself still says "From the grill", "Grilled chicken" and
       "Charcoal all the way". That is content in the database, not code, and it
       is edited in Desk > Menu. There is also no beef on the menu yet.

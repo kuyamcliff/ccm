@@ -32,6 +32,7 @@ import { DevImpersonate } from "./dev/DevImpersonate";
 import { DevTraffic } from "./dev/DevTraffic";
 import { DevLimits } from "./dev/DevLimits";
 import { DevPayments } from "./dev/DevPayments";
+import { DevLaunch } from "./dev/DevLaunch";
 import { RequireDeveloper } from "~/app/guards";
 import { NotFound } from "~/features/misc/NotFound";
 
@@ -143,6 +144,14 @@ export function DeskRoutes() {
           element={
             <RequireDeveloper>
               <DevPayments />
+            </RequireDeveloper>
+          }
+        />
+        <Route
+          path="dev/launch"
+          element={
+            <RequireDeveloper>
+              <DevLaunch />
             </RequireDeveloper>
           }
         />

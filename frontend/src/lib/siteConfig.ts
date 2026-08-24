@@ -41,6 +41,18 @@ export interface FeatureWindow { startAt: string | null; endAt: string | null; }
 
 export interface SiteConfig {
   version: 1;
+  /**
+   * Whether the public site is open to the world.
+   *
+   * False keeps everything behind `/admin`: the customer site is reachable
+   * there for staff to work on, and every other address shows a holding page.
+   * True puts the site at the root and there is no holding page any more.
+   *
+   * Defaults to false, so an existing installation and a config blob written
+   * before this field existed both stay exactly as they were. Going live has to
+   * be somebody deciding to.
+   */
+  launched: boolean;
   defaultLocale: LocaleCode;
   locales: Record<LocaleCode, boolean>;
   features: Record<FeatureName, boolean>;
@@ -73,6 +85,7 @@ export interface SiteConfig {
 
 export const DEFAULT_SITE_CONFIG: SiteConfig = {
   version: 1,
+  launched: false,
   defaultLocale: "en",
   locales: { en: true, fr: true },
   features: {
@@ -136,6 +149,9 @@ export function parseSiteConfig(raw?: string): SiteConfig {
     const locales = (parsed.locales ?? {}) as Record<string, unknown>;
     return {
       version: 1,
+      /* Absent means false, which is what keeps a blob written before this
+         field existed from accidentally publishing a site. */
+      launched: bool(parsed.launched, DEFAULT_SITE_CONFIG.launched),
       defaultLocale: parsed.defaultLocale === "fr" ? "fr" : "en",
       locales: { en: bool(locales.en, true), fr: bool(locales.fr, true) },
       features: {
