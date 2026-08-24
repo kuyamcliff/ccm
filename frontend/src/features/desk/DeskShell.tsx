@@ -93,6 +93,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     title: "Developer",
     items: [
       { to: "/desk/dev", label: "System", icon: "activity", developer: true, end: true },
+      { to: "/desk/dev/launch", label: "Launch", icon: "globe", developer: true },
       { to: "/desk/dev/traffic", label: "Traffic", icon: "chart", developer: true },
       { to: "/desk/dev/errors", label: "Errors", icon: "bug", developer: true },
       { to: "/desk/dev/payments", label: "Payments", icon: "wallet", developer: true },
