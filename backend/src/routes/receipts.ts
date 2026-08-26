@@ -51,8 +51,38 @@ function holdToOnePage(doc: any): void {
 function methodLabel(method: string | null): string {
   if (method === "mtn_momo") return "MTN Mobile Money";
   if (method === "orange_money") return "Orange Money";
+  if (method === "cash") return "Cash at the counter";
   if (method === "free") return "Covered by promo / gift card";
   return method || "Not recorded";
+}
+
+/**
+ * What a booking's state is called on paper.
+ *
+ * The database words are for the database. Somebody holding a printed receipt
+ * wants to know whether they have a table, and "pending_payment" does not say
+ * that in any language.
+ */
+function bookingStateLabel(status: string, isPaid: boolean): string {
+  if (status === "cancelled") return "Cancelled";
+  if (status === "completed") return "Finished";
+  if (status === "confirmed") return "Table held";
+  return isPaid ? "Table held" : "Not held yet";
+}
+
+/** What a takeaway order's state is called on paper. */
+function orderStateLabel(status: string, isPaid: boolean): string {
+  if (status === "cancelled") return "Cancelled";
+  if (status === "picked_up") return "Collected";
+  if (status === "ready") return "Ready to collect";
+  if (status === "confirmed") return "On the fire";
+  if (status === "pending") return "With the kitchen";
+  return isPaid ? "With the kitchen" : "Waiting for payment";
+}
+
+/** A UTC stamp as the receipt writes them: `2026-08-26 · 19:40`. */
+function stamp(value: unknown): string {
+  return `${String(value).replace(" ", " · ")} UTC`;
 }
 
 /**
@@ -211,6 +241,7 @@ receiptsRouter.get("/takeaway/:orderNo", requireAuth, async (req, res) => {
   detail("Name", String(row.name));
   detail("Collect at", String(row.pickup_time));
   if (row.phone) detail("Contact", String(row.phone));
+  detail("Status", orderStateLabel(String(row.status), isPaid));
   detail("Placed", String(row.created_at).replace(" ", " · "));
 
   if (row.note) {
@@ -278,8 +309,8 @@ receiptsRouter.get("/takeaway/:orderNo", requireAuth, async (req, res) => {
 
   if (row.momo_phone) detail("Paid from", String(row.momo_phone));
   if (row.momo_transaction_id) detail("Transaction", String(row.momo_transaction_id));
-  if (isPaid && row.paid_at) detail("Received", `${String(row.paid_at).replace(" ", " · ")} UTC`);
-  if (row.collected_at) detail("Collected", `${String(row.collected_at).replace(" ", " · ")} UTC`);
+  if (isPaid && row.paid_at) detail("Received", stamp(row.paid_at));
+  if (row.collected_at) detail("Collected", stamp(row.collected_at));
 
   // ── Footer ──
   const footTop = FOOT_TOP;
@@ -311,10 +342,23 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
     .prepare(
       `SELECT r.id, r.date, r.time, r.party_size, r.phone, r.note, r.status, r.payment_status,
               r.ccm_code, r.created_at, r.user_id, r.items_json, r.items_total_fcfa, r.deposit_fcfa,
+              r.cancellation_fee_fcfa, r.cancelled_at, r.checked_in_at,
               u.name AS guest_name, u.email AS guest_email,
               t.label AS table_label, t.zone AS table_zone,
-              p.amount_fcfa, p.discount_fcfa, p.momo_phone, p.method AS pay_method,
-              p.reference AS pay_reference, p.momo_transaction_id, p.updated_at AS paid_at
+              p.amount_fcfa, p.discount_fcfa, p.gift_fcfa, p.points_spent, p.promo_code,
+              p.gift_card_code, p.momo_phone, p.method AS pay_method,
+              p.reference AS pay_reference, p.momo_transaction_id, p.updated_at AS paid_at,
+              /* Every table the booking holds and the seats they add up to.
+                 Sub-selects rather than a join so a party across three tables
+                 stays one row and the payment join above cannot multiply it. */
+              (SELECT string_agg(t2.label, ', ' ORDER BY t2.id)
+                 FROM reservation_tables rt
+                 JOIN restaurant_tables t2 ON t2.id = rt.table_id
+                WHERE rt.reservation_id = r.id) AS table_labels,
+              (SELECT COALESCE(SUM(t2.capacity), 0)
+                 FROM reservation_tables rt
+                 JOIN restaurant_tables t2 ON t2.id = rt.table_id
+                WHERE rt.reservation_id = r.id) AS seats_held
        FROM reservations r
        JOIN users u ON r.user_id = u.id
        LEFT JOIN restaurant_tables t ON r.table_id = t.id
@@ -444,10 +488,38 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
   detail("Date", longDate(String(row.date)));
   detail("Time", String(row.time));
   detail("Party size", `${row.party_size} ${Number(row.party_size) === 1 ? "guest" : "guests"}`);
-  if (row.table_label) {
-    detail("Table", `${row.table_label}${row.table_zone ? ` · ${row.table_zone}` : ""}`);
+
+  /*
+   * Every table the booking holds, not just the lead one.
+   *
+   * A party of ten sits across two or three of them, and a receipt naming one
+   * is a receipt somebody takes to the door believing they have a quarter of
+   * what they paid for. `reservation_tables` is the answer; `table_id` is only
+   * the first one chosen, and is all a booking made before that table existed
+   * has. The seat count is worth the line once there is more than one table,
+   * because that is the number that says the party fits.
+   */
+  const tableLabels = String(row.table_labels ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const seatsHeld = Number(row.seats_held) || 0;
+
+  if (tableLabels.length > 1) {
+    detail("Tables", tableLabels.map((label) => `Table ${label}`).join(" + "));
+    if (seatsHeld > 0) detail("Seats held", `${seatsHeld}`);
+  } else if (tableLabels.length === 1 || row.table_label) {
+    const only = tableLabels[0] ?? String(row.table_label);
+    detail("Table", `Table ${only}${row.table_zone ? ` · ${row.table_zone}` : ""}`);
   }
+
   if (row.phone) detail("Contact", String(row.phone));
+  detail("Status", bookingStateLabel(String(row.status), isPaid));
+  if (row.checked_in_at) detail("Arrived", stamp(row.checked_in_at));
+  /* "Cancelled at", not "Cancelled": the status line directly above already
+     says that it was, and two rows reading the same word is a receipt arguing
+     with itself. */
+  if (row.cancelled_at) detail("Cancelled at", stamp(row.cancelled_at));
 
   if (row.note) {
     doc.moveDown(0.4);
@@ -459,9 +531,6 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
   rule(doc.y);
   doc.moveDown(1);
 
-  // ── Payment ──
-  sectionTitle("Payment");
-
   const money = (label: string, value: string, opts: { color?: string; bold?: boolean } = {}) => {
     const y = doc.y;
     doc.fontSize(9.5).font(opts.bold ? "Helvetica-Bold" : "Helvetica")
@@ -471,13 +540,59 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
     doc.y = Math.max(doc.y, y + 15);
   };
 
-  money("Table deposit", `${depositPart.toLocaleString()} FCFA`);
+  /* Whether another line of detail still fits above the footer. The one-page
+     guarantee clips rather than overflows, so an optional line drawn too low
+     is a line nobody ever sees, and a `Received` stamp silently swallowed is
+     worse than one that was never promised. Everything below the total is
+     asked to fit before it is drawn; nothing above it is optional. */
+  const roomFor = (lines = 1) => doc.y + lines * 15 < FOOT_TOP - 16;
 
-  /* What they ordered ahead, itemised. Capped so a large party's order cannot
-     push the footer onto a second page — the rest is summed into one line,
-     which is the honest way to stay on one sheet. */
+  /*
+   * How much room the payment section below is going to need.
+   *
+   * Worked out before anything else is drawn, because the itemised food above
+   * it is the only part that can be made shorter, and it can only be made
+   * shorter if something knows by how much. A fixed cap on the item lines
+   * cannot do this: seven lines fit under a two-word note and overflow under a
+   * three-line one, and what falls off the bottom is the total.
+   */
+  const LINE = 15;
+  const discountLines =
+    discount > 0
+      ? 1 +
+        (row.promo_code ? 1 : 0) +
+        (row.gift_card_code && Number(row.gift_fcfa) > 0 ? 1 : 0) +
+        (Number(row.points_spent) > 0 ? 1 : 0)
+      : 0;
+  const paymentHeight =
+    19 +                                                          // the section heading
+    LINE +                                                        // the deposit
+    (preordered.length > 0 ? LINE : 0) +                          // the food total
+    discountLines * LINE +
+    12 +                                                          // the rule and its gaps
+    24 +                                                          // the total itself
+    (Number(row.cancellation_fee_fcfa) > 0 ? LINE : 0) +
+    LINE +                                                        // how it was paid
+    (isPaid && row.paid_at ? LINE : 0);                           // when it settled
+
+  /*
+   * ── Ordered ahead ──
+   *
+   * Its own section rather than a run of lines inside Payment. Food chosen with
+   * the booking is a list of things somebody bought, and a list of things
+   * somebody bought belongs under a heading with a sum under it, next to the
+   * deposit rather than mixed into it. Capped to whatever is left once the
+   * payment section has had its share: the rest is summed into one honest line,
+   * which is the only way a large party's order stays on one sheet.
+   */
   if (preordered.length > 0) {
-    const MAX_LINES = 8;
+    /* The heading, the "Food and drinks" sum, and the rule closing the section
+       are what the item lines have to fit around. */
+    const budget = FOOT_TOP - 16 - paymentHeight - doc.y - 19 - LINE - 24;
+    const MAX_LINES = Math.max(1, Math.min(7, Math.floor(budget / LINE)));
+
+    sectionTitle("Ordered ahead");
+
     const shown = preordered.slice(0, MAX_LINES);
     const hidden = preordered.slice(MAX_LINES);
 
@@ -492,9 +607,35 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
       );
     }
     money("Food and drinks", `${itemsTotal.toLocaleString()} FCFA`, { bold: true });
+
+    doc.moveDown(1);
+    rule(doc.y);
+    doc.moveDown(1);
   }
 
-  if (discount > 0) money("Discount applied", `- ${discount.toLocaleString()} FCFA`, { color: GREEN });
+  // ── Payment ──
+  sectionTitle("Payment");
+
+  money("Table deposit", `${depositPart.toLocaleString()} FCFA`);
+  if (preordered.length > 0) money("Food and drinks", `${itemsTotal.toLocaleString()} FCFA`);
+
+  /* The discount, and then what made it up. One "Discount applied" line leaves
+     somebody who spent points and a gift card on the same booking with no way
+     to tell which took what off, which is exactly the question a receipt is
+     for. Each part is only drawn when it is actually part of this payment. */
+  if (discount > 0) {
+    money("Discount applied", `- ${discount.toLocaleString()} FCFA`, { color: GREEN });
+    /* Named rather than priced, except the gift card, because the gift card is
+       the only one of the three whose own contribution is written down. Making
+       up a split for the other two would be inventing figures on a receipt. */
+    if (row.promo_code) money("Promo code", String(row.promo_code), { color: GREEN });
+    if (row.gift_card_code && Number(row.gift_fcfa) > 0) {
+      money("Gift card", `- ${Number(row.gift_fcfa).toLocaleString()} FCFA`, { color: GREEN });
+    }
+    if (Number(row.points_spent) > 0) {
+      money("Points spent", `${Number(row.points_spent).toLocaleString()} points`, { color: GREEN });
+    }
+  }
 
   doc.moveDown(0.35);
   rule(doc.y);
@@ -506,23 +647,41 @@ receiptsRouter.get("/:reservationId", requireAuth, async (req, res) => {
     .text(`${paid.toLocaleString()} FCFA`, L + 205, totalY - 2, { width: CONTENT_WIDTH - 205, align: "right" });
   doc.y = totalY + 24;
 
+  /* First of the lines under the total, and unconditional, because a fee is
+     the one figure on here somebody will come back and argue about. The rest
+     of the payment detail is nice to have and gives way to it. */
+  if (Number(row.cancellation_fee_fcfa) > 0) {
+    detail("Cancellation fee", `${Number(row.cancellation_fee_fcfa).toLocaleString()} FCFA`);
+  }
+
+  /* How it was paid and when it settled are the two the space above was
+     reserved for, so neither is asked whether it fits. The wallet number and
+     the provider's transaction id are the ones that give way on a crowded
+     sheet, and they leave room for the "Received" line still to come. */
+  const tail = isPaid && row.paid_at ? 1 : 0;
   detail("Method", methodLabel(row.pay_method as string | null));
-  if (row.momo_phone) detail("Paid from", String(row.momo_phone));
-  if (row.momo_transaction_id ?? row.pay_reference) {
+  if (row.momo_phone && roomFor(1 + tail)) detail("Paid from", String(row.momo_phone));
+  if ((row.momo_transaction_id ?? row.pay_reference) && roomFor(1 + tail)) {
     detail("Transaction", String(row.momo_transaction_id ?? row.pay_reference));
   }
-  if (isPaid && row.paid_at) {
-    detail("Received", `${String(row.paid_at).replace(" ", " · ")} UTC`);
-  }
+  if (isPaid && row.paid_at) detail("Received", stamp(row.paid_at));
 
   // ── Footer, pinned to the bottom of the page ──
   const footTop = FOOT_TOP;
   rule(footTop);
+  /* A cancelled or finished booking is a record of something that happened, and
+     telling its holder to arrive within twenty minutes of a slot that is gone
+     reads as a receipt for the wrong evening. */
+  const footNote =
+    row.status === "cancelled"
+      ? "This booking was cancelled. Kept as a record of what was paid and what was returned."
+      : row.status === "completed"
+        ? "Thank you for eating with us. Kept as a record of what was paid."
+        : preordered.length > 0
+          ? "The deposit and the food are paid. Arrive within 20 minutes of your slot or the table may be released."
+          : "The deposit comes off your bill. Arrive within 20 minutes of your slot or the table may be released.";
   doc.fontSize(8.5).font("Helvetica").fillColor(MUTED)
-    .text(
-      "The deposit comes off your bill. Arrive within 20 minutes of your slot or the table may be released.",
-      L, footTop + 12, { width: CONTENT_WIDTH, align: "center" }
-    );
+    .text(footNote, L, footTop + 12, { width: CONTENT_WIDTH, align: "center" });
   doc.fontSize(7.5).fillColor(FAINT)
     .text(
       `Issued ${new Date().toISOString().replace("T", " ").slice(0, 16)} UTC · camchopmeat.com`,

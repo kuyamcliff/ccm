@@ -95,9 +95,13 @@ export function MenuPage() {
 
   return (
     <div className="menu">
-      <header className="page section--tight menu__head">
-        <h1 className="display display--xl">{c.menu.title}</h1>
-      </header>
+      {/* The heading is read out and indexed, and never drawn.
+          "Our Menu" over a list of dishes said nothing the list did not already
+          say, and it cost the top of a phone screen: the search box and the
+          category rail started a heading's height further down, which on a
+          small screen is a dish and a half of scrolling before anything can be
+          done. What replaces it is nothing. The page is the menu. */}
+      <h1 className="sr-only">{c.menu.title}</h1>
 
       {/* Search and the category rail travel together and stick to the top, so
           both are one thumb-reach away wherever you are in the list. */}

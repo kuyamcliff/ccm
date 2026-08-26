@@ -3,7 +3,7 @@ import { api } from "~/lib/api";
 import type { DeskBooking } from "~/lib/api";
 import { useMutation, useQuery, invalidate } from "~/lib/store";
 import { K } from "~/lib/keys";
-import { dayLabel, money, phoneLabel, timeLabel, todayISO } from "~/lib/format";
+import { dayLabel, money, parseLines, phoneLabel, timeLabel, todayISO } from "~/lib/format";
 import { itemMatches, tokens } from "~/lib/search";
 import { Action, Button } from "~/ui/Button";
 import { TextAreaField, Segmented } from "~/ui/Field";
@@ -23,6 +23,11 @@ import { useToast } from "~/state/toast";
  * what the owner reads at the end of the month when they want to know whether
  * they are losing tables to double bookings or to no-shows, and a cancellation
  * with no reason answers nothing.
+ *
+ * The Ordered column is what makes ordering ahead real. A guest can now choose
+ * food while booking and pay for it with the deposit, and food that is paid for
+ * and that nobody behind the counter can see is worse than food that was never
+ * ordered: the guest sits down expecting it. Tapping the cell lists it.
  */
 
 type Filter = "today" | "upcoming" | "all";
@@ -47,6 +52,7 @@ export function Bookings() {
   const [query, setQuery] = useState("");
   const [cancelling, setCancelling] = useState<DeskBooking | null>(null);
   const [reason, setReason] = useState("");
+  const [ordered, setOrdered] = useState<DeskBooking | null>(null);
 
   const bookings = useQuery(K.desk.bookings, () => api.desk.bookings.list(), { staleMs: 20_000 });
 
@@ -120,6 +126,7 @@ export function Bookings() {
                   <th>Guest</th>
                   <th>Covers</th>
                   <th>Table</th>
+                  <th>Ordered</th>
                   <th>Code</th>
                   <th>Paid</th>
                   <th>State</th>
@@ -140,7 +147,19 @@ export function Bookings() {
                       </span>
                     </td>
                     <td>{booking.party_size}</td>
-                    <td>{booking.table_label ?? "Any"}</td>
+                    {/* Every table the party is on. One booking across three of
+                        them showed the first here, which is the number the
+                        floor gets set to. */}
+                    <td>{booking.table_labels || booking.table_label || "Any"}</td>
+                    <td className="nowrap">
+                      {booking.items_total_fcfa ? (
+                        <Button size="sm" tone="quiet" onClick={() => setOrdered(booking)}>
+                          {`${money(booking.items_total_fcfa)} FCFA`}
+                        </Button>
+                      ) : (
+                        <span className="faint">Nothing</span>
+                      )}
+                    </td>
                     <td>{booking.ccm_code ? <Code value={booking.ccm_code} size="sm" /> : <span className="faint">None</span>}</td>
                     <td className="nowrap">
                       {booking.amount_fcfa ? `${money(booking.amount_fcfa)} FCFA` : <span className="faint">Not yet</span>}
@@ -246,6 +265,45 @@ export function Bookings() {
             ))}
           </div>
         </div>
+      </Sheet>
+
+      {/* What the party ordered when they booked it, for whoever is putting it
+          on the fire. Read straight off the row the list is already holding, so
+          opening it costs no request. */}
+      <Sheet
+        open={ordered !== null}
+        onClose={() => setOrdered(null)}
+        title="Ordered ahead"
+        footer={
+          <Button tone="quiet" onClick={() => setOrdered(null)}>
+            Close
+          </Button>
+        }
+      >
+        {ordered ? (
+          <div className="stack">
+            <p className="lead">
+              {ordered.user_name}, {dayLabel(ordered.date)} at {timeLabel(ordered.time)}.
+            </p>
+
+            <div className="rows rows--inset">
+              {parseLines(ordered.items_json).map((line, index) => (
+                <div key={`${line.name}-${index}`} className="row">
+                  <span className="grow">
+                    {line.qty} × {line.name}
+                  </span>
+                  <span className="fine nowrap">{money(line.price * line.qty)} FCFA</span>
+                </div>
+              ))}
+              <div className="row">
+                <span className="grow strong">Paid with the deposit</span>
+                <span className="fine nowrap">{money(ordered.items_total_fcfa ?? 0)} FCFA</span>
+              </div>
+            </div>
+
+            {ordered.note ? <p className="fine muted">{ordered.note}</p> : null}
+          </div>
+        ) : null}
       </Sheet>
     </DeskPage>
   );

@@ -5,6 +5,8 @@ import type { BookingClash, DiningTable } from "~/lib/api";
 import { useMutation, useQuery, invalidate } from "~/lib/store";
 import { K } from "~/lib/keys";
 import { addDays, dayLabel, isPastSlot, money, normalisePhone, toISODate, todayISO } from "~/lib/format";
+import { priceBasket } from "~/lib/basketPricing";
+import type { BasketLine } from "~/lib/basketPricing";
 import { say } from "~/lib/say";
 import { Icon } from "~/ui/Icon";
 import { Action, Button, LinkButton } from "~/ui/Button";
@@ -14,36 +16,65 @@ import { Notice, SkeletonRows } from "~/ui/Feedback";
 import { usePress } from "~/ui/press";
 import { PaySheet, type PaymentDriver } from "~/features/pay/PaySheet";
 import { FloorPlan } from "./FloorPlan";
+import { PickFood } from "./PickFood";
 import { useSession } from "~/state/session";
 import { useCopy } from "~/state/locale";
+import type { Copy } from "~/copy";
 import { useVenue } from "~/state/venue";
 
 /**
  * Holding a table.
  *
- * Four steps on one route, with the step in the query string. That is the whole
+ * Steps on one route, with the step in the query string. That is the whole
  * reason it is in the URL: on a phone the back gesture is how people undo, and a
- * four-step flow that treats back as "leave the booking" loses the booking. Here
- * back means "previous step", which is what the gesture means everywhere else on
- * the device.
+ * multi-step flow that treats back as "leave the booking" loses the booking.
+ * Here back means "previous step", which is what the gesture means everywhere
+ * else on the device.
  *
  * The deposit is stated in words at the point of decision, not buried in a
  * confirmation, and so is the late cancellation fee. Both are set by the server
  * and read from Desk > Details.
+ *
+ * ── Food, chosen here ──────────────────────────────────────────────────────
+ *
+ * Between the table and the confirmation there is now a step for what the party
+ * wants to eat. It is optional and says so, and what is picked is charged with
+ * the deposit rather than at the table, which is the only reason it is worth
+ * asking before somebody arrives.
+ *
+ * The step only exists when ordering is switched on in the console, so the
+ * order of the steps is built per render rather than being a constant: a site
+ * with ordering off has the four steps it always had, and a `?step=food` link
+ * left over from before it was switched off falls back to the first step the
+ * same way any other unknown step does, rather than drawing a screen with
+ * nothing on it.
  */
 
-type Step = "when" | "who" | "where" | "confirm";
-const ORDER: Step[] = ["when", "who", "where", "confirm"];
+type Step = "when" | "who" | "where" | "food" | "confirm";
+const STEPS_WITH_FOOD: Step[] = ["when", "who", "where", "food", "confirm"];
+const STEPS_WITHOUT_FOOD: Step[] = ["when", "who", "where", "confirm"];
+
+/** What each step calls itself on the progress row. */
+const STEP_LABEL: Record<Step, (c: Copy) => string> = {
+  when: (c) => c.book.stepWhen,
+  who: (c) => c.book.stepWho,
+  where: (c) => c.book.stepWhere,
+  food: (c) => c.book.stepFood,
+  confirm: (c) => c.book.stepConfirm,
+};
 
 /** Two weeks. Further out than that and people are guessing. */
 const DAYS_AHEAD = 14;
 
 export function BookPage() {
   const { c, fill } = useCopy();
-  const { depositFcfa, lateCancelFcfa } = useVenue();
+  const { depositFcfa, lateCancelFcfa, siteConfig } = useVenue();
   const { user } = useSession();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
+
+  const ordering = siteConfig.features.ordering;
+  const ORDER = ordering ? STEPS_WITH_FOOD : STEPS_WITHOUT_FOOD;
 
   const step = (ORDER.includes(params.get("step") as Step) ? params.get("step") : "when") as Step;
 
@@ -69,7 +100,17 @@ export function BookPage() {
   const [phone, setPhone] = useState("");
   const [note, setNote] = useState("");
 
-  const [held, setHeld] = useState<{ id: number; code: string | null } | null>(null);
+  /*
+   * Food and drink to be waiting on the table, as ids and quantities only.
+   *
+   * Deliberately not the takeaway basket: that one belongs to an order somebody
+   * collects and outlives this page in localStorage, and joining the two would
+   * mean an abandoned booking quietly filling somebody's basket. This dies with
+   * the flow, which is what it should do.
+   */
+  const [food, setFood] = useState<BasketLine[]>([]);
+
+  const [held, setHeld] = useState<{ id: number; code: string | null; itemsTotal: number } | null>(null);
   const [paying, setPaying] = useState(false);
   const [clash, setClash] = useState<BookingClash | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -107,6 +148,21 @@ export function BookPage() {
      the only place multi-table booking says anything out loud. */
   const seatsChosen = chosen.reduce((sum, entry) => sum + entry.capacity, 0);
 
+  /* The same cache entry the menu page fills, so a guest who looked at the menu
+     before booking pays nothing for this step and it draws immediately. */
+  const menu = useQuery(K.menu, () => api.site.menu(), {
+    enabled: ordering,
+    persist: true,
+    staleMs: 2 * 60 * 1000,
+  });
+
+  /* Priced here only to show the guest what they are about to be charged. The
+     server prices the same basket again against the live menu when the booking
+     is made, and that figure is the one that is taken. Anything withdrawn from
+     the menu since it was tapped drops out here and is counted in `dropped`. */
+  const picked = useMemo(() => priceBasket(food, menu.data ?? []), [food, menu.data]);
+  const foodCount = picked.lines.reduce((sum, line) => sum + line.qty, 0);
+
   const hold = useMutation(async () => {
     setProblem(null);
     setClash(null);
@@ -117,10 +173,21 @@ export function BookPage() {
       phone: normalisePhone(phone),
       note: note.trim(),
       tableIds: chosen.map((entry) => entry.id),
+      /* Only what is still on the menu, and ids and quantities only. Prices
+         come from the server: a total sent from here is a total the guest
+         could have written themselves. */
+      items: picked.lines.map((line) => ({ id: line.id, qty: line.qty })),
     });
     invalidate(K.myBookings);
     invalidate("book.tables*");
-    setHeld({ id: reservation.id, code: reservation.ccm_code });
+    /* The server's own figure for the food, not the one worked out above, so
+       the amount in the payment sheet is the amount that will be charged even
+       if a price moved between choosing and confirming. */
+    setHeld({
+      id: reservation.id,
+      code: reservation.ccm_code,
+      itemsTotal: reservation.items_total_fcfa ?? 0,
+    });
     setPaying(true);
   });
 
@@ -172,7 +239,7 @@ export function BookPage() {
     <div className="page section stack book">
       <header className="stack stack--tight">
         <h1 className="display display--xl">{c.book.title}</h1>
-        <Steps current={stepIndex} labels={[c.book.stepWhen, c.book.stepWho, c.book.stepWhere, c.book.stepConfirm]} />
+        <Steps current={stepIndex} labels={ORDER.map((entry) => STEP_LABEL[entry](c))} />
       </header>
 
       {clash ? (
@@ -359,7 +426,7 @@ export function BookPage() {
               block
               iconEnd="arrow-right"
               disabled={chosen.length === 0 || seatsChosen < party}
-              onClick={() => go("confirm")}
+              onClick={() => go(ordering ? "food" : "confirm")}
             >
               {c.common.next}
             </Button>
@@ -367,7 +434,48 @@ export function BookPage() {
         </div>
       ) : null}
 
-      {/* ── 4. Confirm ───────────────────────────────────────────────────────*/}
+      {/* ── 4. What they want to eat ─────────────────────────────────────────*/}
+      {step === "food" ? (
+        <div className="stack">
+          <div className="stack stack--tight">
+            <p className="lead">{c.book.preorder}</p>
+            <p className="fine muted">{c.book.preorderBody}</p>
+          </div>
+
+          {menu.error ? (
+            /* The step is optional, so a menu that will not load is a reason to
+               move on rather than a reason to stop: the table can still be
+               held, and the food can still be ordered at it. */
+            <Notice tone="info">{c.book.preorderNone}</Notice>
+          ) : (
+            <PickFood menu={menu.data ?? []} loading={menu.loading} chosen={food} onChange={setFood} />
+          )}
+
+          {foodCount > 0 ? (
+            <div className="rows">
+              <div className="row">
+                <span className="grow label">{fill(c.book.preorderChosen, { n: foodCount })}</span>
+                <Money value={picked.subtotal} size="fine" />
+              </div>
+            </div>
+          ) : null}
+
+          <div className="bar bar--tight">
+            <Button tone="quiet" block icon="arrow-left" onClick={() => go("where")}>
+              {c.common.back}
+            </Button>
+            <Button tone="primary" block iconEnd="arrow-right" onClick={() => go("confirm")}>
+              {/* One button, and what it says depends on whether anything was
+                  picked. A separate Skip next to Next is two ways to do the
+                  same thing, and on a phone the second one is just a way to
+                  press the wrong one. */}
+              {foodCount > 0 ? c.common.next : c.book.preorderSkip}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── 5. Confirm ───────────────────────────────────────────────────────*/}
       {step === "confirm" ? (
         <form
           className="stack"
@@ -407,6 +515,34 @@ export function BookPage() {
             </div>
           </div>
 
+          {/* What they picked, itemised, and what the two figures come to. A
+              summary that showed one "Food and drinks" total would be asking
+              somebody to take on trust the thing they are about to pay for. */}
+          {picked.lines.length > 0 ? (
+            <div className="stack stack--tight">
+              <span className="label">{c.book.stepFood}</span>
+              <div className="rows rows--inset">
+                {picked.lines.map((line) => (
+                  <div key={line.id} className="row">
+                    <span className="grow fine">
+                      {line.qty} {line.item.name}
+                    </span>
+                    <Money value={line.lineTotal} size="fine" />
+                  </div>
+                ))}
+                <div className="row">
+                  <span className="grow label">{c.book.toPay}</span>
+                  <Money value={depositFcfa + picked.subtotal} size="fine" />
+                </div>
+              </div>
+              <p className="fine muted">{c.book.preorderNote}</p>
+            </div>
+          ) : null}
+
+          {/* Something was picked and has since come off the menu. Said plainly
+              here rather than left to be discovered as a smaller bill. */}
+          {picked.dropped > 0 ? <Notice tone="warn">{c.book.preorderGone}</Notice> : null}
+
           <PhoneField label={c.book.phone} hint={c.book.phoneHint} value={phone} onChange={setPhone} required />
 
           <TextAreaField
@@ -436,7 +572,7 @@ export function BookPage() {
           ) : null}
 
           <div className="bar bar--tight">
-            <Button tone="quiet" block icon="arrow-left" onClick={() => go("where")}>
+            <Button tone="quiet" block icon="arrow-left" onClick={() => go(ordering ? "food" : "where")}>
               {c.common.back}
             </Button>
             <Action
@@ -462,11 +598,14 @@ export function BookPage() {
             invalidate(K.myBookings);
             navigate("/mine", { replace: true });
           }}
-          amountFcfa={depositFcfa}
-          title={c.book.deposit}
+          /* The deposit and the food together, because that is one charge on
+             one prompt: the server adds the same two figures when it works out
+             what to ask the wallet for. */
+          amountFcfa={depositFcfa + held.itemsTotal}
+          title={held.itemsTotal > 0 ? c.book.toPay : c.book.deposit}
           what={`${dayLabel(date)}, ${time}${
             chosen.length > 0 ? `, ${chosen.map((entry) => `table ${entry.label}`).join(" and ")}` : ""
-          }`}
+          }${held.itemsTotal > 0 ? `, ${fill(c.book.preorderChosen, { n: foodCount })}` : ""}`}
           driver={driver}
         />
       ) : null}
