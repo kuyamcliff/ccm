@@ -1,5 +1,72 @@
 # Tasks
 
+## Done (2026-08-26, food is chosen when the table is booked)
+- [x] **The menu page said "Our Menu" over a list of dishes and nothing else.**
+      The heading is gone from the page. It is still the page's `h1`, drawn
+      only for a screen reader and a search engine, so the menu now starts with
+      the search box and the category rail a heading's height further up the
+      screen. `.menu__head` went with it.
+- [x] **A guest can order food while booking a table.** A fifth step between
+      the table and the confirmation, optional and said to be optional. What is
+      picked is charged with the deposit on the same Mobile Money prompt, and is
+      waiting when the party sits down.
+- [x] The server has taken `items` on `POST /api/reservations` since the
+      multi-table work: it prices them against the live menu, freezes the lines
+      and the total onto the booking, and `POST /api/payments/initiate` charges
+      `deposit + items_total_fcfa`. Nothing had ever sent that array, so the
+      whole path was dead code and `book.preorder` was a string in `copy/` that
+      no screen used. This is the missing half.
+- [x] The picker is `features/booking/PickFood.tsx`, and is deliberately **not**
+      the takeaway basket: that one belongs to an order somebody collects and
+      lives in localStorage, and joining them would mean an abandoned booking
+      quietly filling somebody's basket, or a basket becoming part of a
+      booking's bill. It lists only what can actually be ordered ahead, since
+      sold out and priced-by-weight are both refused by the server anyway.
+- [x] The confirmation itemises what was picked, sums it with the deposit under
+      "To pay now", and says so again in the payment sheet. The amount charged
+      is the server's own figure off the created booking, not the one worked out
+      in the browser, so a price that moved between choosing and confirming
+      cannot make the sheet lie.
+- [x] The step only exists when ordering is switched on in Desk. With it off,
+      booking is the four steps it always was.
+
+**The receipt.**
+- [x] **Every table, not just the lead one.** The PDF read `reservations.table_id`
+      and named one table to a party sitting across three. It reads
+      `reservation_tables` now, and adds a line for the seats they come to.
+- [x] Food ordered with the table is its own **Ordered ahead** section with a
+      sum under it, rather than a run of unlabelled lines inside Payment.
+- [x] The booking's state, the moment the guest arrived, the moment it was
+      cancelled, the cancellation fee, and what the discount was made of: the
+      promo code by name, the gift card by what it covered, and the points by
+      how many were spent. Nothing invented: points and promos have no FCFA
+      share written down anywhere, so neither is given one.
+- [x] The one-page guarantee is arithmetic now rather than a fixed cap. The
+      payment block is measured before the food is drawn, and the item list is
+      capped to what is left, so a fourteen-line order under a three-line note
+      still leaves the total, the method and the received stamp on the sheet.
+      Verified by rendering four receipts and reading back where every string
+      landed.
+- [x] A cancelled or finished booking no longer tells its holder to arrive
+      within twenty minutes of a slot that has passed.
+- [x] The on-screen receipt got the same: all the tables, an Ordered ahead
+      section with its total, the payment method in the wallet's own name,
+      the contact number, when it was booked and when they arrived. Its money
+      rows carry FCFA, which they did not: a receipt read "2,000" for the
+      deposit and "7,000 FCFA" for the chicken two rows above it.
+- [x] The takeaway receipt says what state the order is in.
+
+**The console.**
+- [x] Desk > Bookings shows every table a booking holds rather than the first,
+      and has an **Ordered** column. Food that is paid for and that nobody
+      behind the counter can see is worse than food that was never ordered, so
+      tapping the cell lists it.
+
+**Not fixed, found on the way past.** Desk > Bookings reads `amount_fcfa` for
+its Paid column and `GET /api/admin/reservations` has never selected it, so
+every booking on that screen reads "Not yet" however it was paid. It wants the
+same `LEFT JOIN payments` the guest's own list uses, and it is not this change.
+
 ## Done (2026-08-09, the basket belonged to the browser)
 - [x] **A basket outlived the account that filled it.** Sign in, choose food,
       sign out, and the items were still there for whoever opened the site

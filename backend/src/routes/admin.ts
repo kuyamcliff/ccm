@@ -100,8 +100,16 @@ adminRouter.get("/reservations", async (req, res) => {
 
   let sql = `SELECT r.id, r.date, r.time, r.party_size, r.phone, r.note, r.status,
     r.payment_status, r.cancellation_fee_fcfa, r.ccm_code, r.cancelled_at, r.cancel_reason, r.created_at,
+    r.items_json, r.items_total_fcfa,
     u.name as user_name, u.email as user_email,
-    t.label as table_label, t.zone as table_zone
+    t.label as table_label, t.zone as table_zone,
+    /* Every table the booking holds, not just the lead one, so the floor a
+       party of ten is actually taking is what staff read off this screen. A
+       sub-select rather than a join: one booking has to stay one row. */
+    (SELECT string_agg(t2.label, ', ' ORDER BY t2.id)
+       FROM reservation_tables rt
+       JOIN restaurant_tables t2 ON t2.id = rt.table_id
+      WHERE rt.reservation_id = r.id) AS table_labels
     FROM reservations r
     JOIN users u ON r.user_id = u.id
     LEFT JOIN restaurant_tables t ON r.table_id = t.id

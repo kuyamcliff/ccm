@@ -27,9 +27,16 @@ Every page was rebuilt. The differences you will notice:
 - **A booking can take more than one table.** A party of ten taps two tables and
   the seats add up. On your Floor screen a table with somebody sitting at it
   shows as in use.
+- **Food is chosen when the table is booked.** After picking their table a guest
+  is asked what they want to eat. Whatever they add is paid for with the deposit
+  in the same Mobile Money prompt, so it can be on the fire as they sit down.
+  Skipping it is one tap and nothing is lost by skipping it.
 - **Guests can say they have arrived**, and can close their own collection order
   once it is ready, so nobody behind the counter has to remember to tap it.
 - **Any receipt, any time**, viewed on the phone and downloaded only if wanted.
+  A receipt now names every table the booking holds rather than the first one,
+  lists what was ordered ahead with its own total, and breaks down what the
+  discount was made of: the promo code, the gift card and the points.
 
 ## The two halves of the site
 
@@ -46,7 +53,7 @@ to ask a developer for is in there.
 |---|---|
 | Overview | Tonight at a glance. Refreshes itself every minute. |
 | Door | Scan the code on a guest's phone, or type it. Says let them in or not. |
-| Bookings | Every booking. Finish, cancel with a reason, or restore one. |
+| Bookings | Every booking, every table it holds, and what the party ordered ahead. Finish, cancel with a reason, or restore one. |
 | Collection | The kitchen board for prepaid orders. New, cooking, ready, collected. |
 | Queue | The waiting list on a full night. |
 | Floor | Drag your tables into the shape of the actual room. Guests see this. |
@@ -133,13 +140,15 @@ the moment the kitchen marks the order ready on the board.
 
 ## What customers can do
 - Create an account, with two-step sign in if they want it.
-- Book a table: pick a day and time, then a table off the real floor plan, and
-  hold it with a 2,500 FCFA Mobile Money deposit that comes off the bill.
+- Book a table: pick a day and time, a table off the real floor plan, and what
+  they want to eat, then hold it with a 2,500 FCFA Mobile Money deposit that
+  comes off the bill. Anything ordered ahead is paid with that deposit.
 - Get a pass with a code, and a PDF receipt carrying a signed QR.
 - Cancel themselves. More than an hour before, the deposit comes back.
 - Order for collection, pay ahead or pay cash at the counter, and show a code.
   Once it is ready they can tap "I have it" themselves.
 - Book more than one table at once for a big party.
+- Order their food while booking the table, and pay for it with the deposit.
 - Tap "I am here" when they arrive, which shows up on your screens within the
   minute.
 - Look at any receipt they have ever had, and download it if they want a copy.
